@@ -26,11 +26,11 @@ CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> spaMessage;
 uint8_t id = 0x00; // spa id
 
 #ifndef TX485_Tx
-#define TX485_Tx 17
+#define TX485_Tx 22
 #endif
 
 #ifndef TX485_Rx
-#define TX485_Rx 16
+#define TX485_Rx 19
 #endif
 
 #define RS_485_MAGIC_NUMBER 0x21345678
@@ -45,7 +45,7 @@ void rs485Setup()
     digitalWrite(TX485_Tx, LOW);
   }
   // Spa communication, 115.200 baud 8N1
-  Serial2.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
+  RS485_SERIAL_PORT.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
   Log.verbose(F("[rs485]: RS485 setup, RX GPIO %d, TX GPIO %d" CR), TX485_Rx, TX485_Tx);
 
   lastCheckedTime = getTime();

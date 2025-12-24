@@ -16,8 +16,18 @@
 #include <rs485.h>
 #include <bridge.h>
 #include <spaEpaper.h>
+#include <led_control.h>
 
 #include "main.h"
+
+// Add this callback function after your existing includes
+void onStationModeGotIP(WiFiEvent_t event, WiFiEventInfo_t info) {
+    ledControl.setWifiConnected();
+}
+
+void onStationModeDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+    ledControl.setWifiDisconnected();
+}
 
 String buildDefinitionString = "";
 #define addBuildDefinition(name) buildDefinitionString += #name " ";
@@ -87,6 +97,8 @@ void setup()
   Log.verbose(F("SDK version: %s" CR), ESP.getSdkVersion());
 
   logSection("Wifi Module Setup");
+  WiFi.onEvent(onStationModeGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  WiFi.onEvent(onStationModeDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   wifiModuleSetup();
   logSection("MQTT Module Setup");
   mqttModuleSetup();
@@ -109,13 +121,16 @@ void setup()
   logSection("Bridge Setup");
   bridgeSetup();
 #endif
+  ledControl.begin();
   logSection("Setup Complete");
 }
 
 void loop()
 {
 #ifdef LOCAL_CLIENT
+  ledControl.flashTx();  // Add before sending RS485 data
   rs485Loop();
+  ledControl.flashRx();  // Add when receiving RS485 data
 #endif
 #ifdef spaEpaper
   spaEpaperLoop();
@@ -141,4 +156,5 @@ void loop()
     bridgeLoop();
 #endif
   }
+  ledControl.update();
 }
