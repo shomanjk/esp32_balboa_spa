@@ -33,6 +33,10 @@ uint8_t id = 0x00; // spa id
 #define TX485_Rx 16
 #endif
 
+#ifndef RS485_SERIAL_PORT
+#define RS485_SERIAL_PORT Serial2
+#endif
+
 #define RS_485_MAGIC_NUMBER 0x21345678
 
 time_t lastCheckedTime;
@@ -45,7 +49,7 @@ void rs485Setup()
     digitalWrite(TX485_Tx, LOW);
   }
   // Spa communication, 115.200 baud 8N1
-  Serial2.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
+  RS485_SERIAL_PORT.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
   Log.verbose(F("[rs485]: RS485 setup, RX GPIO %d, TX GPIO %d" CR), TX485_Rx, TX485_Tx);
 
   lastCheckedTime = getTime();
