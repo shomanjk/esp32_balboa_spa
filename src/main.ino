@@ -16,8 +16,21 @@
 #include <rs485.h>
 #include <bridge.h>
 #include <spaEpaper.h>
+#ifdef M5_ATOM_LED
+#include <led_control.h>
+#endif
 
 #include "main.h"
+
+#ifdef M5_ATOM_LED
+void onStationModeGotIP(WiFiEvent_t event, WiFiEventInfo_t info) {
+    ledControl.setWifiConnected();
+}
+
+void onStationModeDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+    ledControl.setWifiDisconnected();
+}
+#endif
 
 String buildDefinitionString = "";
 #define addBuildDefinition(name) buildDefinitionString += #name " ";
@@ -73,6 +86,10 @@ void setup()
   addBuildDefinition("spaEpaper");
 #endif
 
+#ifdef M5_ATOM_LED
+  addBuildDefinition("M5_ATOM_LED");
+#endif
+
   Log.notice(F("Build Definitions: %s" CR), buildDefinitionString.c_str());
 
   logSection("ESP Information");
@@ -87,6 +104,10 @@ void setup()
   Log.verbose(F("SDK version: %s" CR), ESP.getSdkVersion());
 
   logSection("Wifi Module Setup");
+#ifdef M5_ATOM_LED
+  WiFi.onEvent(onStationModeGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  WiFi.onEvent(onStationModeDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+#endif
   wifiModuleSetup();
   logSection("MQTT Module Setup");
   mqttModuleSetup();
@@ -109,13 +130,22 @@ void setup()
   logSection("Bridge Setup");
   bridgeSetup();
 #endif
+#ifdef M5_ATOM_LED
+  ledControl.begin();
+#endif
   logSection("Setup Complete");
 }
 
 void loop()
 {
 #ifdef LOCAL_CLIENT
+#ifdef M5_ATOM_LED
+  ledControl.flashTx();
+#endif
   rs485Loop();
+#ifdef M5_ATOM_LED
+  ledControl.flashRx();
+#endif
 #endif
 #ifdef spaEpaper
   spaEpaperLoop();
@@ -141,4 +171,7 @@ void loop()
     bridgeLoop();
 #endif
   }
+#ifdef M5_ATOM_LED
+  ledControl.update();
+#endif
 }

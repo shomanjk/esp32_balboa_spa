@@ -12,13 +12,18 @@
 #define GMT_OFFSET -14400
 #define DAYLIGHT_OFFSET 0
 
-#define AUTO_TX false
+#define AUTO_TX true
 
 // Used by LOCAL_CLIENT — UART2 pins for TTL side of RS485 transceiver (see README).
 
 // Default (generic ESP32 dev board wiring, e.g. GPIO16/17):
 #define TX485_Rx 16
 #define TX485_Tx 17
+
+// RS485 UART (default ESP32: Serial2). Override in config.h if you use a different port.
+#ifndef RS485_SERIAL_PORT
+#define RS485_SERIAL_PORT Serial2
+#endif
 
 // ---------------------------------------------------------------------------
 // M5 Atom Lite + Atomic RS485 Base (recommended tub-side stack for this repo)
