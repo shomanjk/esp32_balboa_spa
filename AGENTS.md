@@ -1,0 +1,80 @@
+# Agent / maintainer context
+
+This file helps AI coding agents and humans work on **`esp32_balboa_spa`** without rediscovering project facts. Update it when architecture, hardware targets, or workflows change.
+
+## Project
+
+- **Purpose:** ESP32 firmware to talk **Balboa** spa controllers: read status (temperature, pumps, etc.) and (when implemented) send commands over the Balboa serial protocol.
+- **Maintained fork:** Ongoing work lives in this repo; upstream ESP8266-era projects are archival. See [FORK.md](FORK.md) and [README.md](README.md) “About this fork”.
+- **Protocol reference:** [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md) (linked from README).
+
+## Hardware targets
+
+| Target | PlatformIO env | Notes |
+|--------|----------------|--------|
+| Generic ESP32 dev board (tub-side RS485) | `ESP32prodOta`, `ESP32ota`, etc. | Default UART pins in `config-example.h`: RX **16**, TX **17**. |
+| **M5 Atom Lite + Unit RS485** | **`M5AtomLite-tub`** | `board = m5stack-atom`. Grove wiring and pins: [README](README.md) “M5 Atom Lite + M5 RS485”, [`src/config-example.h`](src/config-example.h). Prefer **`AUTO_TX true`** for typical M5 Unit RS485. |
+| LilyGo T5 ePaper (remote display) | `ESP32-epd47` | `REMOTE_CLIENT` + `spaEpaper`; separate use case from tub RS485. |
+
+**Tub-side path:** `LOCAL_CLIENT` → RS485 at **115200 8N1** on `Serial2` ([`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)).
+
+## Configuration (required before a useful build)
+
+- **`src/config.h`** is **gitignored** (see `.gitignore`). Copy from [`src/config-example.h`](src/config-example.h) and set Wi‑Fi, MQTT, **`TX485_Rx` / `TX485_Tx`**, **`AUTO_TX`**.
+- **`VERSION`** string for serial logs: [`src/main.h`](src/main.h) (`#define VERSION`).
+
+## Build system
+
+- **PlatformIO** ([`platformio.ini`](platformio.ini)). Web UI assets: `data_dir = balboa-spa/dist`, LittleFS, partition **`spa_module.csv`** (root).
+- **Default env:** `default_envs = ESP32ota` (often **not** tub-side; check flags in each `[env:…]`).
+
+### Compile-time flags (see README “Compiler Definitions”)
+
+| Flag | Role |
+|------|------|
+| **`LOCAL_CLIENT`** | RS485 to spa controller (tub-side). |
+| **`LOCAL_CONNECT`** | UDP discovery (port 30303) for Balboa-style discovery. |
+| **`BRIDGE`** | TCP server on **4257**; pairs with Homebridge [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa). |
+| **`REMOTE_CLIENT`** | TCP **client** to port 4257 (remote/kitchen device), not tub RS485. |
+| **`TELNET_LOG`** | Telnet logging. |
+| **`spaEpaper`** | ePaper UI (ESP32-S3 T5 env). |
+
+**Tub-side typical:** `LOCAL_CLIENT` + `LOCAL_CONNECT` + `BRIDGE` (+ optional `TELNET_LOG`). **`M5AtomLite-tub`** already sets these.
+
+## Architecture (where to change what)
+
+| Area | Location | Notes |
+|------|----------|--------|
+| RS485 framing, CTS, CRC, spa **ID** (`0x0A`) | [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp) | Inbound → `spaReadQueue`; outbound from `spaWriteQueue` on Clear-to-Send. |
+| Message parse, status, config requests | [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h) | `sendMessageToSpa()` enqueues to **`spaWriteQueue`**. |
+| MQTT publish | [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp) | Status/config topics under `Spa/<gateway>/…`. |
+| MQTT subscribe / commands | [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp) | **Known gap:** callback currently **echoes** payloads; commands not implemented. |
+| Web / SCI emulation | [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) | **`parseBody`**: reads work; **`device_request` / buttons** not fully wired. **`handleBody`** may mishandle multi-chunk POSTs if `index > 0`. |
+| TCP bridge (LAN clients) | [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp) | Port **4257**; forwards to RS485 via [`cacheRead.cpp`](lib/spaMessage/cacheRead.cpp) / `sendMessageToSpa`. |
+| Remote TCP to spa | [`lib/spaRemoteCommunication/spaCommunication.cpp`](lib/spaRemoteCommunication/spaCommunication.cpp) | Only when **`REMOTE_CLIENT`** is defined. |
+| Main loop / init | [`src/main.ino`](src/main.ino) | Conditional compilation per flags above. |
+
+**Queues:** `spaReadQueue` / `spaWriteQueue` — declared in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), exposed via [`src/main.h`](src/main.h).
+
+## Known product gaps (do not assume they work)
+
+1. **MQTT commands** — subscribe exists; handler does not dispatch commands to `sendMessageToSpa`.
+2. **Web UI buttons** — README states not wired; `parseBody` logs `device_request` but does not send toggles.
+3. **Command framing** — implement Balboa **0x11** (toggle) / **0x20** (set temp) etc. with correct CRC; reuse patterns from [`rs485.cpp`](lib/localRS485Communication/rs485.cpp) `addCRC` / [`balboa.h`](lib/spaMessage/balboa.h) prebuilt frames.
+
+## Testing
+
+- **Bench:** [`emulator/spaEmulator.js`](emulator/spaEmulator.js) + [`emulator/README.md`](emulator/README.md) for crude serial injection.
+- **Logs:** `LOG_LEVEL_VERBOSE` in `platformio.ini` `[com]` `build_flags`.
+
+## Releases & versioning
+
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md); **`[Unreleased]`** for pending work.
+- **Firmware version:** [`src/main.h`](src/main.h) `VERSION` should align with tagged releases when cutting a release.
+- **Process:** [FORK.md](FORK.md) (push, optional PRs on fork, tags, GitHub Releases).
+
+## Conventions for agents
+
+- Prefer **small, focused changes**; match existing style and naming.
+- **`config.h`** secrets: never commit; use **`config-example.h`** for templates only.
+- After user-facing behavior or release steps change, update **CHANGELOG** `[Unreleased]` and this file if needed.

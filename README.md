@@ -6,6 +6,7 @@ This repo — **[shomanjk/esp32_balboa_spa](https://github.com/shomanjk/esp32_ba
 
 - **What changed:** [CHANGELOG.md](CHANGELOG.md) and [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) (when you publish them).
 - **Fork workflow (push vs PR vs tags):** [FORK.md](FORK.md).
+- **AI / contributor orientation:** [AGENTS.md](AGENTS.md) (architecture, flags, known gaps, `config.h`).
 
 WiFI Enable your Balboa SPA using a ESP32 module connected to your spa controller using rs485 interface to Balboa SPA Controller.
 
