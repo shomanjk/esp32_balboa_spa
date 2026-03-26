@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **[AGENTS.md](AGENTS.md):** Maintainer and AI-agent context (hardware targets, PlatformIO envs, compile flags, key source files, known gaps, release/version notes).
+
 ## [0.1.0] - 2026-03-26
 
 First **tagged release of this maintained fork** (lineage and workflow: [FORK.md](FORK.md)). Not a claim of greenfield authorship; version tracks releases from this repository only.
