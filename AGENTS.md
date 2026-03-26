@@ -13,7 +13,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 | Target | PlatformIO env | Notes |
 |--------|----------------|--------|
 | Generic ESP32 dev board (tub-side RS485) | `ESP32prodOta`, `ESP32ota`, etc. | Default UART pins in `config-example.h`: RX **16**, TX **17**. |
-| **M5 Atom Lite + Unit RS485** | **`M5AtomLite-tub`** | `board = m5stack-atom`. Grove wiring and pins: [README](README.md) “M5 Atom Lite + M5 RS485”, [`src/config-example.h`](src/config-example.h). Prefer **`AUTO_TX true`** for typical M5 Unit RS485. |
+| **M5 Atom Lite + Atomic RS485 Base** | **`M5AtomLite-tub`** | `board = m5stack-atom`. Primary hardware target: stack UART **RX 22** / **TX 19**, **`AUTO_TX true`** — [README](README.md) “M5 Atom Lite + Atomic RS485 Base”, [`src/config-example.h`](src/config-example.h). Optional: [Unit RS485](https://docs.m5stack.com/en/unit/rs485) on Grove **32/26**. |
 | LilyGo T5 ePaper (remote display) | `ESP32-epd47` | `REMOTE_CLIENT` + `spaEpaper`; separate use case from tub RS485. |
 
 **Tub-side path:** `LOCAL_CLIENT` → RS485 at **115200 8N1** on `Serial2` ([`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)).
