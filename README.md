@@ -50,16 +50,18 @@ MQTT Commands are not working yet.  I never got around to wiring them up.
 
 For the build I use platformio.
 
-## M5 Atom Lite + M5 RS485 (tub-side)
+## M5 Atom Lite + Atomic RS485 Base (tub-side)
 
-This firmware runs on a **generic ESP32**; a compact option is the [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) with the [Unit RS485](https://docs.m5stack.com/en/unit/rs485) (TTL to RS485, Grove) on the Atom’s **HY2.0** port.
+This maintained fork targets **tub-side** builds on the [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) stacked on the [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (TTL ↔ RS‑485, **SP3485EE**, built-in **12 V→5 V** DC‑DC for the Atom). Generic ESP32 dev boards remain supported; see [`src/config-example.h`](src/config-example.h) for default GPIO **16/17**.
 
 - **PlatformIO environment:** `M5AtomLite-tub` in [`platformio.ini`](platformio.ini) uses `board = m5stack-atom` and the same partition table as other 4MB builds (`spa_module.csv`).
-- **Pins:** On the Atom Grove, **yellow = G26**, **white = G32**. On the [Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove, **yellow = module UART_RX**, **white = module UART_TX**. Connect **ESP TX (G26) → module RX (yellow)** and **ESP RX (G32) → module TX (white)**. In `config.h` this matches **TX485_Rx 32** and **TX485_Tx 26**. If you see no frames, swap the two TTL wires and/or double-check A/B on the spa bus.
-- **`AUTO_TX`:** Prefer **`AUTO_TX true`** in [`src/config.h`](src/config-example.h) when the M5 RS485 board handles transmit direction automatically; keep the default `false` only if you use a transceiver with a separate DE/RE line and match the project’s wiring expectations.
-- **Power:** For bench work, USB 5V is fine. On the tub, use an appropriate **regulated supply** (e.g. 12 V from the spa through a buck converter) per good electrical practice—do not rely on USB for permanent installation.
+- **Pins:** With the Atom Lite **stacked** on the Atomic RS485 Base, UART2 uses **RX = GPIO 22**, **TX = GPIO 19** (same as M5’s [Arduino example](https://github.com/m5stack/M5-ProductExampleCodes/blob/master/AtomBase/AtomicRS485/Arduino/AtomicRS485/AtomicRS485.ino)). In `config.h` set **`TX485_Rx 22`** and **`TX485_Tx 19`**. If you see no frames, double-check **A/B** on the spa bus (and swap A/B if needed); M5 notes optional **120 Ω** termination between A and B for long runs.
+- **`AUTO_TX`:** Prefer **`AUTO_TX true`** in [`src/config.h`](src/config-example.h) so the firmware does not drive a separate DE/RE line; use **`false`** only if your transceiver needs manual direction control.
+- **Power:** The base can **step 12 V down to 5 V** to power the Atom (see [M5 Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base)). Connect the **VH‑3.96** terminal per M5’s pinout and **your** spa controller’s wiring (accessory **12 V** and **GND** are separate from the RS‑485 **A/B** data pair—use the Balboa [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer) guidance). For bench work, **USB 5 V** is fine.
 
-Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑Fi / MQTT, then enable the **M5 Atom Lite** UART/GPIO block in `config.h` (and comment out the default GPIO16/17 lines) before building `M5AtomLite-tub`.
+Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑Fi / MQTT, then enable the **M5 Atom Lite + Atomic RS485 Base** UART block in `config.h` (and comment out the default GPIO16/17 lines) before building `M5AtomLite-tub`.
+
+**Alternate hardware:** You can still use a **generic ESP32** UART (e.g. **16/17**) or wire a [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) (Grove) to the Atom’s **HY2.0** port with **TX485_Rx 32** / **TX485_Tx 26**—see comments in [`src/config-example.h`](src/config-example.h).
 
 ## Compiler Definitions
 
