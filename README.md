@@ -58,6 +58,14 @@ This maintained fork targets **tub-side** builds on the [M5 Atom Lite](https://d
 - **Pins:** With the Atom Lite **stacked** on the Atomic RS485 Base, UART2 uses **RX = GPIO 22**, **TX = GPIO 19** (same as M5’s [Arduino example](https://github.com/m5stack/M5-ProductExampleCodes/blob/master/AtomBase/AtomicRS485/Arduino/AtomicRS485/AtomicRS485.ino)). In `config.h` set **`TX485_Rx 22`** and **`TX485_Tx 19`**. If you see no frames, double-check **A/B** on the spa bus (and swap A/B if needed); M5 notes optional **120 Ω** termination between A and B for long runs.
 - **`AUTO_TX`:** Prefer **`AUTO_TX true`** in [`src/config.h`](src/config-example.h) so the firmware does not drive a separate DE/RE line; use **`false`** only if your transceiver needs manual direction control.
 - **Power:** The base can **step 12 V down to 5 V** to power the Atom (see [M5 Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base)). Connect the **VH‑3.96** terminal per M5’s pinout and **your** spa controller’s wiring (accessory **12 V** and **GND** are separate from the RS‑485 **A/B** data pair—use the Balboa [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer) guidance). For bench work, **USB 5 V** is fine.
+- **RGB LED (Atom Lite, `M5AtomLite-tub` only):** Build flag **`M5_ATOM_LED`** (set in [`platformio.ini`](platformio.ini) for this env) drives the single addressable pixel. Colors mean:
+  | Color | Meaning |
+  | --- | --- |
+  | **Green** (steady) | Wi‑Fi station has an IP (connected to AP). |
+  | **Red** (steady) | Wi‑Fi station disconnected (no IP). |
+  | **Blue** (brief flash) | Shown at the start of each RS485 loop pass (coarse “TX side” hint in code; not per-byte TX). |
+  | **Yellow** (brief flash) | Shown at the end of each RS485 loop pass (coarse “RX side” hint in code). |
+  Blue/yellow are **not** a reliable alternating TX/RX indicator on every loop (timing in [`src/led_control.cpp`](src/led_control.cpp)); they only show the RS485 path is being serviced, not byte‑for‑byte traffic. To disable LED logic, remove or unset **`M5_ATOM_LED`** for that environment and adjust `main.ino` if needed.
 
 Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑Fi / MQTT, then enable the **M5 Atom Lite + Atomic RS485 Base** UART block in `config.h` (and comment out the default GPIO16/17 lines) before building `M5AtomLite-tub`.
 
@@ -71,6 +79,7 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
   * BRIDGE - Enable local TCP Server - Can be leveraged by https://github.com/vincedarley/homebridge-plugin-bwaspa
   * TELNET_LOG - Enables serial logging via a telnet interface
   * spaEpaper - Enables ePaper display
+  * M5_ATOM_LED - (Optional, **`M5AtomLite-tub` only**) M5 Atom RGB LED: Wi‑Fi status + brief RS485 activity flashes; see [M5 Atom Lite + Atomic RS485 Base](#m5-atom-lite--atomic-rs485-base-tub-side).
 
 ### In spa configuration
 
