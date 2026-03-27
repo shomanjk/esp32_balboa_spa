@@ -9,6 +9,13 @@
 #define BROKER_LOGIN ""
 #define BROKER_PASS ""
 
+// OTA controls
+// Keep false for trusted-LAN setups; set true + password before broader exposure.
+#define ENABLE_OTA_AUTH false
+#define OTA_PASSWORD "change-me-before-enabling-auth"
+// OTA transport timeout in milliseconds (applies to ArduinoOTA session)
+#define OTA_TIMEOUT_MS 15000
+
 #define GMT_OFFSET -14400
 #define DAYLIGHT_OFFSET 0
 

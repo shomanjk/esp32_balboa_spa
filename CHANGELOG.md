@@ -8,17 +8,28 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-26
+
 ### Added
 
 - **M5 Atom Lite (`M5AtomLite-tub`):** Optional RGB LED feedback (`led_control` / **`M5_ATOM_LED`**) — Wi‑Fi connected (green) / disconnected (red), brief blue/yellow flashes around RS485 loop activity (from archived **`m5stack-8`** work). Git tag **`archive/m5stack-8`** points at the pre-merge snapshot for reference.
+- **OTA env for M5 tub-side:** Added **`M5AtomLite-tub-ota`** PlatformIO environment using `espota` upload protocol for wireless firmware updates.
 
 ### Changed
 
 - **`lib/localRS485Communication/rs485.cpp`:** UART for RS485 is **`RS485_SERIAL_PORT`** (default **`Serial2`** via `config.h` / `config-example.h`).
+- **`lib/wifiModule/wifiModule.cpp` / `lib/wifiModule/wifiModule.h`:** OTA hardening updates:
+  - optional OTA auth controls (`ENABLE_OTA_AUTH`, `OTA_PASSWORD`) with trusted-LAN default,
+  - configurable OTA timeout (`OTA_TIMEOUT_MS`),
+  - clearer progress/error logs and restart-reason breadcrumbs for OTA lifecycle.
+- **`src/config-example.h`:** Added OTA config templates (`ENABLE_OTA_AUTH`, `OTA_PASSWORD`, `OTA_TIMEOUT_MS`).
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.3.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.3.0**).
 
 ### Documentation
 
 - **[README.md](README.md):** M5 tub-side section describes RGB LED meaning (**`M5_ATOM_LED`**) with a color table and links to **`led_control`**; compiler definitions list includes **`M5_ATOM_LED`**.
+- **[README.md](README.md):** Added OTA update section for `M5AtomLite-tub-ota`, including trusted-LAN default and recovery guidance.
 
 ## [0.2.0] - 2026-03-26
 
@@ -52,6 +63,7 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.0
 [0.2.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.2.0
 [0.1.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.1.0
