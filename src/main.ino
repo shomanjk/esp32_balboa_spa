@@ -139,13 +139,7 @@ void setup()
 void loop()
 {
 #ifdef LOCAL_CLIENT
-#ifdef M5_ATOM_LED
-  ledControl.flashTx();
-#endif
   rs485Loop();
-#ifdef M5_ATOM_LED
-  ledControl.flashRx();
-#endif
 #endif
 #ifdef spaEpaper
   spaEpaperLoop();

@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-27
+
+### Added
+
+- **Web ESP State / Wi‑Fi:** `/state` includes a **WiFi** section (status, SSID, hostname, IP, gateway, subnet, DNS, channel, MAC, RSSI), **RSSI quality label/color**, **5‑minute average RSSI**, and a **rolling RSSI chart** (browser polls `GET /api/wifi` every 5s, ~5 minute window). The chart is right-aligned (newest sample at right), with amber/red threshold guides at -75/-80 dBm. New JSON endpoint **`GET /api/wifi`** returns connection fields for the live chart and updates.
+
+### Changed
+
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.4.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.4.0**).
+
 ## [0.3.1] - 2026-03-26
 
 ### Added
@@ -75,7 +86,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.4.0
 [0.3.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.1
 [0.3.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.0
 [0.2.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.2.0

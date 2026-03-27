@@ -10,8 +10,9 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "0.3.1"
-#define BUILD (String(__DATE__) + " - " + String(__TIME__)).c_str()
+#define VERSION "0.4.0"
+// Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
+#define BUILD __DATE__ " - " __TIME__
 
 #define INITIAL_WDT_TIMEOUT 300 // Reset ESP32 if wifi is not connected within 5 minutes
 #if defined(ESP32S3)
