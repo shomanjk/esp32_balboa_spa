@@ -21,12 +21,14 @@
 #include <spaUtilities.h>
 #include <restartReason.h>
 #include <rs485.h>
+#include "../../src/main.h"
 
 // Local functions
 
 void handleConfig(AsyncWebServerRequest *request);
 void handleStatus(AsyncWebServerRequest *request);
 void handleState(AsyncWebServerRequest *request);
+void handleVersion(AsyncWebServerRequest *request);
 void handleSlash(AsyncWebServerRequest *request);
 void handleNotFound(AsyncWebServerRequest *request);
 void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
@@ -81,6 +83,7 @@ void spaWebServerLoop()
     server.on("/state", HTTP_GET, handleState);
     server.on("/config", HTTP_GET, handleConfig);
     server.on("/status", HTTP_GET, handleStatus);
+    server.on("/api/version", HTTP_GET, handleVersion);
 #ifdef spaEpaper
     server.on("/panel.jpg", HTTP_GET, handleepdpanel);
 #endif
@@ -269,6 +272,8 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Time: </b>" + formatNumberWithCommas(getTime()) + "</li>";
   html += "<li><b>Refresh Time: </b>" + formatNumberWithCommas(getTime() + 60 * 60) + "</li>";
   html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
+  html += "<li><b>Firmware Version: </b>" + String(VERSION) + "</li>";
+  html += "<li><b>Firmware Build: </b>" + String(BUILD) + "</li>";
   String release = String(__DATE__) + " - " + String(__TIME__);
   html += "<li><b>Release: </b>" + release + "</li>";
   html += "<li><b>Build Definition: </b>" + buildDefinitionString + "</li>";
@@ -339,6 +344,19 @@ void handleState(AsyncWebServerRequest *request)
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
+}
+
+void handleVersion(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(256);
+  doc["version"] = VERSION;
+  doc["build"] = BUILD;
+  doc["hostname"] = WiFi.getHostname();
+  doc["ip"] = WiFi.localIP().toString();
+  doc["restartReason"] = getLastRestartReason();
+  serializeJson(doc, *response);
+  request->send(response);
 }
 
 /*

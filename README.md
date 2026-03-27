@@ -84,6 +84,9 @@ pio run -e M5AtomLite-tub-ota -t upload
 
 - Trusted LAN default: OTA auth is off unless enabled in `config.h` (`ENABLE_OTA_AUTH true` + `OTA_PASSWORD`).
 - Recovery path: keep USB serial flashing available via `M5AtomLite-tub` in case OTA fails.
+- Firmware/build visibility in web UI:
+  - `/state` now shows `Firmware Version` and `Firmware Build`.
+  - `/api/version` returns JSON (`version`, `build`, `hostname`, `ip`, `restartReason`) for portal/status integrations.
 
 ## Compiler Definitions
 

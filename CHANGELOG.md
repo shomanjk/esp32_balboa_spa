@@ -8,6 +8,18 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-26
+
+### Added
+
+- **Web firmware metadata endpoint:** Added `GET /api/version` in `lib/spaWebServer/spaWebServer.cpp` returning firmware `version`, `build`, `hostname`, `ip`, and `restartReason`.
+
+### Changed
+
+- **Web state page:** `/state` now shows `Firmware Version` and `Firmware Build` to simplify OTA verification after updates.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.3.1**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.3.1**).
+
 ## [0.3.0] - 2026-03-26
 
 ### Added
@@ -63,7 +75,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.1
 [0.3.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.0
 [0.2.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.2.0
 [0.1.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.1.0
