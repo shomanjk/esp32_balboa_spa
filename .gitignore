@@ -13,6 +13,9 @@ emulator/node_modules
 src/main.ino.cpp
 /scripts/python
 
+# Full flash dumps from scripts/backup_flash.sh
+/backups/
+
 # Local Mosquitto in docker/mosquitto — optional secrets if you add password/TLS later
 docker/mosquitto/config/passwd
 docker/mosquitto/certs/
