@@ -555,16 +555,24 @@ void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_
 
   if (index == 0)
   {
-    // Allocate memory to store the body data
-    request->_tempObject = malloc(total + 1);
-
-    // Copy the data to the allocated buffer
-    memcpy((char *)request->_tempObject + index, data, len);
-    if (index + len == total)
+    request->_tempObject = new String();
+    if (request->_tempObject == nullptr)
     {
-      // Null-terminate the buffer
-      ((char *)request->_tempObject)[total] = '\0';
+      Log.error("[Web]: handleBody String allocation failed (total=%d, len=%d)" CR, total, len);
+      return;
     }
+  }
+
+  if (request->_tempObject == nullptr)
+  {
+    return;
+  }
+
+  // Append each body chunk; this works for both known-length and chunked transfers.
+  String *body = (String *)request->_tempObject;
+  for (size_t i = 0; i < len; i++)
+  {
+    body->concat((char)data[i]);
   }
 }
 
@@ -632,9 +640,10 @@ void handleData(AsyncWebServerRequest *request)
   if (request->_tempObject != nullptr)
   {
     // Log.verbose("[Web]: handleData _tempObject %s" CR, request->_tempObject);
-    String body = String((char *)request->_tempObject);
+    String *bodyPtr = (String *)request->_tempObject;
+    String body = *bodyPtr;
     // Log.verbose("[Web]: handleData 1" CR);
-    free(request->_tempObject);
+    delete bodyPtr;
     // Log.verbose("[Web]: handleData 2" CR);
     request->_tempObject = nullptr;
     // Log.verbose("[Web]: handleData body %s" CR, body.c_str());
@@ -642,8 +651,9 @@ void handleData(AsyncWebServerRequest *request)
     String response = parseBody(body);
     if (response.length() == 0)
     {
-      Log.verbose("[Web]: ERROR: handleData no response for %s" CR, body.c_str());
-      request->send(404, "text/plain", "Not found");
+      Log.verbose("[Web]: handleData no spa data yet for %s" CR, body.c_str());
+      // Keep API responses explicit while avoiding noisy 404 loops during bench testing.
+      request->send(200, "text/xml", "<response><ready>false</ready><error>no_spa_data_yet</error></response>");
       return;
     }
     // Log.verbose("[Web]: handleData response %s" CR, response.c_str());
@@ -664,9 +674,10 @@ void handleLoginData(AsyncWebServerRequest *request)
   if (request->_tempObject != nullptr)
   {
     // Log.verbose("[Web]: handleData _tempObject %s" CR, request->_tempObject);
-    String body = String((char *)request->_tempObject);
+    String *bodyPtr = (String *)request->_tempObject;
+    String body = *bodyPtr;
     // Log.verbose("[Web]: handleData 1" CR);
-    free(request->_tempObject);
+    delete bodyPtr;
     // Log.verbose("[Web]: handleData 2" CR);
     request->_tempObject = nullptr;
     // Log.verbose("[Web]: handleData body %s" CR, body.c_str());
