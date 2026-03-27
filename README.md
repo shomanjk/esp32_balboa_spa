@@ -52,6 +52,20 @@ MQTT Commands are not working yet.  I never got around to wiring them up.
 
 For the build I use platformio.
 
+### Web UI source and submodule workflow
+
+The SPA web UI is tracked as a git submodule at `balboa-spa`, pinned to this repo.
+
+- Submodule remote is this fork: `https://github.com/shomanjk/balboa-spa.git`
+- Upstream for syncing SPA changes: `https://github.com/jozefnad/balboa-spa.git`
+- First-time clone (or after fresh checkout), run:
+
+```
+git submodule update --init --recursive
+```
+
+The LittleFS pre-build script (`scripts/extra_script.py`) now expects the `balboa-spa` submodule to be present and fails fast with guidance if it is missing.
+
 ## M5 Atom Lite + Atomic RS485 Base (tub-side)
 
 This maintained fork targets **tub-side** builds on the [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) stacked on the [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (TTL ↔ RS‑485, **SP3485EE**, built-in **12 V→5 V** DC‑DC for the Atom). Generic ESP32 dev boards remain supported; see [`src/config-example.h`](src/config-example.h) for default GPIO **16/17**.

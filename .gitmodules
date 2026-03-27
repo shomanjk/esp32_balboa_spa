@@ -1,0 +1,3 @@
+[submodule "balboa-spa"]
+	path = balboa-spa
+	url = https://github.com/shomanjk/balboa-spa.git
