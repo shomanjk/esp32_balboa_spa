@@ -71,6 +71,20 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
 
 **Alternate hardware:** You can still use a **generic ESP32** UART (e.g. **16/17**) or wire a [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) (Grove) to the Atom’s **HY2.0** port with **TX485_Rx 32** / **TX485_Tx 26**—see comments in [`src/config-example.h`](src/config-example.h).
 
+## OTA updates (M5 Atom tub-side)
+
+- OTA runtime is already enabled (`ArduinoOTA` in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)); serial logs print host/IP after Wi‑Fi connect.
+- Use PlatformIO environment **`M5AtomLite-tub-ota`** for Wi‑Fi uploads (`upload_protocol = espota`).
+- Set `upload_port` in [`platformio.ini`](platformio.ini) to your device hostname from logs (for example `spa-XXXXXXXXXXXX.local`) or its static IP.
+- Upload command:
+
+```
+pio run -e M5AtomLite-tub-ota -t upload
+```
+
+- Trusted LAN default: OTA auth is off unless enabled in `config.h` (`ENABLE_OTA_AUTH true` + `OTA_PASSWORD`).
+- Recovery path: keep USB serial flashing available via `M5AtomLite-tub` in case OTA fails.
+
 ## Compiler Definitions
 
   * LOCAL_CLIENT - Connects to a local SPA via rs485 connection

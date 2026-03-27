@@ -14,6 +14,22 @@
 #define WIFI_PASSWORD "password"
 #endif
 
+#ifndef ENABLE_OTA_AUTH
+#define ENABLE_OTA_AUTH false
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD ""
+#endif
+
+#ifndef OTA_TIMEOUT_MS
+#define OTA_TIMEOUT_MS 15000
+#endif
+
+#ifndef OTA_PROGRESS_LOG_STEP_PERCENT
+#define OTA_PROGRESS_LOG_STEP_PERCENT 10
+#endif
+
 #ifndef GMT_OFFSET
 #warning "GMT_OFFSET not defined, please define in config.h"
 #define GMT_OFFSET -14400

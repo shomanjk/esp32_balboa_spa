@@ -12,6 +12,26 @@
 
 WiFiManager wifiManager;
 char gatewayName[20];
+static uint8_t lastOtaProgressLoggedPercent = 0;
+
+static const __FlashStringHelper *otaErrorString(ota_error_t error)
+{
+  switch (error)
+  {
+  case OTA_AUTH_ERROR:
+    return F("Auth Failed");
+  case OTA_BEGIN_ERROR:
+    return F("Begin Failed");
+  case OTA_CONNECT_ERROR:
+    return F("Connect Failed");
+  case OTA_RECEIVE_ERROR:
+    return F("Receive Failed");
+  case OTA_END_ERROR:
+    return F("End Failed");
+  default:
+    return F("Unknown OTA Error");
+  }
+}
 
 void wifiModuleSetup()
 {
@@ -95,31 +115,48 @@ String getStringTime()
 
 void otaSetup()
 {
-
-  ArduinoOTA.begin();
+  if (ENABLE_OTA_AUTH)
+  {
+    if (String(OTA_PASSWORD).length() == 0)
+    {
+      Log.warning(F("[WiFi]: OTA auth enabled but OTA_PASSWORD is empty" CR));
+    }
+    ArduinoOTA.setPassword(OTA_PASSWORD);
+    Log.notice(F("[WiFi]: OTA auth enabled (trusted LAN override disabled)" CR));
+  }
+  else
+  {
+    Log.warning(F("[WiFi]: OTA auth disabled; trusted LAN mode active" CR));
+  }
+  ArduinoOTA.setTimeout(OTA_TIMEOUT_MS);
   ArduinoOTA.onStart(notifyOfUpdateStarted);
   ArduinoOTA.onEnd(notifyOfUpdateEnded);
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
-                        { Log.noticeln(F("[WiFi]: OTA Progress: %u%%\r"), (progress / (total / 100))); 
-                          esp_task_wdt_reset(); });
+                        {
+    if (total == 0)
+    {
+      return;
+    }
+    uint8_t progressPercent = (progress * 100) / total;
+    if (progressPercent >= lastOtaProgressLoggedPercent + OTA_PROGRESS_LOG_STEP_PERCENT || progressPercent == 100)
+    {
+      lastOtaProgressLoggedPercent = progressPercent;
+      Log.notice(F("[WiFi]: OTA Progress: %u%%" CR), progressPercent);
+    }
+    esp_task_wdt_reset(); });
   ArduinoOTA.onError([](ota_error_t error)
                      {
-    if (error == OTA_AUTH_ERROR)
-      Log.error(F("[WiFi]: OTA Auth Filed" CR));
-    else if (error == OTA_BEGIN_ERROR)
-      Log.error(F("[WiFi]: Begin Failed" CR));
-    else if (error == OTA_CONNECT_ERROR)
-      Log.error(F("[WiFi]: OTA Connect Failed" CR));
-    else if (error == OTA_RECEIVE_ERROR)
-      Log.error(F("[WiFi]: OTA Receive Failed" CR));
-    else if (error == OTA_END_ERROR)
-      Log.error(F("[WiFi]: OTA End Failed" CR)); });
+    Log.error(F("[WiFi]: OTA Error: %s (%d)" CR), otaErrorString(error), error);
+    setLastRestartReason("OTA error"); });
+  ArduinoOTA.begin();
   Log.notice(F("[WiFi]: Arduino OTA Enabled" CR));
 }
 
 void notifyOfUpdateStarted()
 {
+  lastOtaProgressLoggedPercent = 0;
   Log.notice(F("[WiFi]: Arduino OTA Update Start" CR));
+  setLastRestartReason("OTA start");
   spaCommunicationEnd();
 }
 
