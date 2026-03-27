@@ -1,6 +1,12 @@
 .pio
 .vscode
 
+# macOS
+.DS_Store
+
+# Local PlatformIO installer artifact (if downloaded into repo root)
+get-platformio.py
+
 src/config.h
 emulator/node_modules
 /balboa-spa
