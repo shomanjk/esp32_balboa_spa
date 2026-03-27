@@ -8,9 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-27
+
 ### Changed
 
 - **Legacy web portal (`/status`, `/config`, `/state`):** mobile-first responsive refresh for firmware-served pages in `lib/spaWebServer/spaWebServer.cpp` with viewport meta tag, wrapping/stacking nav buttons, card-like section layout, improved text wrapping for long diagnostics, and fluid media sizing for the panel image and Wi-Fi RSSI chart (including chart resize handling on viewport/orientation changes).
+- **SPA dependency management:** `balboa-spa` is now tracked as a git submodule pinned in this repository (`.gitmodules`) instead of being silently cloned at build time.
+- **Build pre-action (`scripts/extra_script.py`):** now requires an initialized submodule and fails fast with guidance (`git submodule update --init --recursive`) if missing; removed implicit clone behavior.
+- **Documentation:** `README.md` and `AGENTS.md` now document the submodule workflow (`origin` fork + `upstream` remote) and explicitly call out that SPA behavior changes should be coordinated between submodule source and firmware API compatibility.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.5.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.5.0**).
 
 ## [0.4.0] - 2026-03-27
 
@@ -90,7 +97,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.5.0
 [0.4.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.4.0
 [0.3.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.1
 [0.3.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.0

@@ -9,7 +9,6 @@ get-platformio.py
 
 src/config.h
 emulator/node_modules
-/balboa-spa
 src/main.ino.cpp
 /scripts/python
 

@@ -27,6 +27,8 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 - **PlatformIO** ([`platformio.ini`](platformio.ini)). Web UI assets: `data_dir = balboa-spa/dist`, LittleFS, partition **`spa_module.csv`** (root).
 - **Default env:** `default_envs = ESP32ota` (often **not** tub-side; check flags in each `[env:…]`).
+- **Web SPA source:** `balboa-spa` is a tracked **git submodule** pinned in this repo, with fork origin `https://github.com/shomanjk/balboa-spa.git` and upstream `https://github.com/jozefnad/balboa-spa.git`.
+- **First clone/setup:** run `git submodule update --init --recursive` before `uploadfs` builds.
 
 ### Compile-time flags (see README “Compiler Definitions”)
 
@@ -49,7 +51,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 | Message parse, status, config requests | [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h) | `sendMessageToSpa()` enqueues to **`spaWriteQueue`**. |
 | MQTT publish | [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp) | Status/config topics under `Spa/<gateway>/…`. |
 | MQTT subscribe / commands | [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp) | **Known gap:** callback currently **echoes** payloads; commands not implemented. |
-| Web / SCI emulation | [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) | **`parseBody`**: reads work; **`device_request` / buttons** not fully wired. **`handleBody`** may mishandle multi-chunk POSTs if `index > 0`. JSON: **`GET /api/version`**, **`GET /api/wifi`** (Wi‑Fi status/RSSI for `/state` live section + chart). |
+| Web / SCI emulation | [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) | **`parseBody`**: reads work; **`device_request` / buttons** not fully wired. Multi-chunk POST body handling is implemented. When no spa data exists yet, `/devices/sci` returns explicit not-ready XML (`ready=false`, `error=no_spa_data_yet`) instead of 404. JSON: **`GET /api/version`**, **`GET /api/wifi`** (Wi‑Fi status/RSSI for `/state` live section + chart). |
 | TCP bridge (LAN clients) | [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp) | Port **4257**; forwards to RS485 via [`cacheRead.cpp`](lib/spaMessage/cacheRead.cpp) / `sendMessageToSpa`. |
 | Remote TCP to spa | [`lib/spaRemoteCommunication/spaCommunication.cpp`](lib/spaRemoteCommunication/spaCommunication.cpp) | Only when **`REMOTE_CLIENT`** is defined. |
 | Main loop / init | [`src/main.ino`](src/main.ino) | Conditional compilation per flags above. |
@@ -86,4 +88,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 - Prefer **small, focused changes**; match existing style and naming.
 - **`config.h`** secrets: never commit; use **`config-example.h`** for templates only.
+- When changing SPA behavior, update both places intentionally:
+  - SPA source in submodule: `balboa-spa/src/...` (commit/push in SPA fork)
+  - Firmware/API compatibility in parent repo: `lib/spaWebServer/...`, docs/changelog as needed
 - After user-facing behavior or release steps change, update **CHANGELOG** `[Unreleased]` and this file if needed.
