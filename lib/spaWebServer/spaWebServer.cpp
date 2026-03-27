@@ -70,7 +70,7 @@ static void appendWifiStateSection(String &html)
   wl_status_t st = WiFi.status();
   bool ok = (st == WL_CONNECTED);
 
-  html += "</ul><h1>WiFi</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>WiFi</h1><ul>";
   html += "<li><b>Status: </b><span id=\"wf-st\">";
   html += wifiStatusName(st);
   html += " (";
@@ -115,8 +115,8 @@ static void appendWifiStateSection(String &html)
   html += "<li><b>5 min Avg RSSI: </b><span id=\"wf-avg\">—</span></li>";
   html += "</ul>";
 
-  html += "<p style=\"margin:12px 0 6px 0\"><b>RSSI over time</b> (5s samples, ~5 min window)</p>";
-  html += "<canvas id=\"wifiRssiChart\" width=\"720\" height=\"160\" style=\"max-width:100%;border:1px solid #ccc;background:#fff\"></canvas>";
+  html += "<p class='chart-title'><b>RSSI over time</b> (5s samples, ~5 min window)</p>";
+  html += "<div class='chart-wrap'><canvas id=\"wifiRssiChart\" height=\"160\"></canvas></div>";
   html += "<script>";
   html += "(function(){var pollMs=5000,maxPts=60,warnRssi=-75,badRssi=-80;var c=document.getElementById('wifiRssiChart');";
   html += "if(!c)return;var x=c.getContext('2d'),d=[];";
@@ -124,7 +124,8 @@ static void appendWifiStateSection(String &html)
   html += "function colorOf(v){if(v<=badRssi)return '#c62828';if(v<=warnRssi)return '#ef6c00';return '#04AA6D';}";
   html += "function qualityOf(v){if(v<=badRssi)return 'Weak';if(v<=warnRssi)return 'Fair';if(v<=-67)return 'Good';return 'Excellent';}";
   html += "function yOf(v,lo,hi,h){return h-8-(v-lo)/(hi-lo)*(h-16);}";
-  html += "function draw(){var w=c.width,h=c.height;x.fillStyle='#fff';x.fillRect(0,0,w,h);";
+  html += "function resizeCanvas(){var p=c.parentElement;var cssW=p?Math.max(280,p.clientWidth-2):320;var cssH=160;var dpr=window.devicePixelRatio||1;c.width=Math.round(cssW*dpr);c.height=Math.round(cssH*dpr);c.style.width=cssW+'px';c.style.height=cssH+'px';x.setTransform(1,0,0,1,0,0);x.scale(dpr,dpr);draw();}";
+  html += "function draw(){var w=parseFloat(c.style.width)||320,h=parseFloat(c.style.height)||160;x.fillStyle='#fff';x.fillRect(0,0,w,h);";
   html += "x.strokeStyle='#ccc';x.strokeRect(0.5,0.5,w-1,h-1);x.fillStyle='#333';x.font='12px sans-serif';";
   html += "if(d.length<1){x.fillText('Collecting samples…',10,80);return;}";
   html += "var lo=-100,hi=-30,i,m;";
@@ -148,10 +149,10 @@ static void appendWifiStateSection(String &html)
   html += "var rc=document.getElementById('wf-rssi'),qc=document.getElementById('wf-quality');if(rc)rc.style.color=colorOf(j.rssi);if(qc)qc.style.color=colorOf(j.rssi);";
   html += "d.push(j.rssi);if(d.length>maxPts)d.shift();var sum=0;for(var k=0;k<d.length;k++)sum+=d[k];set('wf-avg',(sum/d.length).toFixed(1)+' dBm');draw();}";
   html += "else{set('wf-rssi','—');set('wf-quality','');set('wf-avg','—');var rc=document.getElementById('wf-rssi');if(rc)rc.style.color='';d=[];draw();}}).catch(function(){});}";
-  html += "poll();setInterval(poll,pollMs);})();";
+  html += "window.addEventListener('resize',resizeCanvas);window.addEventListener('orientationchange',resizeCanvas);resizeCanvas();poll();setInterval(poll,pollMs);})();";
   html += "</script>";
 
-  html += "<h1>Spa Status</h1><ul>";
+  html += "</section><section class='panel'><h1>Spa Status</h1><ul>";
 }
 
 AsyncWebServer server(80);
@@ -248,20 +249,20 @@ void handleepdpanel(AsyncWebServerRequest *request)
 }
 #endif
 
-#define style String("<style>body{font-family:Arial,Helvetica,sans-serif;}h1{color:blue;}ul{list-style-type:none;}li{padding:5px;}button{  border: none;  color: white; padding: 15px 32px;  text-align: center;  text-decoration: none;  display: inline-block;  font-size: 16px;  margin: 4px 2px;  cursor: pointer;background-color: #04AA6D;} .active, .btn:hover { background-color: #666;  color: white;}</style>")
+#define style String("<style>:root{--bg:#f4f7f8;--panel:#fff;--text:#1f2933;--muted:#5f6c7b;--brand:#037e52;--brandActive:#4b5563;--border:#d4dbe1;--focus:#0f4a87;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;}*{box-sizing:border-box;}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}html,body{max-width:100%;overflow-x:hidden;}img,canvas{display:block;max-width:100%;height:auto;}.skip-link{position:absolute;left:10px;top:-48px;z-index:999;background:#0f4a87;color:#fff;padding:10px 12px;border-radius:6px;text-decoration:none;}.skip-link:focus{top:10px;outline:3px solid #fff;outline-offset:2px;}.page{max-width:980px;margin:0 auto;padding:var(--space-3);}h1{color:#0f4a87;font-size:1.05rem;margin:0 0 var(--space-2) 0;line-height:1.3;}.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:var(--space-3);margin-bottom:var(--space-3);box-shadow:0 1px 2px rgba(0,0,0,.04);}ul{list-style:none;margin:0;padding:0;}li{padding:var(--space-1) 0;border-bottom:1px dashed #e5eaef;overflow-wrap:anywhere;word-break:break-word;}li:last-child{border-bottom:none;}.spacer{height:8px;border-bottom:none;padding:0;}.top-nav{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-bottom:var(--space-3);}button{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease;}.active{background-color:var(--brandActive);color:#fff;}@media (hover:hover){button:hover{background-color:var(--brandActive);}}button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}button:active{transform:translateY(1px);}.panel-image{width:100%;max-width:600px;margin:0 auto var(--space-3) auto;border-radius:8px;}.chart-title{margin:12px 0 6px 0;color:var(--muted);}.chart-wrap{width:100%;max-width:100%;overflow:hidden;border:1px solid #ccc;background:#fff;border-radius:6px;}#wf-rssi,#wf-quality{font-weight:700;}@media (max-width:640px){.page{padding:var(--space-2);}button{flex:1 1 100%;width:100%;}.panel{padding:var(--space-2);}h1{font-size:1rem;}}@media (prefers-reduced-motion:reduce){button{transition:none;}}</style>")
 
 #define icon String("<link rel='icon' href='/assets/style/hottubbing.webp' type='image/x-icon' />")
 
-#define head String("<head><title>Spa Web Server State</title>") + icon + style + String("</head>")
+#define head String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Web Server State</title>") + icon + style + String("</head>")
 
-#define webMenuStatus String("<form><button class='active' formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form>")
+#define webMenuStatus String("<nav aria-label='Portal navigation'><form class='top-nav'><button class='active' formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form></nav>")
 
-#define webMenuConfig String("<form><button formaction='/status'>SPA Status</button><button class='active' formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form>")
+#define webMenuConfig String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button class='active' formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form></nav>")
 
-#define webMenuState String("<form><button formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button class='active' formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form>")
+#define webMenuState String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button class='active' formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form></nav>")
 
 #ifdef spaEpaper
-#define ePaper String("<img src='panel.jpg' alt='Spa Panel' width=600>")
+#define ePaper String("<img class='panel-image' src='panel.jpg' alt='Spa Panel'>")
 #else
 #define ePaper String("")
 #endif
@@ -269,14 +270,14 @@ void handleepdpanel(AsyncWebServerRequest *request)
 void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
-  String html = "<html>" + head + "<body>" + webMenuStatus + ePaper + "<h1>Spa Status</h1><ul>";
+  String html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Status</h1><ul>";
   html += "<li><b>lastUpdate:</b> " + formatNumberWithCommas(spaStatusData.lastUpdate) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
-  html += "<br><li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
+  html += "<li class='spacer'></li><li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
 
-  html += "<br><li><b>Current Temp: </b>" + String(spaStatusData.currentTemp) + "°C</li>";
+  html += "<li class='spacer'></li><li><b>Current Temp: </b>" + String(spaStatusData.currentTemp) + "°C</li>";
   html += "<li><b>Set Temp: </b>" + String(spaStatusData.setTemp) + "°C</li>";
   html += "<li><b>High Set Temp: </b>" + String(spaStatusData.highSetTemp) + "°C</li>";
   html += "<li><b>Low Set Temp: </b>" + String(spaStatusData.lowSetTemp) + "°C</li>";
@@ -309,15 +310,15 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "<li><b>Notification: </b>" + String(spaStatusData.notification) + "</li>";
   html += "<li><b>Flags 19: </b>" + String(spaStatusData.flags19) + "</li>";
 
-  html += "<br><li><b>Heater On Time Today: </b>" + formatNumberWithCommas(spaStatusData.heaterOnTimeToday) + "(sec)</li>";
+  html += "<li class='spacer'></li><li><b>Heater On Time Today: </b>" + formatNumberWithCommas(spaStatusData.heaterOnTimeToday) + "(sec)</li>";
   html += "<li><b>Heater On Time Yesterday: </b>" + formatNumberWithCommas(spaStatusData.heaterOnTimeYesterday) + "(sec)</li>";
   html += "<li><b>Filter On Time Today: </b>" + formatNumberWithCommas(spaStatusData.filterOnTimeToday) + "(sec)</li>";
   html += "<li><b>Filter On Time Yesterday: </b>" + formatNumberWithCommas(spaStatusData.filterOnTimeYesterday) + "(sec)</li>";
-  html += "<br><li><b>Temperature History: </b>" + historyToString(spaStatusData.temperatureHistory) + "</li>";
+  html += "<li class='spacer'></li><li><b>Temperature History: </b>" + historyToString(spaStatusData.temperatureHistory) + "</li>";
   html += "<li><b>Heat History: </b>" + historyToString(spaStatusData.heatOn->history()) + "</li>";
   html += "<li><b>Filter History: </b>" + historyToString(spaStatusData.filterOn->history()) + "</li>";
 
-  html += "</ul></body></html>";
+  html += "</ul></section></main></div></body></html>";
   // Add more fields as needed
   request->send(200, "text/html", html);
   Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
@@ -327,7 +328,7 @@ void handleConfig(AsyncWebServerRequest *request)
 {
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
 
-  String html = "<html>" + head + "<body>" + webMenuConfig + ePaper + "<h1>Spa Configuration</h1><ul>";
+  String html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Configuration</h1><ul>";
   if (spaConfigurationData.lastUpdate == 0)
   {
     html += "<li><b>Spa Configuration not available</b></li>";
@@ -350,12 +351,12 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "<li><b>Aux 2: </b>" + String(spaConfigurationData.aux2) + "</li>";
     html += "<li><b>Mister: </b>" + String(spaConfigurationData.mister) + "</li>";
     html += "<li><b>temp_scale: </b>" + String(spaConfigurationData.temp_scale) + "</li>";
-    html += "</ul><h1>Filter Configuration</h1><ul>";
+    html += "</ul></section><section class='panel'><h1>Filter Configuration</h1><ul>";
     html += "<li><b>Filter 1 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</li>";
     html += "<li><b>Filter 1 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</li>";
     html += "<li><b>Filter 2 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</li>";
     html += "<li><b>Filter 2 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</li>";
-    html += "</ul><h1>LittleFS Configuration</h1><ul>";
+    html += "</ul></section><section class='panel'><h1>LittleFS Configuration</h1><ul>";
 
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED))
     {
@@ -366,8 +367,8 @@ void handleConfig(AsyncWebServerRequest *request)
       html += "<li>" + listDirToString(LittleFS, "/", 3) + "</li>";
     }
     // Add more fields as needed
-    html += "</ul></body></html>";
   }
+  html += "</ul></section></main></div></body></html>";
   request->send(200, "text/html", html);
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
   Log.verbose("[Web]: handleConfig %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
@@ -378,7 +379,7 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String html = "<html>" + head + "<body>" + webMenuState + ePaper + "<h1>ESP State</h1><ul>";
+  String html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>ESP State</h1><ul>";
   html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
@@ -392,13 +393,13 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Release: </b>" + release + "</li>";
   html += "<li><b>Build Definition: </b>" + buildDefinitionString + "</li>";
 
-  html += "<br><li><b>getTime(): </b>" + formatNumberWithCommas(getTime()) + "</li>";
+  html += "<li class='spacer'></li><li><b>getTime(): </b>" + formatNumberWithCommas(getTime()) + "</li>";
   html += "<li><b>getHour(testLastCheckedTime): </b>" + formatNumberWithCommas(getHour(testLastCheckedTime)) + "</li>";
   html += "<li><b>getHour(getTime()): </b>" + formatNumberWithCommas(getHour(getTime())) + "</li>";
   html += "<li><b>hasDayChanged(testLastCheckedTime): </b>" + String(hasDayChanged(testLastCheckedTime)) + "</li>";
 
 #ifdef LOCAL_CLIENT
-  html += "<br><li><b>rs485 messagesToday: </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
+  html += "<li class='spacer'></li><li><b>rs485 messagesToday: </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
   html += "<li><b>rs485 crcToday: </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
   html += "<li><b>rs485 messagesYesterday: </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
   html += "<li><b>rs485 crcYesterday: </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
@@ -410,49 +411,49 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaStatusData.lastUpdate) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
 
-  html += "</ul><h1>Configuration Status</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>Configuration Status</h1><ul>";
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaConfigurationData.lastUpdate) + "</li>";
   html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaConfigurationData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaConfigurationData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaConfigurationData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaConfigurationData)) + "</li>";
 
-  html += "</ul><h1>Preferences Status</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>Preferences Status</h1><ul>";
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaPreferencesData.lastUpdate) + "</li>";
   html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaPreferencesData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaPreferencesData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaPreferencesData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaPreferencesData)) + "</li>";
 
-  html += "</ul><h1>Filters Status</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>Filters Status</h1><ul>";
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaFilterSettingsData.lastUpdate) + "</li>";
   html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaFilterSettingsData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaFilterSettingsData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaFilterSettingsData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaFilterSettingsData)) + "</li>";
 
-  html += "</ul><h1>Information Status</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>Information Status</h1><ul>";
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaInformationData.lastUpdate) + "</li>";
   html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaInformationData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaInformationData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaInformationData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaInformationData)) + "</li>";
 
-  html += "</ul><h1>Fault Status</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>Fault Status</h1><ul>";
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaFaultLogData.lastUpdate) + "</li>";
   html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaFaultLogData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaFaultLogData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaFaultLogData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaFaultLogData)) + "</li>";
 
-  html += "</ul><h1>spaSettings0x04Data Status</h1><ul>";
+  html += "</ul></section><section class='panel'><h1>spaSettings0x04Data Status</h1><ul>";
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaSettings0x04Data.lastUpdate) + "</li>";
   html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaSettings0x04Data.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaSettings0x04Data.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaSettings0x04Data)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaSettings0x04Data)) + "</li>";
 
-  html += "</ul></body></html>";
+  html += "</ul></section></main></div></body></html>";
 
   request->send(200, "text/html", html);
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());

@@ -38,6 +38,8 @@ Credit for the code goes to https://github.com/jozefnad/balboa-spa
 
 Currently the WebSite buttons are not working.  I never got around to wiring them up.
 
+Legacy firmware-served pages (`/status`, `/config`, `/state`) now include responsive/mobile-friendly layout behavior (viewport scaling, wrapping nav, fluid chart/image sizing) for better phone usability.
+
 ## Integration with Homebridge
 
 I have used this with the homebridge plugin [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa) to control and automate my Hot Tub.
