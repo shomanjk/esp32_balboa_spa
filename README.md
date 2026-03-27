@@ -87,6 +87,7 @@ pio run -e M5AtomLite-tub-ota -t upload
 - Firmware/build visibility in web UI:
   - `/state` now shows `Firmware Version` and `Firmware Build`.
   - `/api/version` returns JSON (`version`, `build`, `hostname`, `ip`, `restartReason`) for portal/status integrations.
+- Reference runbook for OTA with live logs: [`OTA_LOGGING_WORKFLOW.md`](OTA_LOGGING_WORKFLOW.md).
 
 ## Compiler Definitions
 

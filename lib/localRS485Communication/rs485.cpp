@@ -9,6 +9,7 @@
 #include "rs485.h"
 #include "../../src/config.h"
 #include "../../src/main.h"
+#include "../../src/rs485_led_hooks.h"
 
 // QueueHandle_t rs485WriteQueue;
 
@@ -72,6 +73,7 @@ void rs485Loop()
   if (Serial2.available())
   {
     x = Serial2.read();
+    rs485LedNotifyRx();
     spaMessage.push(x);
 
     // Drop until SOF is seen
@@ -297,6 +299,7 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
     Serial2.write(data[i]);
 
   Serial2.flush();
+  rs485LedNotifyTx();
 
   if (AUTO_TX)
   {

@@ -29,6 +29,7 @@ void handleConfig(AsyncWebServerRequest *request);
 void handleStatus(AsyncWebServerRequest *request);
 void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
+void handleWifi(AsyncWebServerRequest *request);
 void handleSlash(AsyncWebServerRequest *request);
 void handleNotFound(AsyncWebServerRequest *request);
 void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
@@ -40,6 +41,118 @@ void handleepdpanel(AsyncWebServerRequest *request);
 String parseBody(String body);
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
 String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
+
+static const char *wifiStatusName(wl_status_t s)
+{
+  switch (s)
+  {
+  case WL_IDLE_STATUS:
+    return "Idle";
+  case WL_NO_SSID_AVAIL:
+    return "No SSID";
+  case WL_SCAN_COMPLETED:
+    return "Scan completed";
+  case WL_CONNECTED:
+    return "Connected";
+  case WL_CONNECT_FAILED:
+    return "Connect failed";
+  case WL_CONNECTION_LOST:
+    return "Connection lost";
+  case WL_DISCONNECTED:
+    return "Disconnected";
+  default:
+    return "Unknown";
+  }
+}
+
+static void appendWifiStateSection(String &html)
+{
+  wl_status_t st = WiFi.status();
+  bool ok = (st == WL_CONNECTED);
+
+  html += "</ul><h1>WiFi</h1><ul>";
+  html += "<li><b>Status: </b><span id=\"wf-st\">";
+  html += wifiStatusName(st);
+  html += " (";
+  html += String(static_cast<int>(st));
+  html += ")</span></li>";
+
+  html += "<li><b>SSID: </b><span id=\"wf-ssid\">";
+  html += ok ? WiFi.SSID() : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>Hostname: </b><span id=\"wf-host\">";
+  html += WiFi.getHostname() ? String(WiFi.getHostname()) : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>IP: </b><span id=\"wf-ip\">";
+  html += ok ? WiFi.localIP().toString() : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>Gateway: </b><span id=\"wf-gw\">";
+  html += ok ? WiFi.gatewayIP().toString() : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>Subnet: </b><span id=\"wf-sn\">";
+  html += ok ? WiFi.subnetMask().toString() : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>DNS: </b><span id=\"wf-dns\">";
+  html += ok ? WiFi.dnsIP(0).toString() : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>Channel: </b><span id=\"wf-ch\">";
+  html += ok ? String(WiFi.channel()) : String("—");
+  html += "</span></li>";
+
+  html += "<li><b>MAC: </b><span id=\"wf-mac\">";
+  html += WiFi.macAddress();
+  html += "</span></li>";
+
+  html += "<li><b>Signal (RSSI): </b><span id=\"wf-rssi\" style=\"font-weight:600\">";
+  html += ok ? String(WiFi.RSSI()) + " dBm" : String("—");
+  html += "</span> <span id=\"wf-quality\" style=\"font-weight:600\"></span></li>";
+  html += "<li><b>5 min Avg RSSI: </b><span id=\"wf-avg\">—</span></li>";
+  html += "</ul>";
+
+  html += "<p style=\"margin:12px 0 6px 0\"><b>RSSI over time</b> (5s samples, ~5 min window)</p>";
+  html += "<canvas id=\"wifiRssiChart\" width=\"720\" height=\"160\" style=\"max-width:100%;border:1px solid #ccc;background:#fff\"></canvas>";
+  html += "<script>";
+  html += "(function(){var pollMs=5000,maxPts=60,warnRssi=-75,badRssi=-80;var c=document.getElementById('wifiRssiChart');";
+  html += "if(!c)return;var x=c.getContext('2d'),d=[];";
+  html += "function set(t,v){var e=document.getElementById(t);if(e)e.textContent=v;}";
+  html += "function colorOf(v){if(v<=badRssi)return '#c62828';if(v<=warnRssi)return '#ef6c00';return '#04AA6D';}";
+  html += "function qualityOf(v){if(v<=badRssi)return 'Weak';if(v<=warnRssi)return 'Fair';if(v<=-67)return 'Good';return 'Excellent';}";
+  html += "function yOf(v,lo,hi,h){return h-8-(v-lo)/(hi-lo)*(h-16);}";
+  html += "function draw(){var w=c.width,h=c.height;x.fillStyle='#fff';x.fillRect(0,0,w,h);";
+  html += "x.strokeStyle='#ccc';x.strokeRect(0.5,0.5,w-1,h-1);x.fillStyle='#333';x.font='12px sans-serif';";
+  html += "if(d.length<1){x.fillText('Collecting samples…',10,80);return;}";
+  html += "var lo=-100,hi=-30,i,m;";
+  html += "for(i=0;i<d.length;i++){m=d[i];if(m<lo)lo=m;if(m>hi)hi=m;}";
+  html += "if(warnRssi<lo)lo=warnRssi-2;if(warnRssi>hi)hi=warnRssi+2;if(badRssi<lo)lo=badRssi-2;if(badRssi>hi)hi=badRssi+2;";
+  html += "if(hi-lo<8){lo-=4;hi+=4;}";
+  html += "x.fillText(lo+' dBm',4,h-4);x.fillText(hi+' dBm',4,14);";
+  html += "x.strokeStyle='rgba(239,108,0,0.65)';x.setLineDash([4,4]);x.beginPath();x.moveTo(10,yOf(warnRssi,lo,hi,h));x.lineTo(w-10,yOf(warnRssi,lo,hi,h));x.stroke();";
+  html += "x.strokeStyle='rgba(198,40,40,0.75)';x.beginPath();x.moveTo(10,yOf(badRssi,lo,hi,h));x.lineTo(w-10,yOf(badRssi,lo,hi,h));x.stroke();x.setLineDash([]);";
+  html += "x.strokeStyle='#04AA6D';x.lineWidth=1.5;x.beginPath();";
+  html += "for(i=0;i<d.length;i++){var slot=maxPts-d.length+i;var px=10+slot*(w-20)/Math.max(1,maxPts-1);";
+  html += "var py=yOf(d[i],lo,hi,h);if(i===0)x.moveTo(px,py);else x.lineTo(px,py);}";
+  html += "x.stroke();}";
+  html += "function poll(){fetch('/api/wifi').then(function(r){return r.json();}).then(function(j){";
+  html += "set('wf-st',j.statusName+' ('+j.status+')');";
+  html += "set('wf-ssid',j.connected?j.ssid:'—');set('wf-host',j.hostname||'—');";
+  html += "set('wf-ip',j.connected?j.ip:'—');set('wf-gw',j.connected?j.gateway:'—');";
+  html += "set('wf-sn',j.connected?j.subnet:'—');set('wf-dns',j.connected?j.dns:'—');";
+  html += "set('wf-ch',j.connected?String(j.channel):'—');set('wf-mac',j.mac||'—');";
+  html += "if(j.connected&&typeof j.rssi==='number'){set('wf-rssi',j.rssi+' dBm');set('wf-quality','('+qualityOf(j.rssi)+')');";
+  html += "var rc=document.getElementById('wf-rssi'),qc=document.getElementById('wf-quality');if(rc)rc.style.color=colorOf(j.rssi);if(qc)qc.style.color=colorOf(j.rssi);";
+  html += "d.push(j.rssi);if(d.length>maxPts)d.shift();var sum=0;for(var k=0;k<d.length;k++)sum+=d[k];set('wf-avg',(sum/d.length).toFixed(1)+' dBm');draw();}";
+  html += "else{set('wf-rssi','—');set('wf-quality','');set('wf-avg','—');var rc=document.getElementById('wf-rssi');if(rc)rc.style.color='';d=[];draw();}}).catch(function(){});}";
+  html += "poll();setInterval(poll,pollMs);})();";
+  html += "</script>";
+
+  html += "<h1>Spa Status</h1><ul>";
+}
 
 AsyncWebServer server(80);
 bool serverSetup = false;
@@ -84,6 +197,7 @@ void spaWebServerLoop()
     server.on("/config", HTTP_GET, handleConfig);
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
+    server.on("/api/wifi", HTTP_GET, handleWifi);
 #ifdef spaEpaper
     server.on("/panel.jpg", HTTP_GET, handleepdpanel);
 #endif
@@ -292,7 +406,7 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>rs485 badFormatYesterday: </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
 #endif
 
-  html += "</ul><h1>Spa Status</h1><ul>";
+  appendWifiStateSection(html);
   html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaStatusData.lastUpdate) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
 
@@ -355,6 +469,47 @@ void handleVersion(AsyncWebServerRequest *request)
   doc["hostname"] = WiFi.getHostname();
   doc["ip"] = WiFi.localIP().toString();
   doc["restartReason"] = getLastRestartReason();
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleWifi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(512);
+  wl_status_t st = WiFi.status();
+  const bool ok = (st == WL_CONNECTED);
+  doc["connected"] = ok;
+  doc["status"] = static_cast<int>(st);
+  doc["statusName"] = wifiStatusName(st);
+  doc["mac"] = WiFi.macAddress();
+  if (WiFi.getHostname())
+  {
+    doc["hostname"] = WiFi.getHostname();
+  }
+  else
+  {
+    doc["hostname"] = "";
+  }
+  if (ok)
+  {
+    doc["ssid"] = WiFi.SSID();
+    doc["rssi"] = WiFi.RSSI();
+    doc["ip"] = WiFi.localIP().toString();
+    doc["gateway"] = WiFi.gatewayIP().toString();
+    doc["subnet"] = WiFi.subnetMask().toString();
+    doc["dns"] = WiFi.dnsIP(0).toString();
+    doc["channel"] = WiFi.channel();
+  }
+  else
+  {
+    doc["ssid"] = "";
+    doc["ip"] = "";
+    doc["gateway"] = "";
+    doc["subnet"] = "";
+    doc["dns"] = "";
+    doc["channel"] = 0;
+  }
   serializeJson(doc, *response);
   request->send(response);
 }
