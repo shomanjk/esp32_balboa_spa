@@ -12,3 +12,7 @@ emulator/node_modules
 /balboa-spa
 src/main.ino.cpp
 /scripts/python
+
+# Local Mosquitto in docker/mosquitto — optional secrets if you add password/TLS later
+docker/mosquitto/config/passwd
+docker/mosquitto/certs/

@@ -1,0 +1,21 @@
+# Mosquitto for bench / dev — separate from Home Assistant's broker.
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f
+#
+# Point src/config.h at this laptop's LAN IP, e.g.:
+#   #define MQTT_SERVER "192.168.1.42"
+#   #define MQTT_PORT 1883
+#   #define BROKER_LOGIN ""
+#   #define BROKER_PASS ""
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: esp32-balboa-mosquitto-dev
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
