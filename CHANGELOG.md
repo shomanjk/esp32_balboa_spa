@@ -8,6 +8,12 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **`platformio.ini` `[env:ESP32ota]`:** Re-enabled `LOCAL_CONNECT`, `LOCAL_CLIENT`, and `BRIDGE` so the default OTA env matches tub-side builds (fixes compile after role flags were commented out in error).
+- **balboa-spa (login):** Balboa BWA login screen shows a short note that on the local gateway, username and password are not verified and any values may be entered to continue.
+- **Web portal `/status`:** SPA Status page is grouped into sections (sync, memory, temperatures, heating, equipment grid, run times, histories) with responsive two-column layout on wider viewports and definition-list rows for easier scanning.
+
 ## [1.0.0] - 2026-04-27
 
 First **1.x** release: tub-side RS485 path validated on hardware; correctness fixes to frame parsing and safer UART draining so the spa link stays reliable under load.
