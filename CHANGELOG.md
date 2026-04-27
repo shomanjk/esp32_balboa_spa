@@ -8,6 +8,15 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **`lib/localRS485Communication/rs485.cpp`:** Added RS485 polarity auto-detect fallback for tub-side UART bring-up. Firmware now starts with normal UART polarity, retries with inverted RX polarity if no valid Balboa frames are seen during the detect window, and logs/records lock state and polarity switch stats.
+
+### Changed
+
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.6.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.6.0**).
+
 ## [0.5.0] - 2026-03-27
 
 ### Changed

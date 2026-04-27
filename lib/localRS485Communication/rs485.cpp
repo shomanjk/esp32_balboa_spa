@@ -19,12 +19,18 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 bool isMessageValid(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 void sendExistingClientResponse(uint8_t id);
+void applyRs485Polarity(bool inverted);
 // bool hasDayChanged();
 
 RTC_NOINIT_ATTR Rs485Stats rs485Stats;
 
 CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> spaMessage;
 uint8_t id = 0x00; // spa id
+bool rs485PolarityInverted = false;
+bool rs485PolarityLocked = false;
+uint8_t rs485PolarityDetectPhase = 0; // 0: try normal, 1: try inverted, 2: detection complete
+uint32_t rs485PolarityDetectWindowStartMs = 0;
+uint32_t rs485ValidFramesSinceBoot = 0;
 
 #ifndef TX485_Tx
 #define TX485_Tx 17
@@ -39,6 +45,7 @@ uint8_t id = 0x00; // spa id
 #endif
 
 #define RS_485_MAGIC_NUMBER 0x21345678
+#define RS485_POLARITY_DETECT_WINDOW_MS 15000
 
 time_t lastCheckedTime;
 
@@ -50,8 +57,8 @@ void rs485Setup()
     digitalWrite(TX485_Tx, LOW);
   }
   // Spa communication, 115.200 baud 8N1
-  RS485_SERIAL_PORT.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
-  Log.verbose(F("[rs485]: RS485 setup, RX GPIO %d, TX GPIO %d" CR), TX485_Rx, TX485_Tx);
+  applyRs485Polarity(false);
+  Log.verbose(F("[rs485]: RS485 setup, RX GPIO %d, TX GPIO %d, auto polarity detect %s" CR), TX485_Rx, TX485_Tx, "enabled");
 
   lastCheckedTime = getTime();
   if (rs485Stats.magicNumber != RS_485_MAGIC_NUMBER)
@@ -60,6 +67,8 @@ void rs485Setup()
     rs485Stats = {};
     rs485Stats.magicNumber = RS_485_MAGIC_NUMBER;
   }
+  rs485Stats.polarityInverted = rs485PolarityInverted ? 1 : 0;
+  rs485Stats.polarityLocked = rs485PolarityLocked ? 1 : 0;
 };
 
 /*
@@ -70,9 +79,30 @@ uint8_t x;
 
 void rs485Loop()
 {
-  if (Serial2.available())
+  if (!rs485PolarityLocked && millis() - rs485PolarityDetectWindowStartMs >= RS485_POLARITY_DETECT_WINDOW_MS)
   {
-    x = Serial2.read();
+    if (rs485PolarityDetectPhase == 0 && rs485ValidFramesSinceBoot == 0)
+    {
+      rs485PolarityDetectPhase = 1;
+      rs485Stats.polaritySwitchesToday++;
+      applyRs485Polarity(true);
+      spaMessage.clear();
+      Log.warning(F("[rs485]: No valid frames with normal polarity, retrying with inverted UART polarity" CR));
+    }
+    else
+    {
+      rs485PolarityDetectPhase = 2;
+      rs485PolarityLocked = true;
+      rs485Stats.polarityLocked = 1;
+      Log.warning(F("[rs485]: Polarity auto-detect complete, using %s UART polarity (valid frames seen: %d)" CR),
+                  rs485PolarityInverted ? "inverted" : "normal",
+                  rs485ValidFramesSinceBoot);
+    }
+  }
+
+  if (RS485_SERIAL_PORT.available())
+  {
+    x = RS485_SERIAL_PORT.read();
     rs485LedNotifyRx();
     spaMessage.push(x);
 
@@ -117,6 +147,15 @@ void rs485Loop()
     {
       // Log.verbose(F("[rs485]: Received: %d - %s" CR), id, msgToString(spaMessage).c_str());
       rs485Stats.messagesToday++;
+      rs485ValidFramesSinceBoot++;
+      if (!rs485PolarityLocked)
+      {
+        rs485PolarityLocked = true;
+        rs485PolarityDetectPhase = 2;
+        rs485Stats.polarityLocked = 1;
+        Log.notice(F("[rs485]: Polarity auto-detect locked on %s UART polarity after first valid frame" CR),
+                   rs485PolarityInverted ? "inverted" : "normal");
+      }
       if (id == 0)
       {
         if (Status_Update(spaMessage)) // This is hacky, but it appears to work
@@ -187,6 +226,8 @@ void rs485Loop()
     rs485Stats.crcToday = 0;
     rs485Stats.badFormatYesterday = rs485Stats.badFormatToday;
     rs485Stats.badFormatToday = 0;
+    rs485Stats.polaritySwitchesYesterday = rs485Stats.polaritySwitchesToday;
+    rs485Stats.polaritySwitchesToday = 0;
   }
 };
 
@@ -296,9 +337,9 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
     delay(1);
   }
   for (int i = 0; i < data.size(); i++)
-    Serial2.write(data[i]);
+    RS485_SERIAL_PORT.write(data[i]);
 
-  Serial2.flush();
+  RS485_SERIAL_PORT.flush();
   rs485LedNotifyTx();
 
   if (AUTO_TX)
@@ -314,6 +355,21 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
     Log.verbose(F("[rs485]: Sent: %s" CR), msgToString(data).c_str());
   }
   data.clear();
+}
+
+void applyRs485Polarity(bool inverted)
+{
+  rs485PolarityInverted = inverted;
+  rs485Stats.polarityInverted = rs485PolarityInverted ? 1 : 0;
+
+  RS485_SERIAL_PORT.end();
+  RS485_SERIAL_PORT.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
+#if defined(ARDUINO_ARCH_ESP32)
+  RS485_SERIAL_PORT.setRxInvert(rs485PolarityInverted);
+#endif
+  rs485PolarityDetectWindowStartMs = millis();
+
+  Log.notice(F("[rs485]: UART polarity set to %s" CR), rs485PolarityInverted ? "inverted" : "normal");
 }
 
 bool isMessageValid(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
