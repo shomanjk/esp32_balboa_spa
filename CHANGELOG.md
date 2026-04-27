@@ -8,7 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Added
+
+- **RS485 raw UART capture (`GET /api/rs485/raw`):** Added a bounded raw-byte ring buffer for remote diagnostics, including byte hex, byte timing gaps, active UART polarity mode, and UART backlog at read time.
+- **RS485 marker/backlog diagnostics (`/state` + `GET /api/rs485`):** Added `0x7E` frame-marker counters, max UART backlog, capture overflow counters, and effective UART pin/baud/AUTO_TX reporting.
+
+### Changed
+
+- **RS485 UART drain:** `rs485Loop()` now drains a bounded batch of waiting UART bytes each pass instead of one byte, preventing backlog when another subsystem briefly blocks the main loop.
+- **MQTT reconnect behavior:** MQTT reconnect attempts are throttled and use a shorter socket timeout so an offline broker cannot starve RS485 processing.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.7.4**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.7.4**).
 
 ## [0.7.2] - 2026-04-27
 

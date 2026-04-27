@@ -20,15 +20,19 @@ void nodeStateReport();
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 String mqttTopic = "Spa/"; // root topic, gets appeanded with node mac address
+unsigned long mqttLastReconnectAttempt = 0;
 
 TickTwo sendStatus(nodeStateReport, 1.5 * 60 * 1000); // 5 minutes
+
+#define MQTT_RECONNECT_INTERVAL_MS 30000
 
 void mqttModuleSetup()
 {
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
   mqtt.setCallback(mqttMessage);
   mqtt.setKeepAlive(10);
-  mqtt.setSocketTimeout(20);
+  mqtt.setSocketTimeout(1);
+  mqtt.setBufferSize(512); // increase pubsubclient buffer size
   mqttTopic = mqttTopic + String(gatewayName) + "/";
   Log.notice("MQTT Server: %s:%d\n", MQTT_SERVER, MQTT_PORT);
   Log.notice("MQTT Topic: %s\n", mqttTopic.c_str());
@@ -37,10 +41,14 @@ void mqttModuleSetup()
 
 void mqttModuleLoop()
 {
-  // TODO: Implement MQTT module loop
   if (!mqtt.connected())
   {
-    reconnect();
+    if (mqttLastReconnectAttempt == 0 || millis() - mqttLastReconnectAttempt >= MQTT_RECONNECT_INTERVAL_MS)
+    {
+      mqttLastReconnectAttempt = millis();
+      reconnect();
+    }
+    return;
   }
   sendStatus.update();
   mqtt.loop();
@@ -55,11 +63,7 @@ void reconnect()
   {
     // Attempt to connect
 
-    // connection =
     mqtt.connect(gatewayName, BROKER_LOGIN, BROKER_PASS, (mqttTopic + "node/state").c_str(), 1, true, "OFF");
-
-    // time to connect
-    delay(1000);
 
     if (mqtt.connected())
     {
@@ -68,7 +72,6 @@ void reconnect()
       nodeStateReport();
     }
   }
-  mqtt.setBufferSize(512); // increase pubsubclient buffer size
 }
 
 void mqttMessage(char *p_topic, byte *p_payload, unsigned int p_length)
