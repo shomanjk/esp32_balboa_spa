@@ -17,6 +17,7 @@
 // Internal libraries
 
 #include <tinyxml2.h>
+#include <cmath>
 #include <spaMessage.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
@@ -337,6 +338,127 @@ static void appendStatusEquipCell(String &html, const char *label, const String 
   html += "</div></div>";
 }
 
+/** Spa status `tempScale`: 0 = Fahrenheit (1°F steps), 1 = Celsius (0.5°C steps). */
+static bool statusSpaTempReady()
+{
+  return spaStatusData.lastUpdate != 0;
+}
+
+static String statusTempDegreeSuffixStr()
+{
+  if (!statusSpaTempReady())
+  {
+    return String("");
+  }
+  return spaStatusData.tempScale ? (String("\xc2\xb0") + "C") : (String("\xc2\xb0") + "F");
+}
+
+static String statusFormatTempValue(float v)
+{
+  if (!statusSpaTempReady())
+  {
+    return String("---");
+  }
+  if (spaStatusData.tempScale)
+  {
+    return String(v, 1);
+  }
+  return String(static_cast<long>(lroundf(v)));
+}
+
+static String statusFormattedTempWithUnit(float v)
+{
+  if (!statusSpaTempReady())
+  {
+    return String("---");
+  }
+  return statusFormatTempValue(v) + statusTempDegreeSuffixStr();
+}
+
+static String statusTempScaleDescription()
+{
+  if (!statusSpaTempReady())
+  {
+    return String("---");
+  }
+  return spaStatusData.tempScale ? (String("Celsius (0.5") + String("\xc2\xb0") + "C steps)")
+                                 : (String("Fahrenheit (1") + String("\xc2\xb0") + "F steps)");
+}
+
+/** Append JSON array oldest-to-newest (left-to-right on chart); firmware index 0 is newest. */
+static void appendStatusJsonFloatArrayOldestFirst(String &html, const float *arr, int n)
+{
+  for (int i = n - 1; i >= 0; i--)
+  {
+    if (i != n - 1)
+    {
+      html += ",";
+    }
+    html += String(arr[i], 4);
+  }
+}
+
+static void appendStatusHistoriesSection(String &html)
+{
+  html += "<div class=\"history-block\"><h3>Temperature history</h3>";
+  html += "<p class=\"chart-caption\">Samples left (older) to right (newer). Raw list index 0 is newest.</p>";
+  html += "<div class=\"chart-wrap\"><canvas id=\"statusTempHistChart\" height=\"140\" aria-label=\"Temperature history chart\"></canvas></div>";
+  html += "<details class=\"history-raw\"><summary>Raw temperature values</summary><pre>";
+  html += historyToString(spaStatusData.temperatureHistory);
+  html += "</pre></details></div>";
+
+  html += "<div class=\"history-block\"><h3>Heater on-time history</h3>";
+  html += "<p class=\"chart-caption\">Seconds per day (raw); chart uses minutes per day (div 60).</p>";
+  html += "<div class=\"chart-wrap\"><canvas id=\"statusHeatHistChart\" height=\"140\" aria-label=\"Heater history chart\"></canvas></div>";
+  html += "<details class=\"history-raw\"><summary>Raw heat history (seconds per day)</summary><pre>";
+  html += historyToString(spaStatusData.heatOn->history());
+  html += "</pre></details></div>";
+
+  html += "<div class=\"history-block\"><h3>Filter on-time history</h3>";
+  html += "<p class=\"chart-caption\">Seconds per day (raw); chart uses hours per day (div 3600).</p>";
+  html += "<div class=\"chart-wrap\"><canvas id=\"statusFilterHistChart\" height=\"140\" aria-label=\"Filter history chart\"></canvas></div>";
+  html += "<details class=\"history-raw\"><summary>Raw filter history (seconds per day)</summary><pre>";
+  html += historyToString(spaStatusData.filterOn->history());
+  html += "</pre></details></div>";
+
+  html += "<script>";
+  html += "const STATUS_TEMP_IS_C=";
+  html += (statusSpaTempReady() && spaStatusData.tempScale) ? "1" : "0";
+  html += ",STATUS_TEMP_HIST=[";
+  appendStatusJsonFloatArrayOldestFirst(html, spaStatusData.temperatureHistory, GRAPH_MAX_READINGS);
+  html += "],STATUS_HEAT_SEC=[";
+  appendStatusJsonFloatArrayOldestFirst(html, spaStatusData.heatOn->history(), GRAPH_MAX_READINGS);
+  html += "],STATUS_FILTER_SEC=[";
+  appendStatusJsonFloatArrayOldestFirst(html, spaStatusData.filterOn->history(), GRAPH_MAX_READINGS);
+  html += "];";
+  html += "function statusScaleHeat(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/60);return b;}";
+  html += "function statusScaleFilter(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/3600);return b;}";
+  html += "function statusDrawLineChart(id,data,isTemp){";
+  html += "var c=document.getElementById(id);if(!c||!data||data.length<1)return;";
+  html += "var ctx=c.getContext('2d');";
+  html += "function fmtY(v){if(isTemp)return STATUS_TEMP_IS_C?Number(v).toFixed(1):String(Math.round(Number(v)));return Number(v).toFixed(2);}";
+  html += "function draw(W,H){";
+  html += "ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#ccc';ctx.strokeRect(0.5,0.5,W-1,H-1);";
+  html += "var lo=Infinity,hi=-Infinity,i,v;";
+  html += "for(i=0;i<data.length;i++){v=Number(data[i]);if(!isFinite(v))continue;if(v<lo)lo=v;if(v>hi)hi=v;}";
+  html += "if(!isFinite(lo)||!isFinite(hi)){ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.fillText('No data',10,H/2);return;}";
+  html += "if(hi-lo<1e-6){lo-=0.5;hi+=0.5;}";
+  html += "var pad=30,pw=W-2*pad,ph=H-22;";
+  html += "function yOf(val){return 14+ph-(val-lo)/(hi-lo)*ph;}";
+  html += "ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.fillText(fmtY(lo),4,H-6);ctx.fillText(fmtY(hi),4,12);";
+  html += "ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();";
+  html += "for(i=0;i<data.length;i++){var px=pad+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}";
+  html += "ctx.stroke();}";
+  html += "function resize(){var p=c.parentElement;var W=p?Math.max(260,p.clientWidth-2):280;var H=parseInt(c.getAttribute('height')||'140',10)||140;";
+  html += "var dpr=window.devicePixelRatio||1;c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';";
+  html += "ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);draw(W,H);}";
+  html += "window.addEventListener('resize',resize);window.addEventListener('orientationchange',resize);resize();}";
+  html += "statusDrawLineChart('statusTempHistChart',STATUS_TEMP_HIST,true);";
+  html += "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(STATUS_HEAT_SEC),false);";
+  html += "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(STATUS_FILTER_SEC),false);";
+  html += "</script>";
+}
+
 void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
@@ -362,6 +484,8 @@ void handleStatus(AsyncWebServerRequest *request)
       ".history-block h3{margin:0 0 6px 0;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       ".history-block pre{margin:0;padding:10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;"
       "font-size:0.8rem;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Courier,monospace;}"
+      ".chart-caption{font-size:0.82rem;color:var(--muted);margin:0 0 6px 0;line-height:1.35;}"
+      ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       "</style>";
 
   String html = "<html>" + head + String(statusStyle) +
@@ -380,12 +504,12 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel\"><h2>Temperatures</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "Current Temp", String(spaStatusData.currentTemp) + "°C");
-  appendStatusKvRow(html, "Set Temp", String(spaStatusData.setTemp) + "°C");
-  appendStatusKvRow(html, "High Set Temp", String(spaStatusData.highSetTemp) + "°C");
-  appendStatusKvRow(html, "Low Set Temp", String(spaStatusData.lowSetTemp) + "°C");
+  appendStatusKvRow(html, "Current Temp", statusFormattedTempWithUnit(spaStatusData.currentTemp));
+  appendStatusKvRow(html, "Set Temp", statusFormattedTempWithUnit(spaStatusData.setTemp));
+  appendStatusKvRow(html, "High Set Temp", statusFormattedTempWithUnit(spaStatusData.highSetTemp));
+  appendStatusKvRow(html, "Low Set Temp", statusFormattedTempWithUnit(spaStatusData.lowSetTemp));
   appendStatusKvRow(html, "Temp Range", getMapDescription(spaStatusData.tempRange, tempRangeMap));
-  appendStatusKvRow(html, "Temp Scale", String(spaStatusData.tempScale));
+  appendStatusKvRow(html, "Temp Scale", statusTempScaleDescription());
   html += "</dl></section>";
 
   html += "<section class=\"panel\"><h2>Spa and heating</h2><dl class=\"kv\">";
@@ -432,13 +556,8 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Histories</h2>";
-  html += "<div class=\"history-block\"><h3>Temperature History</h3><pre>";
-  html += historyToString(spaStatusData.temperatureHistory);
-  html += "</pre></div><div class=\"history-block\"><h3>Heat History</h3><pre>";
-  html += historyToString(spaStatusData.heatOn->history());
-  html += "</pre></div><div class=\"history-block\"><h3>Filter History</h3><pre>";
-  html += historyToString(spaStatusData.filterOn->history());
-  html += "</pre></div></section>";
+  appendStatusHistoriesSection(html);
+  html += "</section>";
 
   html += "</div></main></div></body></html>";
   request->send(200, "text/html", html);

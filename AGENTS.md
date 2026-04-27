@@ -64,6 +64,10 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 2. **Web UI buttons** — README states not wired; `parseBody` logs `device_request` but does not send toggles.
 3. **Command framing** — implement Balboa **0x11** (toggle) / **0x20** (set temp) etc. with correct CRC; reuse patterns from [`rs485.cpp`](lib/localRS485Communication/rs485.cpp) `addCRC` / [`balboa.h`](lib/spaMessage/balboa.h) prebuilt frames.
 
+## Roadmap (deferred)
+
+- **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the web `/status` page).
+
 ## Testing
 
 - **Bench:** [`emulator/spaEmulator.js`](emulator/spaEmulator.js) + [`emulator/README.md`](emulator/README.md) for crude serial injection.

@@ -8,11 +8,15 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-27
+
 ### Changed
 
+- **Web portal `/status`:** Sectioned responsive layout; temperatures use spa **F vs C** (`tempScale`) for suffix and decimals (°F whole degrees, °C one decimal); human-readable **Temp scale**; **Histories** with canvas charts (temperature; heater min/day; filter hr/day) and collapsible raw lists.
 - **`platformio.ini` `[env:ESP32ota]`:** Re-enabled `LOCAL_CONNECT`, `LOCAL_CLIENT`, and `BRIDGE` so the default OTA env matches tub-side builds (fixes compile after role flags were commented out in error).
 - **balboa-spa (login):** Balboa BWA login screen shows a short note that on the local gateway, username and password are not verified and any values may be entered to continue.
-- **Web portal `/status`:** SPA Status page is grouped into sections (sync, memory, temperatures, heating, equipment grid, run times, histories) with responsive two-column layout on wider viewports and definition-list rows for easier scanning.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **1.1.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.1.0**).
 
 ## [1.0.0] - 2026-04-27
 
@@ -172,7 +176,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.1.0
 [1.0.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.0.0
 [0.7.2]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.2
 [0.7.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.1
