@@ -10,6 +10,29 @@ where version numbers are used.
 
 - No unreleased changes yet.
 
+## [0.7.2] - 2026-04-27
+
+### Added
+
+- **RS485 per-mode diagnostics (`/state` + `GET /api/rs485`):** Added `rawBytesNormal*` and `rawBytesInverted*` counters so troubleshooting can compare traffic quality while auto-detect is in `normal` vs `inverted_rx_tx` mode.
+
+### Changed
+
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.7.2**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.7.2**).
+
+## [0.7.1] - 2026-04-27
+
+### Added
+
+- **RS485 mode visibility (`/state` + `GET /api/rs485`):** Exposed active RS485 mode (`normal` or `inverted_rx_tx`) and detect phase to support remote troubleshooting over Wi-Fi.
+
+### Changed
+
+- **`lib/localRS485Communication/rs485.cpp`:** Updated auto-detect to test both `normal` and `inverted_rx_tx` (virtual A/B swap via RX/TX inversion) and only lock after a first valid frame.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.7.1**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.7.1**).
+
 ## [0.7.0] - 2026-04-27
 
 ### Added
@@ -122,7 +145,9 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.2
+[0.7.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.1
 [0.7.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.0
 [0.6.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.6.0
 [0.5.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.5.0

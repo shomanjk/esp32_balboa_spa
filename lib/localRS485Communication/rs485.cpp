@@ -2,6 +2,10 @@
 #include <CircularBuffer.hpp>
 #include <ArduinoLog.h>
 #include <esp_task_wdt.h>
+#include <cstring>
+#if defined(ARDUINO_ARCH_ESP32)
+#include "driver/uart.h"
+#endif
 
 #include  <spaUtilities.h>
 #include <spaMessage.h>
@@ -20,6 +24,7 @@ void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 bool isMessageValid(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 void sendExistingClientResponse(uint8_t id);
 void applyRs485Polarity(bool inverted);
+const char *rs485ModeName(bool inverted);
 // bool hasDayChanged();
 
 RTC_NOINIT_ATTR Rs485Stats rs485Stats;
@@ -31,6 +36,10 @@ bool rs485PolarityLocked = false;
 uint8_t rs485PolarityDetectPhase = 0; // 0: try normal, 1: try inverted, 2: detection complete
 uint32_t rs485PolarityDetectWindowStartMs = 0;
 uint32_t rs485ValidFramesSinceBoot = 0;
+uint32_t rs485LastSampleMs = 0;
+Rs485Snapshot rs485History[RS485_HISTORY_SIZE];
+uint16_t rs485HistoryHead = 0;
+uint16_t rs485HistoryCount = 0;
 
 #ifndef TX485_Tx
 #define TX485_Tx 17
@@ -42,6 +51,9 @@ uint32_t rs485ValidFramesSinceBoot = 0;
 
 #ifndef RS485_SERIAL_PORT
 #define RS485_SERIAL_PORT Serial2
+#endif
+#ifndef RS485_UART_NUM
+#define RS485_UART_NUM UART_NUM_2
 #endif
 
 #define RS_485_MAGIC_NUMBER 0x21345678
@@ -82,22 +94,14 @@ void rs485Loop()
 
   if (!rs485PolarityLocked && millis() - rs485PolarityDetectWindowStartMs >= RS485_POLARITY_DETECT_WINDOW_MS)
   {
-    if (rs485PolarityDetectPhase == 0 && rs485ValidFramesSinceBoot == 0)
+    if (rs485ValidFramesSinceBoot == 0)
     {
-      rs485PolarityDetectPhase = 1;
+      rs485PolarityDetectPhase = (rs485PolarityDetectPhase == 0 ? 1 : 0);
       rs485Stats.polaritySwitchesToday++;
-      applyRs485Polarity(true);
+      applyRs485Polarity(rs485PolarityDetectPhase == 1);
       spaMessage.clear();
-      Log.warning(F("[rs485]: No valid frames with normal polarity, retrying with inverted UART polarity" CR));
-    }
-    else
-    {
-      rs485PolarityDetectPhase = 2;
-      rs485PolarityLocked = true;
-      rs485Stats.polarityLocked = 1;
-      Log.warning(F("[rs485]: Polarity auto-detect complete, using %s UART polarity (valid frames seen: %d)" CR),
-                  rs485PolarityInverted ? "inverted" : "normal",
-                  rs485ValidFramesSinceBoot);
+      Log.warning(F("[rs485]: No valid frames yet, retrying with %s mode (RX/TX inversion toggled)" CR),
+                  rs485ModeName(rs485PolarityInverted));
     }
   }
 
@@ -106,6 +110,14 @@ void rs485Loop()
     hasNewByte = true;
     x = RS485_SERIAL_PORT.read();
     rs485Stats.rawBytesToday++;
+    if (rs485PolarityInverted)
+    {
+      rs485Stats.rawBytesInvertedToday++;
+    }
+    else
+    {
+      rs485Stats.rawBytesNormalToday++;
+    }
     rs485Stats.lastByteMs = millis();
     rs485LedNotifyRx();
     spaMessage.push(x);
@@ -159,8 +171,8 @@ void rs485Loop()
         rs485PolarityLocked = true;
         rs485PolarityDetectPhase = 2;
         rs485Stats.polarityLocked = 1;
-        Log.notice(F("[rs485]: Polarity auto-detect locked on %s UART polarity after first valid frame" CR),
-                   rs485PolarityInverted ? "inverted" : "normal");
+        Log.notice(F("[rs485]: Polarity auto-detect locked on %s mode after first valid frame" CR),
+                   rs485ModeName(rs485PolarityInverted));
       }
       if (id == 0)
       {
@@ -228,6 +240,10 @@ void rs485Loop()
   {
     rs485Stats.rawBytesYesterday = rs485Stats.rawBytesToday;
     rs485Stats.rawBytesToday = 0;
+    rs485Stats.rawBytesNormalYesterday = rs485Stats.rawBytesNormalToday;
+    rs485Stats.rawBytesNormalToday = 0;
+    rs485Stats.rawBytesInvertedYesterday = rs485Stats.rawBytesInvertedToday;
+    rs485Stats.rawBytesInvertedToday = 0;
     rs485Stats.framesYesterday = rs485Stats.framesToday;
     rs485Stats.framesToday = 0;
     rs485Stats.messagesYesterday = rs485Stats.messagesToday;
@@ -239,6 +255,8 @@ void rs485Loop()
     rs485Stats.polaritySwitchesYesterday = rs485Stats.polaritySwitchesToday;
     rs485Stats.polaritySwitchesToday = 0;
   }
+
+  rs485SampleHistory();
 };
 
 void rs485ClearToSend()
@@ -376,10 +394,89 @@ void applyRs485Polarity(bool inverted)
   RS485_SERIAL_PORT.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
 #if defined(ARDUINO_ARCH_ESP32)
   RS485_SERIAL_PORT.setRxInvert(rs485PolarityInverted);
+  if (rs485PolarityInverted)
+  {
+    uart_set_line_inverse(RS485_UART_NUM, static_cast<uart_signal_inv_t>(UART_SIGNAL_RXD_INV | UART_SIGNAL_TXD_INV));
+  }
+  else
+  {
+    uart_set_line_inverse(RS485_UART_NUM, UART_SIGNAL_INV_DISABLE);
+  }
 #endif
   rs485PolarityDetectWindowStartMs = millis();
 
-  Log.notice(F("[rs485]: UART polarity set to %s" CR), rs485PolarityInverted ? "inverted" : "normal");
+  Log.notice(F("[rs485]: UART mode set to %s (RX/TX %s)" CR),
+             rs485ModeName(rs485PolarityInverted),
+             rs485PolarityInverted ? "inverted" : "normal");
+}
+
+const char *rs485ModeName(bool inverted)
+{
+  return inverted ? "inverted_rx_tx" : "normal";
+}
+
+const char *rs485HealthCode()
+{
+  if (rs485Stats.rawBytesToday == 0 && rs485Stats.lastByteMs == 0)
+  {
+    return "NO_UART_BYTES";
+  }
+  if (rs485Stats.messagesToday == 0)
+  {
+    return "UART_BYTES_NO_VALID_FRAMES";
+  }
+  return "VALID_FRAMES_OK";
+}
+
+void rs485SampleHistory()
+{
+  const uint32_t nowMs = millis();
+  if (rs485LastSampleMs != 0 && nowMs - rs485LastSampleMs < 5000)
+  {
+    return;
+  }
+  rs485LastSampleMs = nowMs;
+
+  Rs485Snapshot s = {};
+  s.tMs = nowMs;
+  s.rawBytesToday = rs485Stats.rawBytesToday;
+  s.rawBytesNormalToday = rs485Stats.rawBytesNormalToday;
+  s.rawBytesInvertedToday = rs485Stats.rawBytesInvertedToday;
+  s.framesToday = rs485Stats.framesToday;
+  s.messagesToday = rs485Stats.messagesToday;
+  s.crcToday = rs485Stats.crcToday;
+  s.badFormatToday = rs485Stats.badFormatToday;
+  s.polaritySwitchesToday = rs485Stats.polaritySwitchesToday;
+  s.polarityInverted = rs485Stats.polarityInverted;
+  s.polarityLocked = rs485Stats.polarityLocked;
+  s.detectPhase = rs485Stats.polarityLocked ? 2 : (rs485Stats.polarityInverted ? 1 : 0);
+  strncpy(s.health, rs485HealthCode(), sizeof(s.health) - 1);
+
+  rs485History[rs485HistoryHead] = s;
+  rs485HistoryHead = (rs485HistoryHead + 1) % RS485_HISTORY_SIZE;
+  if (rs485HistoryCount < RS485_HISTORY_SIZE)
+  {
+    rs485HistoryCount++;
+  }
+}
+
+int rs485GetHistoryNewestFirst(Rs485Snapshot *out, int maxCount)
+{
+  if (out == nullptr || maxCount <= 0 || rs485HistoryCount == 0)
+  {
+    return 0;
+  }
+  const int toCopy = (maxCount < rs485HistoryCount) ? maxCount : rs485HistoryCount;
+  for (int i = 0; i < toCopy; i++)
+  {
+    int idx = static_cast<int>(rs485HistoryHead) - 1 - i;
+    while (idx < 0)
+    {
+      idx += RS485_HISTORY_SIZE;
+    }
+    out[i] = rs485History[idx];
+  }
+  return toCopy;
 }
 
 bool isMessageValid(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
