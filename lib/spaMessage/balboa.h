@@ -328,6 +328,13 @@ const std::map<uint8_t, const char *> heatingModeMap = {
     {1, "Rest"},
     {3, "Ready in Rest"}};
 
+/** Status byte 10 bits 4–5: heating activity / stage (not heating mode). */
+const std::map<uint8_t, const char *> heatingStateMap = {
+    {0, "Idle / not heating"},
+    {1, "Heating (active)"},
+    {2, "Heating (alternate stage)"},
+    {3, "Reserved"}};
+
 const std::map<uint8_t, const char *> pumpMap = {
     {0, "Off"},
     {1, "Low"},
