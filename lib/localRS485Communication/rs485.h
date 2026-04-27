@@ -26,6 +26,10 @@ struct Rs485Stats
   uint32_t badFormatYesterday;
   uint32_t crcToday;
   uint32_t crcYesterday;
+  uint32_t polaritySwitchesToday;
+  uint32_t polaritySwitchesYesterday;
+  uint8_t polarityInverted;
+  uint8_t polarityLocked;
   uint32_t magicNumber;
 };
 
