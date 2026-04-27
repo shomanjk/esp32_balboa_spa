@@ -319,59 +319,128 @@ void handleepdpanel(AsyncWebServerRequest *request)
 #define ePaper String("")
 #endif
 
+static void appendStatusKvRow(String &html, const char *label, const String &value)
+{
+  html += "<div class=\"kv-row\"><dt>";
+  html += label;
+  html += "</dt><dd>";
+  html += value;
+  html += "</dd></div>";
+}
+
+static void appendStatusEquipCell(String &html, const char *label, const String &value)
+{
+  html += "<div class=\"equip-cell\"><div class=\"equip-label\">";
+  html += label;
+  html += "</div><div class=\"equip-val\">";
+  html += value;
+  html += "</div></div>";
+}
+
 void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
-  String html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Status</h1><ul>";
-  html += "<li><b>lastUpdate:</b> " + formatNumberWithCommas(spaStatusData.lastUpdate) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
-  html += "<li class='spacer'></li><li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
-  html += "<li><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
-  html += "<li><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
+  const char *statusStyle =
+      "<style>"
+      ".status-page-title{color:#0f4a87;font-size:1.1rem;margin:0 0 var(--space-3) 0;line-height:1.3;}"
+      ".status-layout{display:grid;grid-template-columns:1fr;gap:var(--space-3);}"
+      "@media (min-width:720px){.status-layout{grid-template-columns:1fr 1fr;}}"
+      ".status-layout .panel{margin-bottom:0;}"
+      ".status-span-full{grid-column:1/-1;}"
+      ".status-layout h2{color:#0f4a87;font-size:0.95rem;margin:0 0 var(--space-2) 0;font-weight:700;line-height:1.3;}"
+      "dl.kv{margin:0;padding:0;}"
+      "dl.kv .kv-row{display:grid;grid-template-columns:minmax(110px,42%) 1fr;gap:6px 12px;padding:var(--space-1) 0;"
+      "border-bottom:1px dashed #e5eaef;align-items:start;}"
+      "dl.kv .kv-row:last-child{border-bottom:none;}"
+      "dl.kv dt{margin:0;font-weight:600;color:var(--muted);font-size:0.92rem;}"
+      "dl.kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
+      ".equip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:var(--space-2);}"
+      ".equip-cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fafbfc;}"
+      ".equip-label{font-size:0.82rem;color:var(--muted);font-weight:600;}"
+      ".equip-val{font-weight:600;margin-top:2px;line-height:1.35;}"
+      ".history-block{margin-top:var(--space-2);}"
+      ".history-block h3{margin:0 0 6px 0;font-size:0.88rem;color:var(--muted);font-weight:600;}"
+      ".history-block pre{margin:0;padding:10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;"
+      "font-size:0.8rem;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Courier,monospace;}"
+      "</style>";
 
-  html += "<li class='spacer'></li><li><b>Current Temp: </b>" + String(spaStatusData.currentTemp) + "°C</li>";
-  html += "<li><b>Set Temp: </b>" + String(spaStatusData.setTemp) + "°C</li>";
-  html += "<li><b>High Set Temp: </b>" + String(spaStatusData.highSetTemp) + "°C</li>";
-  html += "<li><b>Low Set Temp: </b>" + String(spaStatusData.lowSetTemp) + "°C</li>";
-  html += "<li><b>Temp Range: </b>" + getMapDescription(spaStatusData.tempRange, tempRangeMap) + "</li>";
-  html += "<li><b>Temp Scale: </b>" + String(spaStatusData.tempScale) + "</li>";
+  String html = "<html>" + head + String(statusStyle) +
+                "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus +
+                "<main id='mainContent'>" + ePaper + "<h1 class=\"status-page-title\">Spa Status</h1><div class=\"status-layout\">";
 
-  html += "<li><b>Spa State: </b>" + getMapDescription(spaStatusData.spaState, spaStateMap) + "</li>";
-  html += "<li><b>Init Mode: </b>" + getMapDescription(spaStatusData.initMode, initModeMap) + "</li>";
-  html += "<li><b>Heating Mode: </b>" + getMapDescription(spaStatusData.heatingMode, heatingModeMap) + "</li>";
-  html += "<li><b>Heating State: </b>" + String(spaStatusData.heatingState) + "</li>";
-  html += "<li><b>Needs Heat: </b>" + String(spaStatusData.needsHeat) + "</li>";
+  html += "<section class=\"panel\"><h2>Data sync</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "lastUpdate", formatNumberWithCommas(spaStatusData.lastUpdate));
+  appendStatusKvRow(html, "magicNumber", String(spaStatusData.magicNumber));
+  html += "</dl></section>";
 
-  html += "<li><b>Time: </b>" + String(spaStatusData.time) + "</li>";
-  html += "<li><b>Clock Mode: </b>" + String(spaStatusData.clockMode) + "</li>";
-  html += "<li><b>Filter Mode: </b>" + getMapDescription(spaStatusData.filterMode, filterModeMap) + "</li>";
-  html += "<li><b>Pump 1: </b>" + getMapDescription(spaStatusData.pump1, pumpMap) + "</li>";
-  html += "<li><b>Pump 2: </b>" + getMapDescription(spaStatusData.pump2, pumpMap) + "</li>";
-  html += "<li><b>Pump 3: </b>" + getMapDescription(spaStatusData.pump3, pumpMap) + "</li>";
-  html += "<li><b>Pump 4: </b>" + getMapDescription(spaStatusData.pump4, pumpMap) + "</li>";
-  html += "<li><b>Pump 5: </b>" + getMapDescription(spaStatusData.pump5, pumpMap) + "</li>";
-  html += "<li><b>Pump 6: </b>" + getMapDescription(spaStatusData.pump6, pumpMap) + "</li>";
-  html += "<li><b>Circulation Pump: </b>" + getMapDescription(spaStatusData.circ, onOffMap) + "</li>";
-  html += "<li><b>Blower: </b>" + getMapDescription(spaStatusData.blower, onOffMap) + "</li>";
-  html += "<li><b>Light 1: </b>" + getMapDescription(spaStatusData.light1, onOffMap) + "</li>";
-  html += "<li><b>Light 2: </b>" + getMapDescription(spaStatusData.light2, onOffMap) + "</li>";
-  html += "<li><b>Mister: </b>" + getMapDescription(spaStatusData.mister, onOffMap) + "</li>";
-  html += "<li><b>Panel Locked: </b>" + getMapDescription(spaStatusData.panelLocked, lockedMap) + "</li>";
-  html += "<li><b>Settings Lock: </b>" + getMapDescription(spaStatusData.settingsLock, lockedMap) + "</li>";
-  html += "<li><b>M8 Cycle Time: </b>" + String(spaStatusData.m8CycleTime) + "</li>";
-  html += "<li><b>Notification: </b>" + String(spaStatusData.notification) + "</li>";
-  html += "<li><b>Flags 19: </b>" + String(spaStatusData.flags19) + "</li>";
+  html += "<section class=\"panel\"><h2>Device memory</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "Free Heap", formatNumberWithCommas(ESP.getFreeHeap()));
+  appendStatusKvRow(html, "Free PSRAM", formatNumberWithCommas(ESP.getFreePsram()));
+  appendStatusKvRow(html, "Free Stack", formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)));
+  html += "</dl></section>";
 
-  html += "<li class='spacer'></li><li><b>Heater On Time Today: </b>" + formatNumberWithCommas(spaStatusData.heaterOnTimeToday) + "(sec)</li>";
-  html += "<li><b>Heater On Time Yesterday: </b>" + formatNumberWithCommas(spaStatusData.heaterOnTimeYesterday) + "(sec)</li>";
-  html += "<li><b>Filter On Time Today: </b>" + formatNumberWithCommas(spaStatusData.filterOnTimeToday) + "(sec)</li>";
-  html += "<li><b>Filter On Time Yesterday: </b>" + formatNumberWithCommas(spaStatusData.filterOnTimeYesterday) + "(sec)</li>";
-  html += "<li class='spacer'></li><li><b>Temperature History: </b>" + historyToString(spaStatusData.temperatureHistory) + "</li>";
-  html += "<li><b>Heat History: </b>" + historyToString(spaStatusData.heatOn->history()) + "</li>";
-  html += "<li><b>Filter History: </b>" + historyToString(spaStatusData.filterOn->history()) + "</li>";
+  html += "<section class=\"panel\"><h2>Temperatures</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "Current Temp", String(spaStatusData.currentTemp) + "°C");
+  appendStatusKvRow(html, "Set Temp", String(spaStatusData.setTemp) + "°C");
+  appendStatusKvRow(html, "High Set Temp", String(spaStatusData.highSetTemp) + "°C");
+  appendStatusKvRow(html, "Low Set Temp", String(spaStatusData.lowSetTemp) + "°C");
+  appendStatusKvRow(html, "Temp Range", getMapDescription(spaStatusData.tempRange, tempRangeMap));
+  appendStatusKvRow(html, "Temp Scale", String(spaStatusData.tempScale));
+  html += "</dl></section>";
 
-  html += "</ul></section></main></div></body></html>";
-  // Add more fields as needed
+  html += "<section class=\"panel\"><h2>Spa and heating</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "Spa State", getMapDescription(spaStatusData.spaState, spaStateMap));
+  appendStatusKvRow(html, "Init Mode", getMapDescription(spaStatusData.initMode, initModeMap));
+  appendStatusKvRow(html, "Heating Mode", getMapDescription(spaStatusData.heatingMode, heatingModeMap));
+  appendStatusKvRow(html, "Heating State", String(spaStatusData.heatingState));
+  appendStatusKvRow(html, "Needs Heat", String(spaStatusData.needsHeat));
+  html += "</dl></section>";
+
+  html += "<section class=\"panel\"><h2>Time and filtration</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "Time", String(spaStatusData.time));
+  appendStatusKvRow(html, "Clock Mode", String(spaStatusData.clockMode));
+  appendStatusKvRow(html, "Filter Mode", getMapDescription(spaStatusData.filterMode, filterModeMap));
+  html += "</dl></section>";
+
+  html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
+  appendStatusEquipCell(html, "Pump 1", getMapDescription(spaStatusData.pump1, pumpMap));
+  appendStatusEquipCell(html, "Pump 2", getMapDescription(spaStatusData.pump2, pumpMap));
+  appendStatusEquipCell(html, "Pump 3", getMapDescription(spaStatusData.pump3, pumpMap));
+  appendStatusEquipCell(html, "Pump 4", getMapDescription(spaStatusData.pump4, pumpMap));
+  appendStatusEquipCell(html, "Pump 5", getMapDescription(spaStatusData.pump5, pumpMap));
+  appendStatusEquipCell(html, "Pump 6", getMapDescription(spaStatusData.pump6, pumpMap));
+  appendStatusEquipCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap));
+  appendStatusEquipCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap));
+  appendStatusEquipCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap));
+  appendStatusEquipCell(html, "Light 2", getMapDescription(spaStatusData.light2, onOffMap));
+  appendStatusEquipCell(html, "Mister", getMapDescription(spaStatusData.mister, onOffMap));
+  html += "</div></section>";
+
+  html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "Panel Locked", getMapDescription(spaStatusData.panelLocked, lockedMap));
+  appendStatusKvRow(html, "Settings Lock", getMapDescription(spaStatusData.settingsLock, lockedMap));
+  appendStatusKvRow(html, "M8 Cycle Time", String(spaStatusData.m8CycleTime));
+  appendStatusKvRow(html, "Notification", String(spaStatusData.notification));
+  appendStatusKvRow(html, "Flags 19", String(spaStatusData.flags19));
+  html += "</dl></section>";
+
+  html += "<section class=\"panel\"><h2>Run times</h2><dl class=\"kv\">";
+  appendStatusKvRow(html, "Heater On Time Today", formatNumberWithCommas(spaStatusData.heaterOnTimeToday) + " (sec)");
+  appendStatusKvRow(html, "Heater On Time Yesterday", formatNumberWithCommas(spaStatusData.heaterOnTimeYesterday) + " (sec)");
+  appendStatusKvRow(html, "Filter On Time Today", formatNumberWithCommas(spaStatusData.filterOnTimeToday) + " (sec)");
+  appendStatusKvRow(html, "Filter On Time Yesterday", formatNumberWithCommas(spaStatusData.filterOnTimeYesterday) + " (sec)");
+  html += "</dl></section>";
+
+  html += "<section class=\"panel status-span-full\"><h2>Histories</h2>";
+  html += "<div class=\"history-block\"><h3>Temperature History</h3><pre>";
+  html += historyToString(spaStatusData.temperatureHistory);
+  html += "</pre></div><div class=\"history-block\"><h3>Heat History</h3><pre>";
+  html += historyToString(spaStatusData.heatOn->history());
+  html += "</pre></div><div class=\"history-block\"><h3>Filter History</h3><pre>";
+  html += historyToString(spaStatusData.filterOn->history());
+  html += "</pre></div></section>";
+
+  html += "</div></main></div></body></html>";
   request->send(200, "text/html", html);
   Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
 }
