@@ -18,6 +18,7 @@
 
 #include <tinyxml2.h>
 #include <cmath>
+#include <ctime>
 #include <spaMessage.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
@@ -320,6 +321,43 @@ void handleepdpanel(AsyncWebServerRequest *request)
 #define ePaper String("")
 #endif
 
+/** Local wall time for /status; invalid or epoch 0 → "Time not synced". */
+static String statusFormatEpochLocalHuman(time_t t)
+{
+  if (t <= 0)
+  {
+    return String("Time not synced");
+  }
+  struct tm tmStore;
+  struct tm *p = localtime_r(&t, &tmStore);
+  if (!p)
+  {
+    return String("Time not synced");
+  }
+  char buf[32];
+  if (strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", p) == 0)
+  {
+    return String("Time not synced");
+  }
+  return String(buf);
+}
+
+/** Primary human time + optional collapsible raw epoch for spa status lastUpdate. */
+static String statusLastUpdateDisplayHtml(unsigned long epoch)
+{
+  time_t t = static_cast<time_t>(epoch);
+  String primary = statusFormatEpochLocalHuman(t);
+  if (epoch == 0UL)
+  {
+    return primary;
+  }
+  String out = primary;
+  out += "<details class=\"history-raw\"><summary>Raw epoch (Unix s)</summary>";
+  out += formatNumberWithCommas(epoch);
+  out += "</details>";
+  return out;
+}
+
 static void appendStatusKvRow(String &html, const char *label, const String &value)
 {
   html += "<div class=\"kv-row\"><dt>";
@@ -329,9 +367,58 @@ static void appendStatusKvRow(String &html, const char *label, const String &val
   html += "</dd></div>";
 }
 
-static void appendStatusEquipCell(String &html, const char *label, const String &value)
+static bool statusSpaConfigReady()
 {
-  html += "<div class=\"equip-cell\"><div class=\"equip-label\">";
+  return spaConfigurationData.lastUpdate != 0;
+}
+
+/** Configuration 0x2E: pump two-bit 0 = None (not installed). */
+static bool statusPumpConfiguredAbsent(unsigned pumpId)
+{
+  if (!statusSpaConfigReady() || pumpId < 1 || pumpId > 6)
+  {
+    return false;
+  }
+  const uint8_t *p = &spaConfigurationData.pump1;
+  return p[pumpId - 1] == 0;
+}
+
+/** Configuration byte 2: 0 = None, 1 = Present. */
+static bool statusLightConfiguredAbsent(unsigned lightId)
+{
+  if (!statusSpaConfigReady() || lightId < 1 || lightId > 2)
+  {
+    return false;
+  }
+  return lightId == 1 ? (spaConfigurationData.light1 == 0) : (spaConfigurationData.light2 == 0);
+}
+
+/** Two-bit 0 in config payload = not fitted (same convention as pumps). */
+static bool statusCircConfiguredAbsent()
+{
+  return statusSpaConfigReady() && !spaConfigurationData.circulationPump;
+}
+
+static bool statusBlowerConfiguredAbsent()
+{
+  return statusSpaConfigReady() && !spaConfigurationData.blower;
+}
+
+static bool statusMisterConfiguredAbsent()
+{
+  return statusSpaConfigReady() && !spaConfigurationData.mister;
+}
+
+static void appendStatusEquipCell(String &html, const char *label, const String &value, bool configuredAbsent)
+{
+  if (configuredAbsent)
+  {
+    html += "<div class=\"equip-cell equip-absent\" title=\"Not installed (spa configuration)\"><div class=\"equip-label\">";
+  }
+  else
+  {
+    html += "<div class=\"equip-cell\"><div class=\"equip-label\">";
+  }
   html += label;
   html += "</div><div class=\"equip-val\">";
   html += value;
@@ -478,6 +565,9 @@ void handleStatus(AsyncWebServerRequest *request)
       "dl.kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
       ".equip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:var(--space-2);}"
       ".equip-cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fafbfc;}"
+      ".equip-cell.equip-absent{opacity:0.58;background:#eef1f4;color:var(--muted);border-color:#dde2e8;}"
+      ".equip-cell.equip-absent .equip-label{color:#7a8794;}"
+      ".equip-cell.equip-absent .equip-val{font-weight:500;color:#5f6c7b;}"
       ".equip-label{font-size:0.82rem;color:var(--muted);font-weight:600;}"
       ".equip-val{font-weight:600;margin-top:2px;line-height:1.35;}"
       ".history-block{margin-top:var(--space-2);}"
@@ -493,9 +583,11 @@ void handleStatus(AsyncWebServerRequest *request)
                 "<main id='mainContent'>" + ePaper + "<h1 class=\"status-page-title\">Spa Status</h1><div class=\"status-layout\">";
 
   html += "<section class=\"panel\"><h2>Data sync</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "lastUpdate", formatNumberWithCommas(spaStatusData.lastUpdate));
+  appendStatusKvRow(html, "lastUpdate", statusLastUpdateDisplayHtml(spaStatusData.lastUpdate));
   appendStatusKvRow(html, "magicNumber", String(spaStatusData.magicNumber));
-  html += "</dl></section>";
+  html += "</dl>";
+  html += "<p class=\"chart-caption\">magicNumber is a firmware RAM struct validity marker (expected 0x12345678 after init), not a spa model ID.</p>";
+  html += "</section>";
 
   html += "<section class=\"panel\"><h2>Device memory</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "Free Heap", formatNumberWithCommas(ESP.getFreeHeap()));
@@ -516,7 +608,7 @@ void handleStatus(AsyncWebServerRequest *request)
   appendStatusKvRow(html, "Spa State", getMapDescription(spaStatusData.spaState, spaStateMap));
   appendStatusKvRow(html, "Init Mode", getMapDescription(spaStatusData.initMode, initModeMap));
   appendStatusKvRow(html, "Heating Mode", getMapDescription(spaStatusData.heatingMode, heatingModeMap));
-  appendStatusKvRow(html, "Heating State", String(spaStatusData.heatingState));
+  appendStatusKvRow(html, "Heating State", getMapDescription(spaStatusData.heatingState, heatingStateMap));
   appendStatusKvRow(html, "Needs Heat", String(spaStatusData.needsHeat));
   html += "</dl></section>";
 
@@ -527,17 +619,17 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
-  appendStatusEquipCell(html, "Pump 1", getMapDescription(spaStatusData.pump1, pumpMap));
-  appendStatusEquipCell(html, "Pump 2", getMapDescription(spaStatusData.pump2, pumpMap));
-  appendStatusEquipCell(html, "Pump 3", getMapDescription(spaStatusData.pump3, pumpMap));
-  appendStatusEquipCell(html, "Pump 4", getMapDescription(spaStatusData.pump4, pumpMap));
-  appendStatusEquipCell(html, "Pump 5", getMapDescription(spaStatusData.pump5, pumpMap));
-  appendStatusEquipCell(html, "Pump 6", getMapDescription(spaStatusData.pump6, pumpMap));
-  appendStatusEquipCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap));
-  appendStatusEquipCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap));
-  appendStatusEquipCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap));
-  appendStatusEquipCell(html, "Light 2", getMapDescription(spaStatusData.light2, onOffMap));
-  appendStatusEquipCell(html, "Mister", getMapDescription(spaStatusData.mister, onOffMap));
+  appendStatusEquipCell(html, "Pump 1", getMapDescription(spaStatusData.pump1, pumpMap), statusPumpConfiguredAbsent(1));
+  appendStatusEquipCell(html, "Pump 2", getMapDescription(spaStatusData.pump2, pumpMap), statusPumpConfiguredAbsent(2));
+  appendStatusEquipCell(html, "Pump 3", getMapDescription(spaStatusData.pump3, pumpMap), statusPumpConfiguredAbsent(3));
+  appendStatusEquipCell(html, "Pump 4", getMapDescription(spaStatusData.pump4, pumpMap), statusPumpConfiguredAbsent(4));
+  appendStatusEquipCell(html, "Pump 5", getMapDescription(spaStatusData.pump5, pumpMap), statusPumpConfiguredAbsent(5));
+  appendStatusEquipCell(html, "Pump 6", getMapDescription(spaStatusData.pump6, pumpMap), statusPumpConfiguredAbsent(6));
+  appendStatusEquipCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent());
+  appendStatusEquipCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent());
+  appendStatusEquipCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1));
+  appendStatusEquipCell(html, "Light 2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2));
+  appendStatusEquipCell(html, "Mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent());
   html += "</div></section>";
 
   html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";

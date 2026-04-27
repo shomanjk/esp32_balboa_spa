@@ -8,6 +8,22 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-27
+
+### Changed
+
+- **Web portal `/status`:** **lastUpdate** shows local date/time when NTP time is valid, **Time not synced** when epoch is 0, with optional **Raw epoch** details; **Heating state** uses text labels from **`heatingStateMap`**; **magicNumber** has a short caption (firmware RAM marker `0x12345678`, not spa model).
+- **`src/main.h`:** Firmware version **`VERSION`** set to **1.3.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.3.0**).
+
+## [1.2.0] - 2026-04-27
+
+### Changed
+
+- **Web portal `/status`:** Equipment tiles use **`spaConfigurationData`** (when received) to de-emphasize items marked **not installed** in the spa configuration (pumps, lights, circ, blower, mister).
+- **`src/main.h`:** Firmware version **`VERSION`** set to **1.2.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.2.0**).
+
 ## [1.1.0] - 2026-04-27
 
 ### Changed
@@ -176,7 +192,9 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.3.0
+[1.2.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.2.0
 [1.1.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.1.0
 [1.0.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.0.0
 [0.7.2]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.2
