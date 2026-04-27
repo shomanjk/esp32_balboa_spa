@@ -7,12 +7,17 @@
 
 #define RS485_WRITE_QUEUE 10
 #define RS485_HISTORY_SIZE 60
+#define RS485_RAW_CAPTURE_SIZE 256
 
 void rs485Setup();
 void rs485Loop();
 void rs485ClearToSend();
 void rs485SampleHistory();
 const char *rs485HealthCode();
+int rs485RxGpio();
+int rs485TxGpio();
+int rs485Baud();
+bool rs485AutoTxEnabled();
 
 // void rs485Send(uint8_t *data, int length, boolean addCrc, boolean force = false);
 // void rs485Send(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data, boolean addCrc, boolean force = false);
@@ -43,6 +48,12 @@ struct Rs485Stats
   uint32_t polaritySwitchesYesterday;
   uint8_t polarityInverted;
   uint8_t polarityLocked;
+  uint32_t frameMarkersToday;
+  uint32_t frameMarkersYesterday;
+  uint32_t maxUartAvailableToday;
+  uint32_t maxUartAvailableYesterday;
+  uint32_t rawCaptureOverflowsToday;
+  uint32_t rawCaptureOverflowsYesterday;
   uint32_t magicNumber;
 };
 
@@ -66,6 +77,17 @@ struct Rs485Snapshot
 };
 
 int rs485GetHistoryNewestFirst(Rs485Snapshot *out, int maxCount);
+
+struct Rs485RawByte
+{
+  uint32_t tMs;
+  uint16_t gapMs;
+  uint8_t value;
+  uint8_t polarityInverted;
+  uint8_t uartAvailable;
+};
+
+int rs485GetRawRecent(Rs485RawByte *out, int maxCount);
 
 struct rs485WriteQueueMessage
 {

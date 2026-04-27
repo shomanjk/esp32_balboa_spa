@@ -25,6 +25,9 @@ bool isMessageValid(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 void sendExistingClientResponse(uint8_t id);
 void applyRs485Polarity(bool inverted);
 const char *rs485ModeName(bool inverted);
+void rs485DrainUart();
+void rs485ProcessByte(uint8_t x, uint8_t uartAvailable);
+void rs485RecordRawByte(uint8_t value, uint8_t uartAvailable);
 // bool hasDayChanged();
 
 RTC_NOINIT_ATTR Rs485Stats rs485Stats;
@@ -40,6 +43,10 @@ uint32_t rs485LastSampleMs = 0;
 Rs485Snapshot rs485History[RS485_HISTORY_SIZE];
 uint16_t rs485HistoryHead = 0;
 uint16_t rs485HistoryCount = 0;
+Rs485RawByte rs485RawCapture[RS485_RAW_CAPTURE_SIZE];
+uint16_t rs485RawCaptureHead = 0;
+uint16_t rs485RawCaptureCount = 0;
+uint32_t rs485LastRawCaptureMs = 0;
 
 #ifndef TX485_Tx
 #define TX485_Tx 17
@@ -56,8 +63,9 @@ uint16_t rs485HistoryCount = 0;
 #define RS485_UART_NUM UART_NUM_2
 #endif
 
-#define RS_485_MAGIC_NUMBER 0x21345678
+#define RS_485_MAGIC_NUMBER 0x21345679
 #define RS485_POLARITY_DETECT_WINDOW_MS 15000
+#define RS485_BAUD_RATE 115200
 
 time_t lastCheckedTime;
 
@@ -89,9 +97,6 @@ void rs485Setup()
 
 void rs485Loop()
 {
-  bool hasNewByte = false;
-  uint8_t x = 0;
-
   if (!rs485PolarityLocked && millis() - rs485PolarityDetectWindowStartMs >= RS485_POLARITY_DETECT_WINDOW_MS)
   {
     if (rs485ValidFramesSinceBoot == 0)
@@ -105,58 +110,112 @@ void rs485Loop()
     }
   }
 
-  if (RS485_SERIAL_PORT.available())
-  {
-    hasNewByte = true;
-    x = RS485_SERIAL_PORT.read();
-    rs485Stats.rawBytesToday++;
-    if (rs485PolarityInverted)
-    {
-      rs485Stats.rawBytesInvertedToday++;
-    }
-    else
-    {
-      rs485Stats.rawBytesNormalToday++;
-    }
-    rs485Stats.lastByteMs = millis();
-    rs485LedNotifyRx();
-    spaMessage.push(x);
+  rs485DrainUart();
 
-    // Drop until SOF is seen
-    if (spaMessage.first() != 0x7E)
-      spaMessage.clear();
-    if (spaMessage.size() > BALBOA_MESSAGE_SIZE - 1)
+  if (hasDayChanged(lastCheckedTime))
+  {
+    rs485Stats.rawBytesYesterday = rs485Stats.rawBytesToday;
+    rs485Stats.rawBytesToday = 0;
+    rs485Stats.rawBytesNormalYesterday = rs485Stats.rawBytesNormalToday;
+    rs485Stats.rawBytesNormalToday = 0;
+    rs485Stats.rawBytesInvertedYesterday = rs485Stats.rawBytesInvertedToday;
+    rs485Stats.rawBytesInvertedToday = 0;
+    rs485Stats.framesYesterday = rs485Stats.framesToday;
+    rs485Stats.framesToday = 0;
+    rs485Stats.messagesYesterday = rs485Stats.messagesToday;
+    rs485Stats.crcYesterday = rs485Stats.crcToday;
+    rs485Stats.messagesToday = 0;
+    rs485Stats.crcToday = 0;
+    rs485Stats.badFormatYesterday = rs485Stats.badFormatToday;
+    rs485Stats.badFormatToday = 0;
+    rs485Stats.polaritySwitchesYesterday = rs485Stats.polaritySwitchesToday;
+    rs485Stats.polaritySwitchesToday = 0;
+    rs485Stats.frameMarkersYesterday = rs485Stats.frameMarkersToday;
+    rs485Stats.frameMarkersToday = 0;
+    rs485Stats.maxUartAvailableYesterday = rs485Stats.maxUartAvailableToday;
+    rs485Stats.maxUartAvailableToday = 0;
+    rs485Stats.rawCaptureOverflowsYesterday = rs485Stats.rawCaptureOverflowsToday;
+    rs485Stats.rawCaptureOverflowsToday = 0;
+  }
+
+  rs485SampleHistory();
+};
+
+void rs485DrainUart()
+{
+  const uint16_t maxBytesPerLoop = 512;
+  uint16_t processed = 0;
+  while (RS485_SERIAL_PORT.available() && processed < maxBytesPerLoop)
+  {
+    int uartAvailable = RS485_SERIAL_PORT.available();
+    if (uartAvailable > static_cast<int>(rs485Stats.maxUartAvailableToday))
     {
-      rs485Stats.badFormatToday++;
-      Log.warning(F("[rs485]: Invalid message, too long: %s" CR), msgToString(spaMessage).c_str());
-      spaMessage.clear();
+      rs485Stats.maxUartAvailableToday = uartAvailable;
     }
+    uint8_t x = RS485_SERIAL_PORT.read();
+    if (uartAvailable > 255)
+    {
+      uartAvailable = 255;
+    }
+    rs485ProcessByte(x, static_cast<uint8_t>(uartAvailable));
+    processed++;
+  }
+}
+
+void rs485ProcessByte(uint8_t x, uint8_t uartAvailable)
+{
+  rs485RecordRawByte(x, uartAvailable);
+  rs485Stats.rawBytesToday++;
+  if (rs485PolarityInverted)
+  {
+    rs485Stats.rawBytesInvertedToday++;
+  }
+  else
+  {
+    rs485Stats.rawBytesNormalToday++;
+  }
+  rs485Stats.lastByteMs = millis();
+  if (x == 0x7E)
+  {
+    rs485Stats.frameMarkersToday++;
+  }
+  rs485LedNotifyRx();
+  spaMessage.push(x);
+
+  // Drop until SOF is seen
+  if (spaMessage.first() != 0x7E)
+    spaMessage.clear();
+  if (spaMessage.size() > BALBOA_MESSAGE_SIZE - 1)
+  {
+    rs485Stats.badFormatToday++;
+    Log.warning(F("[rs485]: Invalid message, too long: %s" CR), msgToString(spaMessage).c_str());
+    spaMessage.clear();
   }
 
   // Double SOF-marker, drop last one
-  if (spaMessage[1] == 0x7E && spaMessage.size() > 1)
+  if (spaMessage.size() > 1 && spaMessage[1] == 0x7E)
     spaMessage.pop();
 
-  if (hasNewByte && x == 0x7E && spaMessage.size() > 2)
+  if (x == 0x7E && spaMessage.size() > 2)
   {
     // Log.verbose(F("[rs485]: spaMessage %s, size %d, supplied size %d, %d" CR), msgToString(spaMessage).c_str(), spaMessage.size(), spaMessage[1] + 2, isMessageValid(spaMessage));
   }
 
-  if (spaMessage.size() == 4 && (spaMessage[1] > BALBOA_MESSAGE_SIZE | !(spaMessage[3] == 0xBF || spaMessage[3] == 0xAF)))
+  if (spaMessage.size() == 4 && (spaMessage[1] > BALBOA_MESSAGE_SIZE || !(spaMessage[3] == 0xBF || spaMessage[3] == 0xAF)))
   {
     rs485Stats.badFormatToday++;
     Log.warning(F("[rs485]: Invalid message, corrupted length/broadcast flag: %s" CR), msgToString(spaMessage).c_str());
     spaMessage.clear();
   }
 
-  if (spaMessage.size() - 2 > spaMessage[1])
+  if (spaMessage.size() > 1 && spaMessage.size() - 2 > spaMessage[1])
   {
     rs485Stats.badFormatToday++;
     Log.warning(F("[rs485]: Invalid message, corrupted length: %s" CR), msgToString(spaMessage).c_str());
     spaMessage.clear();
   }
 
-  if (hasNewByte && x == 0x7E && spaMessage.size() > 4 && spaMessage.size() == spaMessage[1] + 2)
+  if (x == 0x7E && spaMessage.size() > 4 && spaMessage.size() == spaMessage[1] + 2)
   {
     rs485Stats.framesToday++;
 
@@ -235,29 +294,7 @@ void rs485Loop()
     }
     spaMessage.clear();
   }
-
-  if (hasDayChanged(lastCheckedTime))
-  {
-    rs485Stats.rawBytesYesterday = rs485Stats.rawBytesToday;
-    rs485Stats.rawBytesToday = 0;
-    rs485Stats.rawBytesNormalYesterday = rs485Stats.rawBytesNormalToday;
-    rs485Stats.rawBytesNormalToday = 0;
-    rs485Stats.rawBytesInvertedYesterday = rs485Stats.rawBytesInvertedToday;
-    rs485Stats.rawBytesInvertedToday = 0;
-    rs485Stats.framesYesterday = rs485Stats.framesToday;
-    rs485Stats.framesToday = 0;
-    rs485Stats.messagesYesterday = rs485Stats.messagesToday;
-    rs485Stats.crcYesterday = rs485Stats.crcToday;
-    rs485Stats.messagesToday = 0;
-    rs485Stats.crcToday = 0;
-    rs485Stats.badFormatYesterday = rs485Stats.badFormatToday;
-    rs485Stats.badFormatToday = 0;
-    rs485Stats.polaritySwitchesYesterday = rs485Stats.polaritySwitchesToday;
-    rs485Stats.polaritySwitchesToday = 0;
-  }
-
-  rs485SampleHistory();
-};
+}
 
 void rs485ClearToSend()
 {
@@ -391,7 +428,7 @@ void applyRs485Polarity(bool inverted)
   rs485Stats.polarityInverted = rs485PolarityInverted ? 1 : 0;
 
   RS485_SERIAL_PORT.end();
-  RS485_SERIAL_PORT.begin(115200, SERIAL_8N1, TX485_Rx, TX485_Tx);
+  RS485_SERIAL_PORT.begin(RS485_BAUD_RATE, SERIAL_8N1, TX485_Rx, TX485_Tx);
 #if defined(ARDUINO_ARCH_ESP32)
   RS485_SERIAL_PORT.setRxInvert(rs485PolarityInverted);
   if (rs485PolarityInverted)
@@ -426,6 +463,59 @@ const char *rs485HealthCode()
     return "UART_BYTES_NO_VALID_FRAMES";
   }
   return "VALID_FRAMES_OK";
+}
+
+int rs485RxGpio()
+{
+  return TX485_Rx;
+}
+
+int rs485TxGpio()
+{
+  return TX485_Tx;
+}
+
+int rs485Baud()
+{
+  return RS485_BAUD_RATE;
+}
+
+bool rs485AutoTxEnabled()
+{
+  return AUTO_TX;
+}
+
+void rs485RecordRawByte(uint8_t value, uint8_t uartAvailable)
+{
+  const uint32_t nowMs = millis();
+  uint32_t gap = 0;
+  if (rs485LastRawCaptureMs != 0)
+  {
+    gap = nowMs - rs485LastRawCaptureMs;
+    if (gap > 65535)
+    {
+      gap = 65535;
+    }
+  }
+  rs485LastRawCaptureMs = nowMs;
+
+  Rs485RawByte b = {};
+  b.tMs = nowMs;
+  b.gapMs = static_cast<uint16_t>(gap);
+  b.value = value;
+  b.polarityInverted = rs485PolarityInverted ? 1 : 0;
+  b.uartAvailable = uartAvailable;
+
+  if (rs485RawCaptureCount == RS485_RAW_CAPTURE_SIZE)
+  {
+    rs485Stats.rawCaptureOverflowsToday++;
+  }
+  rs485RawCapture[rs485RawCaptureHead] = b;
+  rs485RawCaptureHead = (rs485RawCaptureHead + 1) % RS485_RAW_CAPTURE_SIZE;
+  if (rs485RawCaptureCount < RS485_RAW_CAPTURE_SIZE)
+  {
+    rs485RawCaptureCount++;
+  }
 }
 
 void rs485SampleHistory()
@@ -475,6 +565,26 @@ int rs485GetHistoryNewestFirst(Rs485Snapshot *out, int maxCount)
       idx += RS485_HISTORY_SIZE;
     }
     out[i] = rs485History[idx];
+  }
+  return toCopy;
+}
+
+int rs485GetRawRecent(Rs485RawByte *out, int maxCount)
+{
+  if (out == nullptr || maxCount <= 0 || rs485RawCaptureCount == 0)
+  {
+    return 0;
+  }
+  const int toCopy = (maxCount < rs485RawCaptureCount) ? maxCount : rs485RawCaptureCount;
+  int idx = static_cast<int>(rs485RawCaptureHead) - toCopy;
+  while (idx < 0)
+  {
+    idx += RS485_RAW_CAPTURE_SIZE;
+  }
+  for (int i = 0; i < toCopy; i++)
+  {
+    out[i] = rs485RawCapture[idx];
+    idx = (idx + 1) % RS485_RAW_CAPTURE_SIZE;
   }
   return toCopy;
 }

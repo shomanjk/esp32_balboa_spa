@@ -31,6 +31,7 @@ void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
+void handleRs485Raw(AsyncWebServerRequest *request);
 void handleRs485History(AsyncWebServerRequest *request);
 void handleSlash(AsyncWebServerRequest *request);
 void handleNotFound(AsyncWebServerRequest *request);
@@ -247,6 +248,7 @@ void spaWebServerLoop()
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
+    server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
 #ifdef spaEpaper
@@ -463,20 +465,26 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Raw Bytes (normal today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</li>";
   html += "<li><b>Raw Bytes (inverted today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
   html += "<li><b>Frame Attempts (today): </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
+  html += "<li><b>0x7E Markers (today): </b>" + formatNumberWithCommas(rs485Stats.frameMarkersToday) + "</li>";
   html += "<li><b>Valid Frames (today): </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
   html += "<li><b>CRC Errors (today): </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
   html += "<li><b>Format Errors (today): </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
   html += "<li><b>Mode Switches (today): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesToday) + "</li>";
+  html += "<li><b>Max UART Backlog (today): </b>" + formatNumberWithCommas(rs485Stats.maxUartAvailableToday) + "</li>";
   html += "<li class='spacer'></li><li><b>Raw Bytes (yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
   html += "<li><b>Raw Bytes (normal yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</li>";
   html += "<li><b>Raw Bytes (inverted yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</li>";
   html += "<li><b>Frame Attempts (yesterday): </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
+  html += "<li><b>0x7E Markers (yesterday): </b>" + formatNumberWithCommas(rs485Stats.frameMarkersYesterday) + "</li>";
   html += "<li><b>Valid Frames (yesterday): </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
   html += "<li><b>CRC Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
   html += "<li><b>Format Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
   html += "<li><b>Mode Switches (yesterday): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesYesterday) + "</li>";
+  html += "<li><b>Max UART Backlog (yesterday): </b>" + formatNumberWithCommas(rs485Stats.maxUartAvailableYesterday) + "</li>";
   html += "<li class='spacer'></li><li><b>Last Byte Millis: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
   html += "<li><b>Last Valid Frame Millis: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
+  html += "<li><b>UART Pins: </b>RX GPIO " + String(rs485RxGpio()) + ", TX GPIO " + String(rs485TxGpio()) + ", " + String(rs485Baud()) + " baud</li>";
+  html += "<li><b>AUTO_TX: </b>" + String(rs485AutoTxEnabled() ? "true" : "false") + "</li>";
   html += "<li><b>Polarity Inverted (raw): </b>" + String(rs485Stats.polarityInverted) + "</li>";
   html += "<li><b>Health Code (raw): </b>" + rsHealth + "</li>";
 
@@ -486,12 +494,14 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>rs485 rawBytesNormalToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</li>";
   html += "<li><b>rs485 rawBytesInvertedToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
   html += "<li><b>rs485 framesToday: </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
+  html += "<li><b>rs485 frameMarkersToday: </b>" + formatNumberWithCommas(rs485Stats.frameMarkersToday) + "</li>";
   html += "<li><b>rs485 crcToday: </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
   html += "<li><b>rs485 messagesYesterday: </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
   html += "<li><b>rs485 rawBytesYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
   html += "<li><b>rs485 rawBytesNormalYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</li>";
   html += "<li><b>rs485 rawBytesInvertedYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</li>";
   html += "<li><b>rs485 framesYesterday: </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
+  html += "<li><b>rs485 frameMarkersYesterday: </b>" + formatNumberWithCommas(rs485Stats.frameMarkersYesterday) + "</li>";
   html += "<li><b>rs485 crcYesterday: </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
   html += "<li><b>rs485 badFormatToday: </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
   html += "<li><b>rs485 badFormatYesterday: </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
@@ -501,6 +511,7 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>rs485 detectPhase: </b>" + String(rs485Stats.polarityLocked ? "2" : (rs485Stats.polarityInverted ? "1" : "0")) + "</li>";
   html += "<li><b>rs485 lastByteMs: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
   html += "<li><b>rs485 lastValidFrameMs: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
+  html += "<li><b>rs485 raw endpoint: </b>/api/rs485/raw?limit=80</li>";
 #endif
 
   appendWifiStateSection(html);
@@ -614,7 +625,11 @@ void handleWifi(AsyncWebServerRequest *request)
 void handleRs485(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(768);
+  DynamicJsonDocument doc(2048);
+  doc["rxGpio"] = rs485RxGpio();
+  doc["txGpio"] = rs485TxGpio();
+  doc["baud"] = rs485Baud();
+  doc["autoTx"] = rs485AutoTxEnabled();
   doc["rawBytesToday"] = rs485Stats.rawBytesToday;
   doc["rawBytesYesterday"] = rs485Stats.rawBytesYesterday;
   doc["rawBytesNormalToday"] = rs485Stats.rawBytesNormalToday;
@@ -629,6 +644,12 @@ void handleRs485(AsyncWebServerRequest *request)
   doc["crcYesterday"] = rs485Stats.crcYesterday;
   doc["badFormatToday"] = rs485Stats.badFormatToday;
   doc["badFormatYesterday"] = rs485Stats.badFormatYesterday;
+  doc["frameMarkersToday"] = rs485Stats.frameMarkersToday;
+  doc["frameMarkersYesterday"] = rs485Stats.frameMarkersYesterday;
+  doc["maxUartAvailableToday"] = rs485Stats.maxUartAvailableToday;
+  doc["maxUartAvailableYesterday"] = rs485Stats.maxUartAvailableYesterday;
+  doc["rawCaptureOverflowsToday"] = rs485Stats.rawCaptureOverflowsToday;
+  doc["rawCaptureOverflowsYesterday"] = rs485Stats.rawCaptureOverflowsYesterday;
   doc["polaritySwitchesToday"] = rs485Stats.polaritySwitchesToday;
   doc["polaritySwitchesYesterday"] = rs485Stats.polaritySwitchesYesterday;
   doc["polarityInverted"] = rs485Stats.polarityInverted;
@@ -640,6 +661,68 @@ void handleRs485(AsyncWebServerRequest *request)
   doc["health"] = rs485HealthCode();
 
   serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleRs485Raw(AsyncWebServerRequest *request)
+{
+  int limit = 80;
+  if (request->hasArg("limit"))
+  {
+    const int requested = request->arg("limit").toInt();
+    if (requested > 0)
+    {
+      limit = requested;
+    }
+  }
+  if (limit > RS485_RAW_CAPTURE_SIZE)
+  {
+    limit = RS485_RAW_CAPTURE_SIZE;
+  }
+
+  Rs485RawByte bytes[RS485_RAW_CAPTURE_SIZE];
+  const int count = rs485GetRawRecent(bytes, limit);
+
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  response->print("{\"count\":");
+  response->print(count);
+  response->print(",\"limit\":");
+  response->print(limit);
+  response->print(",\"rxGpio\":");
+  response->print(rs485RxGpio());
+  response->print(",\"txGpio\":");
+  response->print(rs485TxGpio());
+  response->print(",\"baud\":");
+  response->print(rs485Baud());
+  response->print(",\"mode\":\"");
+  response->print(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal");
+  response->print("\",\"bytesHex\":\"");
+  for (int i = 0; i < count; i++)
+  {
+    char b[4];
+    snprintf(b, sizeof(b), "%02X", bytes[i].value);
+    if (i > 0)
+    {
+      response->print(' ');
+    }
+    response->print(b);
+  }
+  response->print("\",\"items\":[");
+  for (int i = 0; i < count; i++)
+  {
+    char row[176];
+    snprintf(row, sizeof(row),
+             "%s{\"tMs\":%lu,\"gapMs\":%u,\"byte\":\"%02X\",\"dec\":%u,\"mode\":\"%s\",\"uartAvailable\":%u}",
+             i > 0 ? "," : "",
+             static_cast<unsigned long>(bytes[i].tMs),
+             bytes[i].gapMs,
+             bytes[i].value,
+             bytes[i].value,
+             bytes[i].polarityInverted ? "inverted_rx_tx" : "normal",
+             bytes[i].uartAvailable);
+    response->print(row);
+  }
+  response->print("]}");
   request->send(response);
 }
 
