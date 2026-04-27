@@ -8,6 +8,22 @@ where version numbers are used.
 
 ## [Unreleased]
 
+- No unreleased changes yet.
+
+## [0.7.0] - 2026-04-27
+
+### Added
+
+- **RS485 diagnostics (`/state` + `GET /api/rs485`):** Added raw UART byte counters, frame counters, last byte timestamp, and last valid frame timestamp for remote troubleshooting. Added a simple RS485 health classification (`NO_UART_BYTES`, `UART_BYTES_NO_VALID_FRAMES`, `VALID_FRAMES_OK`) exposed via JSON.
+
+### Changed
+
+- **`lib/localRS485Communication/rs485.cpp`:** Hardened parser flow to only process frame-end checks when a new UART byte is read, reducing stale-byte edge cases during low/no traffic.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **0.7.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.7.0**).
+
+## [0.6.0] - 2026-04-27
+
 ### Added
 
 - **`lib/localRS485Communication/rs485.cpp`:** Added RS485 polarity auto-detect fallback for tub-side UART bring-up. Firmware now starts with normal UART polarity, retries with inverted RX polarity if no valid Balboa frames are seen during the detect window, and logs/records lock state and polarity switch stats.
@@ -106,7 +122,9 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.0
+[0.6.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.6.0
 [0.5.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.5.0
 [0.4.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.4.0
 [0.3.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.3.1

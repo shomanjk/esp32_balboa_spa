@@ -30,6 +30,7 @@ void handleStatus(AsyncWebServerRequest *request);
 void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
+void handleRs485(AsyncWebServerRequest *request);
 void handleSlash(AsyncWebServerRequest *request);
 void handleNotFound(AsyncWebServerRequest *request);
 void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
@@ -199,6 +200,7 @@ void spaWebServerLoop()
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
+    server.on("/api/rs485", HTTP_GET, handleRs485);
 #ifdef spaEpaper
     server.on("/panel.jpg", HTTP_GET, handleepdpanel);
 #endif
@@ -400,11 +402,19 @@ void handleState(AsyncWebServerRequest *request)
 
 #ifdef LOCAL_CLIENT
   html += "<li class='spacer'></li><li><b>rs485 messagesToday: </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
+  html += "<li><b>rs485 rawBytesToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesToday) + "</li>";
+  html += "<li><b>rs485 framesToday: </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
   html += "<li><b>rs485 crcToday: </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
   html += "<li><b>rs485 messagesYesterday: </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
+  html += "<li><b>rs485 rawBytesYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
+  html += "<li><b>rs485 framesYesterday: </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
   html += "<li><b>rs485 crcYesterday: </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
   html += "<li><b>rs485 badFormatToday: </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
   html += "<li><b>rs485 badFormatYesterday: </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
+  html += "<li><b>rs485 polarityInverted: </b>" + String(rs485Stats.polarityInverted) + "</li>";
+  html += "<li><b>rs485 polarityLocked: </b>" + String(rs485Stats.polarityLocked) + "</li>";
+  html += "<li><b>rs485 lastByteMs: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
+  html += "<li><b>rs485 lastValidFrameMs: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
 #endif
 
   appendWifiStateSection(html);
@@ -511,6 +521,42 @@ void handleWifi(AsyncWebServerRequest *request)
     doc["dns"] = "";
     doc["channel"] = 0;
   }
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleRs485(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(768);
+  doc["rawBytesToday"] = rs485Stats.rawBytesToday;
+  doc["rawBytesYesterday"] = rs485Stats.rawBytesYesterday;
+  doc["framesToday"] = rs485Stats.framesToday;
+  doc["framesYesterday"] = rs485Stats.framesYesterday;
+  doc["messagesToday"] = rs485Stats.messagesToday;
+  doc["messagesYesterday"] = rs485Stats.messagesYesterday;
+  doc["crcToday"] = rs485Stats.crcToday;
+  doc["crcYesterday"] = rs485Stats.crcYesterday;
+  doc["badFormatToday"] = rs485Stats.badFormatToday;
+  doc["badFormatYesterday"] = rs485Stats.badFormatYesterday;
+  doc["polaritySwitchesToday"] = rs485Stats.polaritySwitchesToday;
+  doc["polaritySwitchesYesterday"] = rs485Stats.polaritySwitchesYesterday;
+  doc["polarityInverted"] = rs485Stats.polarityInverted;
+  doc["polarityLocked"] = rs485Stats.polarityLocked;
+  doc["lastByteMs"] = rs485Stats.lastByteMs;
+  doc["lastValidFrameMs"] = rs485Stats.lastValidFrameMs;
+
+  String health = "VALID_FRAMES_OK";
+  if (rs485Stats.rawBytesToday == 0 && rs485Stats.lastByteMs == 0)
+  {
+    health = "NO_UART_BYTES";
+  }
+  else if (rs485Stats.messagesToday == 0)
+  {
+    health = "UART_BYTES_NO_VALID_FRAMES";
+  }
+  doc["health"] = health;
+
   serializeJson(doc, *response);
   request->send(response);
 }

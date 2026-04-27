@@ -20,12 +20,18 @@ extern uint8_t id; // spa id
 
 struct Rs485Stats
 {
+  uint32_t rawBytesToday;
+  uint32_t rawBytesYesterday;
+  uint32_t framesToday;
+  uint32_t framesYesterday;
   uint32_t messagesToday;
   uint32_t messagesYesterday;
   uint32_t badFormatToday;
   uint32_t badFormatYesterday;
   uint32_t crcToday;
   uint32_t crcYesterday;
+  uint32_t lastByteMs;
+  uint32_t lastValidFrameMs;
   uint32_t polaritySwitchesToday;
   uint32_t polaritySwitchesYesterday;
   uint8_t polarityInverted;

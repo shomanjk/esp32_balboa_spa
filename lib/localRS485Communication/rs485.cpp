@@ -75,10 +75,11 @@ void rs485Setup()
 
 */
 
-uint8_t x;
-
 void rs485Loop()
 {
+  bool hasNewByte = false;
+  uint8_t x = 0;
+
   if (!rs485PolarityLocked && millis() - rs485PolarityDetectWindowStartMs >= RS485_POLARITY_DETECT_WINDOW_MS)
   {
     if (rs485PolarityDetectPhase == 0 && rs485ValidFramesSinceBoot == 0)
@@ -102,7 +103,10 @@ void rs485Loop()
 
   if (RS485_SERIAL_PORT.available())
   {
+    hasNewByte = true;
     x = RS485_SERIAL_PORT.read();
+    rs485Stats.rawBytesToday++;
+    rs485Stats.lastByteMs = millis();
     rs485LedNotifyRx();
     spaMessage.push(x);
 
@@ -121,7 +125,7 @@ void rs485Loop()
   if (spaMessage[1] == 0x7E && spaMessage.size() > 1)
     spaMessage.pop();
 
-  if (x == 0x7E && spaMessage.size() > 2)
+  if (hasNewByte && x == 0x7E && spaMessage.size() > 2)
   {
     // Log.verbose(F("[rs485]: spaMessage %s, size %d, supplied size %d, %d" CR), msgToString(spaMessage).c_str(), spaMessage.size(), spaMessage[1] + 2, isMessageValid(spaMessage));
   }
@@ -140,13 +144,15 @@ void rs485Loop()
     spaMessage.clear();
   }
 
-  if (x == 0x7E && spaMessage.size() > 4 && spaMessage.size() == spaMessage[1] + 2)
+  if (hasNewByte && x == 0x7E && spaMessage.size() > 4 && spaMessage.size() == spaMessage[1] + 2)
   {
+    rs485Stats.framesToday++;
 
     if (isMessageValid(spaMessage))
     {
       // Log.verbose(F("[rs485]: Received: %d - %s" CR), id, msgToString(spaMessage).c_str());
       rs485Stats.messagesToday++;
+      rs485Stats.lastValidFrameMs = millis();
       rs485ValidFramesSinceBoot++;
       if (!rs485PolarityLocked)
       {
@@ -220,6 +226,10 @@ void rs485Loop()
 
   if (hasDayChanged(lastCheckedTime))
   {
+    rs485Stats.rawBytesYesterday = rs485Stats.rawBytesToday;
+    rs485Stats.rawBytesToday = 0;
+    rs485Stats.framesYesterday = rs485Stats.framesToday;
+    rs485Stats.framesToday = 0;
     rs485Stats.messagesYesterday = rs485Stats.messagesToday;
     rs485Stats.crcYesterday = rs485Stats.crcToday;
     rs485Stats.messagesToday = 0;
