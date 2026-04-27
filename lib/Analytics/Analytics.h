@@ -28,7 +28,7 @@
 #include <Arduino.h>
 #include "../../src/main.h"
 
-#define ANALYTICS_VERSION "0.6.0"
+#define ANALYTICS_VERSION "0.7.0"
 #define ANALYTICS_MAGIC_NUMBER 0x13245678 // Magic number to check if data is initialized
 
 typedef struct
