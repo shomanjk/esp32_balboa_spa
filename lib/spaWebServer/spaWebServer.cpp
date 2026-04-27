@@ -31,6 +31,7 @@ void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
+void handleRs485History(AsyncWebServerRequest *request);
 void handleSlash(AsyncWebServerRequest *request);
 void handleNotFound(AsyncWebServerRequest *request);
 void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
@@ -64,6 +65,52 @@ static const char *wifiStatusName(wl_status_t s)
   default:
     return "Unknown";
   }
+}
+
+static String rs485HealthLabel(const String &health)
+{
+  if (health == "VALID_FRAMES_OK")
+  {
+    return "Healthy";
+  }
+  if (health == "UART_BYTES_NO_VALID_FRAMES")
+  {
+    return "Bytes seen, no valid frames";
+  }
+  return "No UART bytes";
+}
+
+static String rs485HealthColor(const String &health)
+{
+  if (health == "VALID_FRAMES_OK")
+  {
+    return "#04AA6D";
+  }
+  if (health == "UART_BYTES_NO_VALID_FRAMES")
+  {
+    return "#ef6c00";
+  }
+  return "#c62828";
+}
+
+static String rs485ModeHint(bool inverted)
+{
+  return inverted
+             ? "Inverted RX/TX mode is active (virtual A/B swap)."
+             : "Normal RX/TX mode is active.";
+}
+
+static String rs485HealthHint(const String &health)
+{
+  if (health == "VALID_FRAMES_OK")
+  {
+    return "Balboa frames are decoding correctly.";
+  }
+  if (health == "UART_BYTES_NO_VALID_FRAMES")
+  {
+    return "Signal is present, but framing/quality is not yet valid.";
+  }
+  return "No bus activity detected at UART RX yet.";
 }
 
 static void appendWifiStateSection(String &html)
@@ -200,6 +247,7 @@ void spaWebServerLoop()
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
+    server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
 #ifdef spaEpaper
     server.on("/panel.jpg", HTTP_GET, handleepdpanel);
@@ -381,7 +429,8 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>ESP State</h1><ul>";
+  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}</style>";
+  String html = "<html>" + head + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper + "<div class='state-grid'><section class='panel'><h1>ESP State</h1><ul>";
   html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
@@ -401,18 +450,55 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>hasDayChanged(testLastCheckedTime): </b>" + String(hasDayChanged(testLastCheckedTime)) + "</li>";
 
 #ifdef LOCAL_CLIENT
+  String rsHealth = String(rs485HealthCode());
+
+  html += "</ul></section><section class='panel'><h1>RS485 Diagnostics</h1><ul>";
+  html += "<li><b>Health: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></li>";
+  html += "<li><b>Hint: </b>" + rs485HealthHint(rsHealth) + "</li>";
+  html += "<li><b>Mode: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + String(rs485Stats.polarityInverted ? "#0f4a87" : "#4b5563") + "'>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</span></li>";
+  html += "<li><b>Mode Hint: </b>" + rs485ModeHint(rs485Stats.polarityInverted) + "</li>";
+  html += "<li><b>Detect Phase: </b>" + String(rs485Stats.polarityLocked ? "2 (locked)" : (rs485Stats.polarityInverted ? "1 (testing inverted_rx_tx)" : "0 (testing normal)")) + "</li>";
+  html += "<li><b>Polarity Locked: </b>" + String(rs485Stats.polarityLocked ? "yes" : "no") + "</li>";
+  html += "<li class='spacer'></li><li><b>Raw Bytes (today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesToday) + "</li>";
+  html += "<li><b>Raw Bytes (normal today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</li>";
+  html += "<li><b>Raw Bytes (inverted today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
+  html += "<li><b>Frame Attempts (today): </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
+  html += "<li><b>Valid Frames (today): </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
+  html += "<li><b>CRC Errors (today): </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
+  html += "<li><b>Format Errors (today): </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
+  html += "<li><b>Mode Switches (today): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesToday) + "</li>";
+  html += "<li class='spacer'></li><li><b>Raw Bytes (yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
+  html += "<li><b>Raw Bytes (normal yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</li>";
+  html += "<li><b>Raw Bytes (inverted yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</li>";
+  html += "<li><b>Frame Attempts (yesterday): </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
+  html += "<li><b>Valid Frames (yesterday): </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
+  html += "<li><b>CRC Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
+  html += "<li><b>Format Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
+  html += "<li><b>Mode Switches (yesterday): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesYesterday) + "</li>";
+  html += "<li class='spacer'></li><li><b>Last Byte Millis: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
+  html += "<li><b>Last Valid Frame Millis: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
+  html += "<li><b>Polarity Inverted (raw): </b>" + String(rs485Stats.polarityInverted) + "</li>";
+  html += "<li><b>Health Code (raw): </b>" + rsHealth + "</li>";
+
+  html += "</ul></section><section class='panel'><h1>RS485 Raw Counters</h1><ul>";
   html += "<li class='spacer'></li><li><b>rs485 messagesToday: </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
   html += "<li><b>rs485 rawBytesToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesToday) + "</li>";
+  html += "<li><b>rs485 rawBytesNormalToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</li>";
+  html += "<li><b>rs485 rawBytesInvertedToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
   html += "<li><b>rs485 framesToday: </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
   html += "<li><b>rs485 crcToday: </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
   html += "<li><b>rs485 messagesYesterday: </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
   html += "<li><b>rs485 rawBytesYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
+  html += "<li><b>rs485 rawBytesNormalYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</li>";
+  html += "<li><b>rs485 rawBytesInvertedYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</li>";
   html += "<li><b>rs485 framesYesterday: </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
   html += "<li><b>rs485 crcYesterday: </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
   html += "<li><b>rs485 badFormatToday: </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
   html += "<li><b>rs485 badFormatYesterday: </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
   html += "<li><b>rs485 polarityInverted: </b>" + String(rs485Stats.polarityInverted) + "</li>";
   html += "<li><b>rs485 polarityLocked: </b>" + String(rs485Stats.polarityLocked) + "</li>";
+  html += "<li><b>rs485 mode: </b>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</li>";
+  html += "<li><b>rs485 detectPhase: </b>" + String(rs485Stats.polarityLocked ? "2" : (rs485Stats.polarityInverted ? "1" : "0")) + "</li>";
   html += "<li><b>rs485 lastByteMs: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
   html += "<li><b>rs485 lastValidFrameMs: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
 #endif
@@ -463,7 +549,7 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>staleData: </b>" + String(staleData(spaSettings0x04Data)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaSettings0x04Data)) + "</li>";
 
-  html += "</ul></section></main></div></body></html>";
+  html += "</ul></section></div></main></div></body></html>";
 
   request->send(200, "text/html", html);
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
@@ -531,6 +617,10 @@ void handleRs485(AsyncWebServerRequest *request)
   DynamicJsonDocument doc(768);
   doc["rawBytesToday"] = rs485Stats.rawBytesToday;
   doc["rawBytesYesterday"] = rs485Stats.rawBytesYesterday;
+  doc["rawBytesNormalToday"] = rs485Stats.rawBytesNormalToday;
+  doc["rawBytesNormalYesterday"] = rs485Stats.rawBytesNormalYesterday;
+  doc["rawBytesInvertedToday"] = rs485Stats.rawBytesInvertedToday;
+  doc["rawBytesInvertedYesterday"] = rs485Stats.rawBytesInvertedYesterday;
   doc["framesToday"] = rs485Stats.framesToday;
   doc["framesYesterday"] = rs485Stats.framesYesterday;
   doc["messagesToday"] = rs485Stats.messagesToday;
@@ -543,19 +633,56 @@ void handleRs485(AsyncWebServerRequest *request)
   doc["polaritySwitchesYesterday"] = rs485Stats.polaritySwitchesYesterday;
   doc["polarityInverted"] = rs485Stats.polarityInverted;
   doc["polarityLocked"] = rs485Stats.polarityLocked;
+  doc["mode"] = rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal";
+  doc["detectPhase"] = rs485Stats.polarityLocked ? 2 : (rs485Stats.polarityInverted ? 1 : 0);
   doc["lastByteMs"] = rs485Stats.lastByteMs;
   doc["lastValidFrameMs"] = rs485Stats.lastValidFrameMs;
+  doc["health"] = rs485HealthCode();
 
-  String health = "VALID_FRAMES_OK";
-  if (rs485Stats.rawBytesToday == 0 && rs485Stats.lastByteMs == 0)
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleRs485History(AsyncWebServerRequest *request)
+{
+  int limit = 20;
+  if (request->hasArg("limit"))
   {
-    health = "NO_UART_BYTES";
+    const int requested = request->arg("limit").toInt();
+    if (requested > 0)
+    {
+      limit = requested;
+    }
   }
-  else if (rs485Stats.messagesToday == 0)
+  if (limit > RS485_HISTORY_SIZE)
   {
-    health = "UART_BYTES_NO_VALID_FRAMES";
+    limit = RS485_HISTORY_SIZE;
   }
-  doc["health"] = health;
+
+  Rs485Snapshot snapshots[RS485_HISTORY_SIZE];
+  const int count = rs485GetHistoryNewestFirst(snapshots, limit);
+
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(16384);
+  doc["count"] = count;
+  doc["limit"] = limit;
+  JsonArray items = doc.createNestedArray("items");
+  for (int i = 0; i < count; i++)
+  {
+    JsonObject row = items.createNestedObject();
+    row["tMs"] = snapshots[i].tMs;
+    row["health"] = snapshots[i].health;
+    row["mode"] = snapshots[i].polarityInverted ? "inverted_rx_tx" : "normal";
+    row["detectPhase"] = snapshots[i].detectPhase;
+    row["rawBytesToday"] = snapshots[i].rawBytesToday;
+    row["rawBytesNormalToday"] = snapshots[i].rawBytesNormalToday;
+    row["rawBytesInvertedToday"] = snapshots[i].rawBytesInvertedToday;
+    row["framesToday"] = snapshots[i].framesToday;
+    row["messagesToday"] = snapshots[i].messagesToday;
+    row["crcToday"] = snapshots[i].crcToday;
+    row["badFormatToday"] = snapshots[i].badFormatToday;
+    row["polaritySwitchesToday"] = snapshots[i].polaritySwitchesToday;
+  }
 
   serializeJson(doc, *response);
   request->send(response);

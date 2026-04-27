@@ -6,10 +6,13 @@
 #include "../../src/main.h"
 
 #define RS485_WRITE_QUEUE 10
+#define RS485_HISTORY_SIZE 60
 
 void rs485Setup();
 void rs485Loop();
 void rs485ClearToSend();
+void rs485SampleHistory();
+const char *rs485HealthCode();
 
 // void rs485Send(uint8_t *data, int length, boolean addCrc, boolean force = false);
 // void rs485Send(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data, boolean addCrc, boolean force = false);
@@ -22,6 +25,10 @@ struct Rs485Stats
 {
   uint32_t rawBytesToday;
   uint32_t rawBytesYesterday;
+  uint32_t rawBytesNormalToday;
+  uint32_t rawBytesNormalYesterday;
+  uint32_t rawBytesInvertedToday;
+  uint32_t rawBytesInvertedYesterday;
   uint32_t framesToday;
   uint32_t framesYesterday;
   uint32_t messagesToday;
@@ -40,6 +47,25 @@ struct Rs485Stats
 };
 
 extern Rs485Stats rs485Stats;
+
+struct Rs485Snapshot
+{
+  uint32_t tMs;
+  uint32_t rawBytesToday;
+  uint32_t rawBytesNormalToday;
+  uint32_t rawBytesInvertedToday;
+  uint32_t framesToday;
+  uint32_t messagesToday;
+  uint32_t crcToday;
+  uint32_t badFormatToday;
+  uint32_t polaritySwitchesToday;
+  uint8_t polarityInverted;
+  uint8_t polarityLocked;
+  uint8_t detectPhase;
+  char health[32];
+};
+
+int rs485GetHistoryNewestFirst(Rs485Snapshot *out, int maxCount);
 
 struct rs485WriteQueueMessage
 {
