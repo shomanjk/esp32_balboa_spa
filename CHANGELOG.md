@@ -8,17 +8,28 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-27
+
+First **1.x** release: tub-side RS485 path validated on hardware; correctness fixes to frame parsing and safer UART draining so the spa link stays reliable under load.
+
+### Fixed
+
+- **RS485 frame validation (critical):** The 4-byte prelude check used **bitwise OR** (`|`) instead of **logical OR** (`||`) when combining the length test with the broadcast-flag test (`0xBF` / `0xAF`), which could corrupt accept/reject decisions for Balboa frames. This is corrected to logical OR.
+- **RS485 bounds safety:** Double-`0x7E` handling and length overrun checks now verify `spaMessage.size()` before indexing `spaMessage[1]` or comparing `size() - 2` to the length byte, avoiding invalid reads on short buffers.
+- **RS485 end-of-frame with batched reads:** After refactoring UART handling to drain multiple bytes per loop, complete-frame detection now runs for **each** processed `0x7E` so frames still complete correctly when several bytes arrive in one iteration.
+
 ### Added
 
-- **RS485 raw UART capture (`GET /api/rs485/raw`):** Added a bounded raw-byte ring buffer for remote diagnostics, including byte hex, byte timing gaps, active UART polarity mode, and UART backlog at read time.
-- **RS485 marker/backlog diagnostics (`/state` + `GET /api/rs485`):** Added `0x7E` frame-marker counters, max UART backlog, capture overflow counters, and effective UART pin/baud/AUTO_TX reporting.
+- **RS485 raw UART capture (`GET /api/rs485/raw`):** Bounded raw-byte ring buffer for remote diagnostics: hex stream, per-byte gap timing, active polarity mode, and UART backlog at capture time.
+- **RS485 marker/backlog diagnostics (`/state` + `GET /api/rs485`):** `0x7E` frame-marker counters, max UART backlog, raw-capture overflow counters, and effective UART pin/baud/AUTO_TX reporting.
 
 ### Changed
 
-- **RS485 UART drain:** `rs485Loop()` now drains a bounded batch of waiting UART bytes each pass instead of one byte, preventing backlog when another subsystem briefly blocks the main loop.
-- **MQTT reconnect behavior:** MQTT reconnect attempts are throttled and use a shorter socket timeout so an offline broker cannot starve RS485 processing.
-- **`src/main.h`:** Firmware version **`VERSION`** set to **0.7.4**.
-- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**0.7.4**).
+- **RS485 UART drain:** `rs485Loop()` drains a bounded batch of waiting UART bytes per pass (instead of one), reducing backlog when the main loop is briefly blocked.
+- **RS485 persisted stats:** `RS_485_MAGIC_NUMBER` incremented so upgraded firmware does not misinterpret older in-flash layout after struct growth.
+- **MQTT reconnect behavior:** Reconnect attempts throttled (30s), shorter socket timeout, `setBufferSize(512)` applied at setup; avoids an unreachable broker dominating loop time and starving RS485.
+- **`src/main.h`:** Firmware version **`VERSION`** set to **1.0.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.0.0**).
 
 ## [0.7.2] - 2026-04-27
 
@@ -155,7 +166,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.0.0
 [0.7.2]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.2
 [0.7.1]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.1
 [0.7.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v0.7.0
