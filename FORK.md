@@ -4,7 +4,7 @@ This document explains how this repository relates to earlier projects and how w
 
 ## Lineage
 
-This codebase is a port and modernization of Balboa spa control firmware for ESP32. The [README](README.md) **Background / History** section cites:
+This codebase is a port and modernization of Balboa spa control firmware for ESP32. The ESP32-era README baseline descends from **[NorthernMan54/esp32_balboa_spa](https://github.com/NorthernMan54/esp32_balboa_spa)** (branch **`ESP32`**); a verbatim snapshot of that README is preserved at the bottom of [README.md](README.md) for credit and history. The [README](README.md) **Background and credits** section also cites:
 
 - [cribskip/esp8266_spa](https://github.com/cribskip/esp8266_spa) (ESP8266 reference implementation)
 - [EmmanuelLM/esp8266_spa](https://github.com/EmmanuelLM/esp8266_spa) (related ESP8266 work)
