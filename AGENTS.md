@@ -5,7 +5,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 ## Project
 
 - **Purpose:** ESP32 firmware to talk **Balboa** spa controllers: read status (temperature, pumps, etc.) and (when implemented) send commands over the Balboa serial protocol.
-- **Maintained fork:** Ongoing work lives in this repo; upstream ESP8266-era projects are archival. See [FORK.md](FORK.md) and [README.md](README.md) “About this fork”.
+- **Maintained fork:** Ongoing work lives in this repo; upstream ESP8266-era projects are archival. See [FORK.md](FORK.md) and [README.md](README.md) (“About this fork” + self-contained sections; **collapsed** verbatim snapshot of [NorthernMan54/esp32_balboa_spa](https://github.com/NorthernMan54/esp32_balboa_spa) `ESP32` README at the bottom for lineage).
 - **Protocol reference:** [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md) (linked from README).
 
 ## Hardware targets

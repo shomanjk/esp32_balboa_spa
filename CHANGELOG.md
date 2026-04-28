@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **README:** Restructured for a self-contained top (lineage, features, web/MQTT/HA, build, M5, OTA, compiler flags, credits) and a **collapsed verbatim snapshot** of [NorthernMan54/esp32_balboa_spa](https://github.com/NorthernMan54/esp32_balboa_spa) branch **`ESP32`** README at the bottom; [FORK.md](FORK.md) lineage updated to name NorthernMan54.
+
 ## [1.4.0] - 2026-04-27
 
 ### Added
