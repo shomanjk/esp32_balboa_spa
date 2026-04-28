@@ -17,8 +17,6 @@ namespace
 {
 
   /** Bits for optional HA entities (pumps, loads, diagnostics). Minimal discovery is separate. */
-  static uint32_t s_haEquipmentPublishedMask = 0;
-
   enum HaEquipBit : uint32_t
   {
     HA_PUMP1 = 1u << 0,
@@ -35,6 +33,11 @@ namespace
     HA_MODEL = 1u << 11,
     HA_SOFTWARE = 1u << 12,
   };
+
+  /** Every optional discovery entity (not in minimal set). Used to retract stale retained configs from the broker. */
+  static constexpr uint32_t ALL_EQUIPMENT_BITS =
+      HA_PUMP1 | HA_PUMP2 | HA_PUMP3 | HA_PUMP4 | HA_PUMP5 | HA_PUMP6 | HA_CIRC | HA_BLOWER | HA_LIGHT1 |
+      HA_LIGHT2 | HA_MISTER | HA_MODEL | HA_SOFTWARE;
 
   void macSlug(char *out, size_t outLen)
   {
@@ -109,7 +112,8 @@ namespace
 
   void publishSensor(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
                      const char *group, const char *field, const char *deviceClass,
-                     const char *unit, const char *stateClass, const char *entityCategory)
+                     const char *unit, const char *stateClass, const char *entityCategory,
+                     const char *icon = nullptr)
   {
     char objectId[48];
     buildObjectId(objectId, sizeof(objectId), objectSuffix);
@@ -133,12 +137,14 @@ namespace
       root["state_class"] = stateClass;
     if (entityCategory && entityCategory[0])
       root["entity_category"] = entityCategory;
+    if (icon && icon[0])
+      root["icon"] = icon;
 
     publishDoc("sensor", objectId, doc);
   }
 
   void publishBinarySensor(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
-                           const char *group, const char *field)
+                           const char *group, const char *field, const char *icon = nullptr)
   {
     char objectId[48];
     buildObjectId(objectId, sizeof(objectId), objectSuffix);
@@ -156,6 +162,8 @@ namespace
     root["payload_off"] = "Off";
     addAvailability(root, mqttTopic);
     addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
 
     publishDoc("binary_sensor", objectId, doc);
   }
@@ -251,25 +259,25 @@ namespace
     switch (bit)
     {
     case HA_PUMP1:
-      publishSensor(macSlugStr, "pump1", "Spa pump 1", "status", "pump1", nullptr, nullptr, nullptr, nullptr);
+      publishSensor(macSlugStr, "pump1", "Spa pump 1", "status", "pump1", nullptr, nullptr, nullptr, nullptr, "mdi:pump");
       break;
     case HA_PUMP2:
-      publishSensor(macSlugStr, "pump2", "Spa pump 2", "status", "pump2", nullptr, nullptr, nullptr, nullptr);
+      publishSensor(macSlugStr, "pump2", "Spa pump 2", "status", "pump2", nullptr, nullptr, nullptr, nullptr, "mdi:pump");
       break;
     case HA_PUMP3:
-      publishSensor(macSlugStr, "pump3", "Spa pump 3", "status", "pump3", nullptr, nullptr, nullptr, nullptr);
+      publishSensor(macSlugStr, "pump3", "Spa pump 3", "status", "pump3", nullptr, nullptr, nullptr, nullptr, "mdi:pump");
       break;
     case HA_PUMP4:
-      publishSensor(macSlugStr, "pump4", "Spa pump 4", "status", "pump4", nullptr, nullptr, nullptr, nullptr);
+      publishSensor(macSlugStr, "pump4", "Spa pump 4", "status", "pump4", nullptr, nullptr, nullptr, nullptr, "mdi:pump");
       break;
     case HA_PUMP5:
-      publishSensor(macSlugStr, "pump5", "Spa pump 5", "status", "pump5", nullptr, nullptr, nullptr, nullptr);
+      publishSensor(macSlugStr, "pump5", "Spa pump 5", "status", "pump5", nullptr, nullptr, nullptr, nullptr, "mdi:pump");
       break;
     case HA_PUMP6:
-      publishSensor(macSlugStr, "pump6", "Spa pump 6", "status", "pump6", nullptr, nullptr, nullptr, nullptr);
+      publishSensor(macSlugStr, "pump6", "Spa pump 6", "status", "pump6", nullptr, nullptr, nullptr, nullptr, "mdi:pump");
       break;
     case HA_CIRC:
-      publishBinarySensor(macSlugStr, "circ", "Spa circulation pump", "status", "circ");
+      publishBinarySensor(macSlugStr, "circ", "Spa circulation pump", "status", "circ", "mdi:pump");
       break;
     case HA_BLOWER:
       publishBinarySensor(macSlugStr, "blower", "Spa blower", "status", "blower");
@@ -296,25 +304,25 @@ namespace
 
   void publishMinimalDiscovery(const char *macSlugStr)
   {
-    publishSensor(macSlugStr, "current_temp", "Spa current temperature", "status", "currentTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr);
-    publishSensor(macSlugStr, "set_temp", "Spa set temperature", "status", "setTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr);
-    publishSensor(macSlugStr, "low_set_temp", "Spa low set temperature", "status", "lowSetTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr);
-    publishSensor(macSlugStr, "high_set_temp", "Spa high set temperature", "status", "highSetTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr);
-    publishSensor(macSlugStr, "sensor_a", "Spa sensor A", "status", "sensorA", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr);
-    publishSensor(macSlugStr, "sensor_b", "Spa sensor B", "status", "sensorB", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr);
+    publishSensor(macSlugStr, "current_temp", "Spa current temperature", "status", "currentTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "set_temp", "Spa set temperature", "status", "setTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "low_set_temp", "Spa low set temperature", "status", "lowSetTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "high_set_temp", "Spa high set temperature", "status", "highSetTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "sensor_a", "Spa sensor A", "status", "sensorA", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "sensor_b", "Spa sensor B", "status", "sensorB", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
 
-    publishSensor(macSlugStr, "heating_state", "Spa heating state", "status", "heatingState", nullptr, nullptr, "measurement", nullptr);
+    publishSensor(macSlugStr, "heating_state", "Spa heating state", "status", "heatingState", nullptr, nullptr, "measurement", nullptr, nullptr);
 
-    publishSensor(macSlugStr, "spa_state", "Spa state", "status", "spaState", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "init_mode", "Spa init mode", "status", "initMode", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "heating_mode", "Spa heating mode", "status", "heatingMode", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "filter_mode", "Spa filter mode", "status", "filterMode", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "temp_range", "Spa temperature range", "status", "tempRange", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "panel_locked", "Spa panel locked", "status", "panelLocked", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "settings_lock", "Spa settings lock", "status", "settingsLock", nullptr, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "spa_state", "Spa state", "status", "spaState", nullptr, nullptr, nullptr, nullptr, "mdi:hot-tub");
+    publishSensor(macSlugStr, "init_mode", "Spa init mode", "status", "initMode", nullptr, nullptr, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "heating_mode", "Spa heating mode", "status", "heatingMode", nullptr, nullptr, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "filter_mode", "Spa filter mode", "status", "filterMode", nullptr, nullptr, nullptr, nullptr, "mdi:sync");
+    publishSensor(macSlugStr, "temp_range", "Spa temperature range", "status", "tempRange", nullptr, nullptr, nullptr, nullptr, "mdi:thermometer-lines");
+    publishSensor(macSlugStr, "panel_locked", "Spa panel locked", "status", "panelLocked", nullptr, nullptr, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "settings_lock", "Spa settings lock", "status", "settingsLock", nullptr, nullptr, nullptr, nullptr, nullptr);
 
-    publishSensor(macSlugStr, "spa_time", "Spa clock", "status", "time", nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "temp_scale", "Spa temperature scale", "status", "tempScale", nullptr, nullptr, nullptr, "diagnostic");
+    publishSensor(macSlugStr, "spa_time", "Spa clock", "status", "time", nullptr, nullptr, nullptr, nullptr, nullptr);
+    publishSensor(macSlugStr, "temp_scale", "Spa temperature scale", "status", "tempScale", nullptr, nullptr, nullptr, "diagnostic", nullptr);
   }
 
 } // namespace
@@ -341,7 +349,9 @@ void publishHomeAssistantDiscoveryExpanded()
   macSlug(macStr, sizeof(macStr));
 
   const uint32_t desired = computeDesiredEquipmentMask();
-  const uint32_t retract = s_haEquipmentPublishedMask & ~desired;
+  /* Retract every optional slot we are not publishing, including stale retained discovery from older sessions
+   * or firmware (previously we only retracted bits published in-RAM this boot, so HA kept ghost entities). */
+  const uint32_t retract = ALL_EQUIPMENT_BITS & ~desired;
 
   for (uint32_t b = HA_PUMP1; b <= HA_SOFTWARE; b <<= 1)
   {
@@ -357,8 +367,6 @@ void publishHomeAssistantDiscoveryExpanded()
     if (desired & b)
       publishEquipmentBit(b, macStr);
   }
-
-  s_haEquipmentPublishedMask = desired;
 
   if (desired != 0)
     Log.notice(F("[HA discovery]: equipment discovery mask 0x%lx (config=%lu info=%lu)" CR),

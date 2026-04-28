@@ -8,6 +8,18 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-04-27
+
+### Fixed
+
+- **Home Assistant MQTT discovery** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Retract optional discovery for **every** equipment slot not in the current desired mask (not only slots published earlier this boot), so **stale retained** `homeassistant/.../config` messages from older firmware or prior broker state are cleared when MQTT connects or when spa configuration is refreshed.
+
+### Changed
+
+- **Home Assistant MQTT discovery icons** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Added explicit MQTT discovery `icon` fields for Balboa-like entities (`pump1`-`pump6`, `circ`, `temp_range`, `spa_state`, `filter_mode`) to better match the official Home Assistant Balboa integration visual style.
+- **`src/main.h`:** Firmware **`VERSION`** **1.4.3**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** **1.4.3**.
+
 ## [1.4.2] - 2026-04-27
 
 ### Changed
@@ -21,7 +33,7 @@ where version numbers are used.
 ### Changed
 
 - **README:** Restructured for a self-contained top (lineage, features, web/MQTT/HA, build, M5, OTA, compiler flags, credits) and a **collapsed verbatim snapshot** of [NorthernMan54/esp32_balboa_spa](https://github.com/NorthernMan54/esp32_balboa_spa) branch **`ESP32`** README at the bottom; [FORK.md](FORK.md) lineage updated to name NorthernMan54.
-- **Home Assistant MQTT discovery:** On connect, publishes a **minimal** retained set (temperatures, heating state, spa modes, locks, clock, temp scale). **Pumps, loads, mister, and diagnostic model/software** discovery is published only after **`spaConfigurationData`** / **`spaInformationData`** are populated (same install rules as the web `/status` page); slots that drop out of the desired set are **retracted** (empty retained config) for the current power session. Triggered from configuration and information parses in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp); logic in [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp).
+- **Home Assistant MQTT discovery:** On connect, publishes a **minimal** retained set (temperatures, heating state, spa modes, locks, clock, temp scale). **Pumps, loads, mister, and diagnostic model/software** discovery is published only after **`spaConfigurationData`** / **`spaInformationData`** are populated (same install rules as the web `/status` page); slots that drop out of the desired set are **retracted** (empty retained config). Triggered from configuration and information parses in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp); logic in [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp).
 - **`src/main.h`:** Firmware version **`VERSION`** set to **1.4.1**.
 - **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.4.1**).
 
