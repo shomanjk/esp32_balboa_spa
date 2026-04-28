@@ -8,6 +8,14 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-04-27
+
+### Changed
+
+- **Web portal ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)):** **`/config`** and **`/state`** show **local date/time** for spa **`lastUpdate`** / **`lastRequest`** and ESP wall-clock fields, with optional **Raw epoch (Unix s)** details (same pattern as **`/status`**). **Filter Configuration** adds short scheduling help, **`lastUpdate (filter settings)`**, and **`Filter 2 enabled`** when filter data has been received.
+- **`src/main.h`:** Firmware **`VERSION`** **1.4.2**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** **1.4.2**.
+
 ## [1.4.1] - 2026-04-27
 
 ### Changed
@@ -209,7 +217,10 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.3.0
 [1.2.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.2.0
 [1.1.0]: https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v1.1.0
