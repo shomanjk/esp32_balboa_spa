@@ -42,6 +42,21 @@
 
 #define WIFI_CONNECT_TIMEOUT 10000
 
+#ifndef WIFI_OFFLINE_RESTART_TIMEOUT_MS
+// If Wi-Fi stays offline this long, force a reboot to recover from stale stack/AP states.
+#define WIFI_OFFLINE_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
+#endif
+
+#ifndef WIFI_OFFLINE_RESTART_MIN_UPTIME_MS
+// Avoid reboot churn while the device is still in early boot/reconnect.
+#define WIFI_OFFLINE_RESTART_MIN_UPTIME_MS (2UL * 60UL * 1000UL)
+#endif
+
+#ifndef WIFI_OFFLINE_RESTART_LOG_INTERVAL_MS
+// Throttle offline watchdog progress logs.
+#define WIFI_OFFLINE_RESTART_LOG_INTERVAL_MS 30000UL
+#endif
+
 const long gmtOffset_sec = GMT_OFFSET;
 const int daylightOffset_sec = DAYLIGHT_OFFSET;
 extern char gatewayName[20];

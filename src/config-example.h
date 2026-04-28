@@ -20,6 +20,10 @@
 #define OTA_PASSWORD "change-me-before-enabling-auth"
 // OTA transport timeout in milliseconds (applies to ArduinoOTA session)
 #define OTA_TIMEOUT_MS 15000
+// If Wi-Fi remains offline for this long, firmware self-restarts to recover.
+// #define WIFI_OFFLINE_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
+// Optional guard to avoid reboot churn during early boot.
+// #define WIFI_OFFLINE_RESTART_MIN_UPTIME_MS (2UL * 60UL * 1000UL)
 
 #define GMT_OFFSET -14400
 #define DAYLIGHT_OFFSET 0

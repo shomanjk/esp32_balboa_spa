@@ -13,6 +13,9 @@
 WiFiManager wifiManager;
 char gatewayName[20];
 static uint8_t lastOtaProgressLoggedPercent = 0;
+static unsigned long wifiOfflineSinceMs = 0;
+static unsigned long wifiOfflineLastLogMs = 0;
+static bool wifiOfflineRestartArmed = true;
 
 static const __FlashStringHelper *otaErrorString(ota_error_t error)
 {
@@ -51,10 +54,43 @@ void wifiModuleLoop()
 {
   if (WiFi.status() != WL_CONNECTED)
   {
+    if (wifiOfflineSinceMs == 0)
+    {
+      wifiOfflineSinceMs = millis();
+      wifiOfflineLastLogMs = 0;
+      Log.warning(F("[WiFi]: Offline watchdog started at %lums" CR), wifiOfflineSinceMs);
+    }
+    unsigned long nowMs = millis();
+    unsigned long offlineMs = nowMs - wifiOfflineSinceMs;
+    if (offlineMs >= WIFI_OFFLINE_RESTART_LOG_INTERVAL_MS &&
+        (wifiOfflineLastLogMs == 0 || (nowMs - wifiOfflineLastLogMs) >= WIFI_OFFLINE_RESTART_LOG_INTERVAL_MS))
+    {
+      wifiOfflineLastLogMs = nowMs;
+      Log.warning(F("[WiFi]: Offline for %lums (restart at %lums)" CR), offlineMs, (unsigned long)WIFI_OFFLINE_RESTART_TIMEOUT_MS);
+    }
+    if (wifiOfflineRestartArmed &&
+        offlineMs >= WIFI_OFFLINE_RESTART_TIMEOUT_MS &&
+        nowMs >= WIFI_OFFLINE_RESTART_MIN_UPTIME_MS)
+    {
+      wifiOfflineRestartArmed = false;
+      setLastRestartReason("WiFi offline watchdog");
+      Log.error(F("[WiFi]: Offline timeout reached (%lums), restarting" CR), offlineMs);
+      delay(50);
+      ESP.restart();
+      return;
+    }
     wifiConnect();
   }
   else
   {
+    if (wifiOfflineSinceMs != 0)
+    {
+      unsigned long recoveredMs = millis() - wifiOfflineSinceMs;
+      Log.notice(F("[WiFi]: Connectivity restored after %lums offline" CR), recoveredMs);
+      wifiOfflineSinceMs = 0;
+      wifiOfflineLastLogMs = 0;
+      wifiOfflineRestartArmed = true;
+    }
     ArduinoOTA.handle();
 #ifdef TELNET_LOG
     switch (TelnetStream.read())
