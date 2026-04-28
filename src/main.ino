@@ -21,6 +21,7 @@
 #endif
 
 #include "main.h"
+#include <webLogBuffer.h>
 
 #ifdef M5_ATOM_LED
 void onStationModeGotIP(WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -39,8 +40,9 @@ void setup()
 {
   // Launch serial for debugging purposes
   Serial.begin(SERIAL_BAUD);
+  webLogBufferSetup(Serial);
   Log.setPrefix(logPrintPrefix);
-  Log.begin(LOG_LEVEL, &Serial);
+  Log.begin(LOG_LEVEL, &webLogBufferGetLogPrint());
   esp_task_wdt_init(INITIAL_WDT_TIMEOUT, true); // enable panic so ESP32 restarts
   esp_task_wdt_add(NULL);                       // add current thread to WDT watch
   logSection("WELCOME TO esp32_balboa_spa");
