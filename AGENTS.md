@@ -65,6 +65,12 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 2. **Web UI buttons** — README states not wired; `parseBody` logs `device_request` but does not send toggles.
 3. **Command framing** — implement Balboa **0x11** (toggle) / **0x20** (set temp) etc. with correct CRC; reuse patterns from [`rs485.cpp`](lib/localRS485Communication/rs485.cpp) `addCRC` / [`balboa.h`](lib/spaMessage/balboa.h) prebuilt frames.
 
+## Active command-write scope
+
+- **v1 in scope:** web + MQTT command path for Balboa **`0x11`** (toggle/button) and **`0x20`** (set temperature) only.
+- **Deferred after v1:** `SystemTime`, `TimeFormat`, `TempUnits`, and broader settings writes.
+- **Protocol authority for wire behavior:** [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md); validate frame bytes and payload semantics there before enabling each new command family.
+
 ## Roadmap (deferred)
 
 - **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the web `/status` page).

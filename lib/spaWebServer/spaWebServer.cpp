@@ -418,6 +418,59 @@ static bool statusMisterConfiguredAbsent()
   return statusSpaConfigReady() && !spaConfigurationData.mister;
 }
 
+static int toggleCountForButtonRequest(uint8_t itemCode, bool requestHasState, bool desiredOn)
+{
+  // Lights are binary; one toggle transitions state.
+  if (itemCode == 17 || itemCode == 18)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+    const bool isOn = (itemCode == 17 ? spaStatusData.light1 : spaStatusData.light2);
+    return (isOn == desiredOn) ? 0 : 1;
+  }
+
+  // Pumps can be two-speed: Off(0)->Low(1)->High(2)->Off(0).
+  if (itemCode >= 4 && itemCode <= 9)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+
+    const uint8_t pumpId = (itemCode - 3);
+    const uint8_t pumpStatus[] = {spaStatusData.pump1, spaStatusData.pump2, spaStatusData.pump3, spaStatusData.pump4, spaStatusData.pump5, spaStatusData.pump6};
+    const uint8_t pumpConfig[] = {spaConfigurationData.pump1, spaConfigurationData.pump2, spaConfigurationData.pump3, spaConfigurationData.pump4, spaConfigurationData.pump5, spaConfigurationData.pump6};
+
+    uint8_t state = pumpStatus[pumpId - 1];
+    uint8_t speedConfig = pumpConfig[pumpId - 1];
+    if (speedConfig <= 1)
+    {
+      bool isOn = state > 0;
+      return (isOn == desiredOn) ? 0 : 1;
+    }
+
+    if (desiredOn)
+    {
+      return (state == 0) ? 1 : 0;
+    }
+    // desired Off: from Low->Off = 2 toggles (via High), from High->Off = 1 toggle.
+    if (state == 0)
+    {
+      return 0;
+    }
+    if (state == 1)
+    {
+      return 2;
+    }
+    return 1;
+  }
+
+  // Other items (blower/aux/range/mode) remain single-toggle for now.
+  return 1;
+}
+
 static void appendStatusEquipCell(String &html, const char *label, const String &value, bool configuredAbsent)
 {
   if (configuredAbsent)
@@ -432,6 +485,35 @@ static void appendStatusEquipCell(String &html, const char *label, const String 
   html += "</div><div class=\"equip-val\">";
   html += value;
   html += "</div></div>";
+}
+
+static void appendStatusControlCell(String &html, const char *label, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState)
+{
+  if (configuredAbsent)
+  {
+    html += "<div class=\"equip-cell equip-absent\" title=\"Not installed (spa configuration)\">";
+  }
+  else
+  {
+    html += "<div class=\"equip-cell\">";
+  }
+  html += "<div class=\"equip-label\">";
+  html += label;
+  html += "</div><div class=\"equip-val\">";
+  html += value;
+  html += "</div>";
+
+  if (!configuredAbsent && buttonCode > 0 && desiredState != nullptr)
+  {
+    html += "<div class=\"equip-actions\"><button class=\"equip-btn\" type=\"button\" data-button=\"";
+    html += String(buttonCode);
+    html += "\" data-state=\"";
+    html += desiredState;
+    html += "\" onclick=\"statusSendButton(this)\">Turn ";
+    html += String(desiredState).equalsIgnoreCase("on") ? "On" : "Off";
+    html += "</button></div>";
+  }
+  html += "</div>";
 }
 
 /** Spa status `tempScale`: 0 = Fahrenheit (1°F steps), 1 = Celsius (0.5°C steps). */
@@ -579,6 +661,12 @@ void handleStatus(AsyncWebServerRequest *request)
       ".equip-cell.equip-absent .equip-val{font-weight:500;color:#5f6c7b;}"
       ".equip-label{font-size:0.82rem;color:var(--muted);font-weight:600;}"
       ".equip-val{font-weight:600;margin-top:2px;line-height:1.35;}"
+      ".equip-actions{margin-top:8px;}"
+      ".equip-btn{background:#0f4a87;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:.84rem;}"
+      ".equip-btn:disabled{opacity:.55;cursor:not-allowed;}"
+      ".status-control-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
+      ".status-control-row input{border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:90px;}"
+      ".status-control-result{margin-top:8px;font-size:.84rem;color:var(--muted);}"
       ".history-block{margin-top:var(--space-2);}"
       ".history-block h3{margin:0 0 6px 0;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       ".history-block pre{margin:0;padding:10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;"
@@ -611,7 +699,16 @@ void handleStatus(AsyncWebServerRequest *request)
   appendStatusKvRow(html, "Low Set Temp", statusFormattedTempWithUnit(spaStatusData.lowSetTemp));
   appendStatusKvRow(html, "Temp Range", getMapDescription(spaStatusData.tempRange, tempRangeMap));
   appendStatusKvRow(html, "Temp Scale", statusTempScaleDescription());
-  html += "</dl></section>";
+  html += "</dl>";
+  html += "<div class=\"status-control-row\"><label for=\"statusSetTempInput\" class=\"equip-label\">Set Temp</label>";
+  html += "<input id=\"statusSetTempInput\" type=\"number\" step=\"";
+  html += (spaStatusData.tempScale ? "0.5" : "1");
+  html += "\" value=\"";
+  html += String(spaStatusData.setTemp, spaStatusData.tempScale ? 1 : 0);
+  html += "\" />";
+  html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSendSetTemp()\">Send</button></div>";
+  html += "<div id=\"statusSetTempResult\" class=\"status-control-result\"></div>";
+  html += "</section>";
 
   html += "<section class=\"panel\"><h2>Spa and heating</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "Spa State", getMapDescription(spaStatusData.spaState, spaStateMap));
@@ -628,18 +725,18 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
-  appendStatusEquipCell(html, "Pump 1", getMapDescription(spaStatusData.pump1, pumpMap), statusPumpConfiguredAbsent(1));
-  appendStatusEquipCell(html, "Pump 2", getMapDescription(spaStatusData.pump2, pumpMap), statusPumpConfiguredAbsent(2));
-  appendStatusEquipCell(html, "Pump 3", getMapDescription(spaStatusData.pump3, pumpMap), statusPumpConfiguredAbsent(3));
-  appendStatusEquipCell(html, "Pump 4", getMapDescription(spaStatusData.pump4, pumpMap), statusPumpConfiguredAbsent(4));
-  appendStatusEquipCell(html, "Pump 5", getMapDescription(spaStatusData.pump5, pumpMap), statusPumpConfiguredAbsent(5));
-  appendStatusEquipCell(html, "Pump 6", getMapDescription(spaStatusData.pump6, pumpMap), statusPumpConfiguredAbsent(6));
-  appendStatusEquipCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent());
-  appendStatusEquipCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent());
-  appendStatusEquipCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1));
-  appendStatusEquipCell(html, "Light 2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2));
-  appendStatusEquipCell(html, "Mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent());
-  html += "</div></section>";
+  appendStatusControlCell(html, "Pump 1", getMapDescription(spaStatusData.pump1, pumpMap), statusPumpConfiguredAbsent(1), 4, spaStatusData.pump1 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Pump 2", getMapDescription(spaStatusData.pump2, pumpMap), statusPumpConfiguredAbsent(2), 5, spaStatusData.pump2 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Pump 3", getMapDescription(spaStatusData.pump3, pumpMap), statusPumpConfiguredAbsent(3), 6, spaStatusData.pump3 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Pump 4", getMapDescription(spaStatusData.pump4, pumpMap), statusPumpConfiguredAbsent(4), 7, spaStatusData.pump4 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Pump 5", getMapDescription(spaStatusData.pump5, pumpMap), statusPumpConfiguredAbsent(5), 8, spaStatusData.pump5 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Pump 6", getMapDescription(spaStatusData.pump6, pumpMap), statusPumpConfiguredAbsent(6), 9, spaStatusData.pump6 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent(), 0, nullptr);
+  appendStatusControlCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent(), 12, spaStatusData.blower == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1), 17, spaStatusData.light1 ? "off" : "on");
+  appendStatusControlCell(html, "Light 2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2), 18, spaStatusData.light2 ? "off" : "on");
+  appendStatusControlCell(html, "Mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent(), 14, spaStatusData.mister ? "off" : "on");
+  html += "</div><div id=\"statusButtonResult\" class=\"status-control-result\"></div></section>";
 
   html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "Panel Locked", getMapDescription(spaStatusData.panelLocked, lockedMap));
@@ -660,6 +757,26 @@ void handleStatus(AsyncWebServerRequest *request)
   appendStatusHistoriesSection(html);
   html += "</section>";
 
+  html += "<script>"
+          "async function statusSendSci(payload){"
+          "const body='<sci_request version=\"1.0\"><data_service><targets><device id=\"00 11 22 33 44 55 66 77\"/></targets><requests>'+payload+'</requests></data_service></sci_request>';"
+          "const r=await fetch('/devices/sci',{method:'POST',headers:{'Content-Type':'application/xml'},body});"
+          "return await r.text();"
+          "}"
+          "function statusSetResult(id,text){var el=document.getElementById(id);if(el)el.textContent=text;}"
+          "async function statusSendButton(btn){"
+          "try{btn.disabled=true;const c=btn.getAttribute('data-button');const s=btn.getAttribute('data-state')||'on';"
+          "const xml='<device_request target_name=\"Button\">'+c+':'+s+'</device_request>';"
+          "const out=await statusSendSci(xml);statusSetResult('statusButtonResult',out.indexOf('result=\\'accepted\\'')>=0?'Button command accepted':'Button command response: '+out);"
+          "setTimeout(function(){location.reload();},1200);}catch(e){statusSetResult('statusButtonResult','Button command failed: '+e);}finally{btn.disabled=false;}"
+          "}"
+          "async function statusSendSetTemp(){"
+          "const input=document.getElementById('statusSetTempInput');if(!input)return;const v=input.value;"
+          "try{const xml='<device_request target_name=\"SetTemp\">'+v+'</device_request>';"
+          "const out=await statusSendSci(xml);statusSetResult('statusSetTempResult',out.indexOf('result=\\'accepted\\'')>=0?'SetTemp accepted':'SetTemp response: '+out);"
+          "setTimeout(function(){location.reload();},1200);}catch(e){statusSetResult('statusSetTempResult','SetTemp failed: '+e);}"
+          "}"
+          "</script>";
   html += "</div></main></div></body></html>";
   request->send(200, "text/html", html);
   Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
@@ -1164,18 +1281,91 @@ String parseBody(String body)
     using namespace tinyxml2;
     XMLDocument xmlDocument;
     xmlDocument.Parse(body.c_str());
-    tinyxml2::XMLElement *deviceRequestElement = xmlDocument.FirstChildElement("sci_request")
-                                                     ->FirstChildElement("data_service")
-                                                     ->FirstChildElement("requests")
-                                                     ->FirstChildElement("device_request");
+    tinyxml2::XMLElement *root = xmlDocument.FirstChildElement("sci_request");
+    tinyxml2::XMLElement *dataService = (root ? root->FirstChildElement("data_service") : nullptr);
+    tinyxml2::XMLElement *requests = (dataService ? dataService->FirstChildElement("requests") : nullptr);
+    tinyxml2::XMLElement *deviceRequestElement = (requests ? requests->FirstChildElement("device_request") : nullptr);
+
+    if (!deviceRequestElement)
+    {
+      response = "<device_request result='rejected' error='invalid_xml'></device_request>";
+      return response;
+    }
 
     const char *targetName = deviceRequestElement->Attribute("target_name");
-
-    // Get the value inside the <device_request> element
     const char *deviceRequestValue = deviceRequestElement->GetText();
+    String target = (targetName ? String(targetName) : "");
+    String value = (deviceRequestValue ? String(deviceRequestValue) : "");
 
-    Log.verbose("[Web]: Button requested %s %s" CR, targetName, deviceRequestValue);
-    // response = encodeResponse(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength);
+    if (target == "Button")
+    {
+      int separator = value.indexOf(':');
+      String itemCodeRaw = (separator > 0 ? value.substring(0, separator) : value);
+      String desiredStateRaw = (separator > 0 ? value.substring(separator + 1) : "");
+      bool requestHasState = separator > 0;
+      bool desiredOn = desiredStateRaw.equalsIgnoreCase("on");
+      int itemCode = itemCodeRaw.toInt();
+      if (itemCode <= 0 || itemCode > 255)
+      {
+        response = "<device_request target_name='Button' result='rejected' error='invalid_button_payload'>" + value + "</device_request>";
+        return response;
+      }
+
+      int togglesToSend = toggleCountForButtonRequest((uint8_t)itemCode, requestHasState, desiredOn);
+      Log.verbose("[Web]: Button request raw=%s item=%d desired=%s toggles=%d" CR, value.c_str(), itemCode, (requestHasState ? desiredStateRaw.c_str() : "n/a"), togglesToSend);
+      if (togglesToSend <= 0)
+      {
+        response = "<device_request target_name='Button' result='accepted'>" + value + "</device_request>";
+        Log.verbose("[Web]: Button request no-op; already in desired state" CR);
+      }
+      else
+      {
+        SpaCommandResult result = {false, SPA_COMMAND_INVALID_ARGUMENT, "unknown"};
+        for (int i = 0; i < togglesToSend; i++)
+        {
+          result = spaSendToggleCommand((uint8_t)itemCode, SPA_COMMAND_SOURCE_WEB);
+          if (!result.accepted)
+          {
+            break;
+          }
+        }
+
+        if (result.accepted)
+        {
+          response = "<device_request target_name='Button' result='accepted'>" + value + "</device_request>";
+        }
+        else
+        {
+          response = "<device_request target_name='Button' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
+        }
+        Log.verbose("[Web]: Button request %s -> %s" CR, value.c_str(), result.reason);
+      }
+    }
+    else if (target == "SetTemp")
+    {
+      float requested = value.toFloat();
+      if (requested <= 0.0f)
+      {
+        response = "<device_request target_name='SetTemp' result='rejected' error='invalid_temp_payload'>" + value + "</device_request>";
+        return response;
+      }
+
+      SpaCommandResult result = spaSetTargetTemperature(requested, SPA_COMMAND_SOURCE_WEB);
+      if (result.accepted)
+      {
+        response = "<device_request target_name='SetTemp' result='accepted'>" + value + "</device_request>";
+      }
+      else
+      {
+        response = "<device_request target_name='SetTemp' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
+      }
+      Log.verbose("[Web]: SetTemp request %s -> %s" CR, value.c_str(), result.reason);
+    }
+    else
+    {
+      response = "<device_request target_name='" + target + "' result='rejected' error='unsupported_target'>" + value + "</device_request>";
+      Log.verbose("[Web]: Unsupported device_request target=%s value=%s" CR, target.c_str(), value.c_str());
+    }
   }
   else
   {
