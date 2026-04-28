@@ -27,6 +27,7 @@ where version numbers are used.
 
 ### Changed
 
+- **Wi-Fi offline self-heal watchdog** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp), [`lib/wifiModule/wifiModule.h`](lib/wifiModule/wifiModule.h), [`src/config-example.h`](src/config-example.h)): Added timed offline restart recovery (default 10 minutes offline, minimum uptime 2 minutes, throttled progress logs). When connectivity returns, the watchdog state clears and logs recovery duration.
 - **Single-speed pump normalization for controls/status** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Status/control rendering and control-state matching now normalize configured 1-speed pumps to binary On/Off semantics (`pumpNOn`) while preserving raw pump values in diagnostics, reducing false multi-speed assumptions on single-speed spa setups.
 - **Bridge-to-RS485 observability** ([`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp), [`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)): Added `[BridgeDiag]` logs for ingress ids, forwarding decisions, queue depth at enqueue/dequeue, and RS485 send timing to correlate raw bridge injections with on-wire transmission.
 - **Oracle comparer matching flexibility** ([`scripts/bridge_raw_compare.py`](scripts/bridge_raw_compare.py)): Added `--match-by frame` mode so comparisons can align semantically equivalent runs even when labels differ across matrices.

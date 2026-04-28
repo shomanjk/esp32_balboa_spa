@@ -1246,36 +1246,55 @@ void handleLogsPage(AsyncWebServerRequest *request)
 #newBadge{display:none}
 </style>)HTML";
   html += "<div class='preset-row'><button type='button' id='pAll'>All</button><button type='button' id='pErr'>Errors only</button><button type='button' id='pRs'>RS485</button><button type='button' id='pBridge'>BridgeDiag</button><button type='button' id='pWifi'>WiFi</button></div>";
-  html += "<div class='log-controls'><label>Include <input type='text' id='fInc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
+  html += "<div class='log-controls'><label>Level <select id='lvl'><option value='0'>SILENT</option><option value='1'>FATAL</option><option value='2'>ERROR</option><option value='3'>WARNING</option><option value='4'>INFO/NOTICE</option><option value='5'>TRACE</option><option value='6'>VERBOSE</option></select></label>";
+  html += "<button type='button' id='applyLvl'>Apply level</button>";
+  html += "<label>Include <input type='text' id='fInc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
   html += "<label>Exclude <input type='text' id='fExc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
   html += "<label><input type='checkbox' id='pause'/> Pause</label>";
+  html += "<label><input type='checkbox' id='hideIdleCts' checked/> Hide idle CTS</label>";
+  html += "<label><input type='checkbox' id='showHidden'/> Show hidden</label>";
   html += "<label><input type='checkbox' id='useWs'/> WebSocket tail</label>";
   html += "<label><input type='checkbox' id='autoScroll' checked/> Auto-scroll</label>";
   html += "<button type='button' id='newBadge'>0 new lines</button>";
   html += "<button type='button' id='clr'>Clear view</button><button type='button' id='copyTxt'>Copy</button><button type='button' id='dlTxt'>Download .log</button><button type='button' id='dlJson'>Download .json</button>";
-  html += "<label>Level <select id='lvl'><option value='0'>SILENT</option><option value='1'>FATAL</option><option value='2'>ERROR</option><option value='3'>WARNING</option><option value='4'>NOTICE</option><option value='5'>TRACE</option><option value='6'>VERBOSE</option></select></label>";
-  html += "<button type='button' id='applyLvl'>Apply level</button></div>";
-  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='connState'></span></div>";
+  html += "</div>";
+  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='hiddenCount'>hidden idle CTS: 0</span><span id='connState'></span></div>";
   html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div><script>";
   html += R"JS((function(){
 var logView=document.getElementById('logView'),since=0,pollMs=900,timer,ws,useWs=false,newBuffered=0;
 var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
 var pauseEl=document.getElementById('pause'),autoScrollEl=document.getElementById('autoScroll'),newBadge=document.getElementById('newBadge');
-var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),connState=document.getElementById('connState');
-var rendered=[],maxRendered=1200;
+var hideIdleCtsEl=document.getElementById('hideIdleCts'),showHiddenEl=document.getElementById('showHidden');
+var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),hiddenCountEl=document.getElementById('hiddenCount'),connState=document.getElementById('connState');
+var rendered=[],maxRendered=8000;
+var hiddenIdleCts=0;
 function getTag(t){var m=t.match(/\[([^\]]+)\]/);return m?m[1]:'';}
 function getLevelClass(t){if(/\bE:|\bERROR\b/.test(t))return'lvl-e';if(/\bW:|\bWARNING\b/.test(t))return'lvl-w';if(/\bI:|\bNOTICE\b|\bINFO\b/.test(t))return'lvl-i';if(/\bTRACE\b|\bVERBOSE\b/.test(t))return'lvl-v';return'';}
 function esc(s){return s.replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+function isIdleCtsLine(t){
+var l=t.toLowerCase();
+if(l.indexOf('[bridgediag]')<0)return false;
+if(l.indexOf('cts')<0)return false;
+if(l.indexOf('depth_before=0')<0)return false;
+return true;
+}
 function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.toLowerCase().indexOf(i.toLowerCase())<0)return false;if(x&&t.toLowerCase().indexOf(x.toLowerCase())>=0)return false;return true;}
 function renderLine(rec){var tag=getTag(rec.t),cls=getLevelClass(rec.t);var body=esc(rec.t);if(tag){body=body.replace('['+tag+']','<span class=\"log-tag\">['+esc(tag)+']</span>');}
 return '<div class=\"log-line '+cls+'\"><span class=\"log-seq\">#'+rec.s+'</span><span>'+body+'</span></div>';}
-function refreshFromRendered(){var out='',n=0;for(var i=0;i<rendered.length;i++){if(!passes(rendered[i].t))continue;out+=renderLine(rendered[i]);n++;}logView.innerHTML=out;renderCount.textContent=n+' lines';if(autoScrollEl.checked){logView.scrollTop=logView.scrollHeight;}}
+function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;if(!showHiddenEl.checked)continue;}if(!passes(line))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);logView.innerHTML=out;renderCount.textContent=n+' lines';if(autoScrollEl.checked){logView.scrollTop=logView.scrollHeight;}}
 function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){rendered.push({s:arr[j].s,t:arr[j].t});if(rendered.length>maxRendered)rendered.shift();}refreshFromRendered();}
 function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;
 if(autoScrollEl.checked||atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
 else{newBuffered+=arr.length;newBadge.textContent=String(newBuffered)+' new lines';newBadge.style.display='inline-flex';for(var k=0;k<arr.length;k++){rendered.push({s:arr[k].s,t:arr[k].t});if(rendered.length>maxRendered)rendered.shift();}renderCount.textContent=rendered.length+' lines';}}
 function capSel(mx){for(var i=0;i<sel.options.length;i++){var o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}
-function poll(){if(document.hidden)return;fetch('/api/logs?since='+since+'&limit=120').then(function(r){return r.json();}).then(function(j){connState.textContent='ok';if(typeof j.newestSeq==='number')since=j.newestSeq;if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);receiveLines(j.lines||[]);}).catch(function(){connState.textContent='error';});}
+function poll(){if(document.hidden)return;fetch('/api/logs?since='+since+'&limit=120').then(function(r){return r.json();}).then(function(j){
+connState.textContent='ok';
+if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);
+var lines=j.lines||[];
+receiveLines(lines);
+if(lines.length>0&&typeof lines[lines.length-1].s==='number'){since=lines[lines.length-1].s;}
+else if(typeof j.newestSeq==='number'){since=j.newestSeq;}
+}).catch(function(){connState.textContent='error';});}
 function startPoll(){stopPoll();streamMode.textContent='poll';timer=setInterval(poll,pollMs);poll();}
 function stopPoll(){if(timer){clearInterval(timer);timer=null;}}
 function connectWs(){streamMode.textContent='ws';var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');connState.textContent='connecting';
@@ -1288,11 +1307,26 @@ document.getElementById('pRs').addEventListener('click',function(){setPreset('[R
 document.getElementById('pBridge').addEventListener('click',function(){setPreset('[BridgeDiag]','');});
 document.getElementById('pWifi').addEventListener('click',function(){setPreset('[WiFi]','');});
 fInc.addEventListener('input',refreshFromRendered);fExc.addEventListener('input',refreshFromRendered);
+hideIdleCtsEl.addEventListener('change',refreshFromRendered);
+showHiddenEl.addEventListener('change',refreshFromRendered);
 newBadge.addEventListener('click',function(){newBuffered=0;newBadge.style.display='none';refreshFromRendered();logView.scrollTop=logView.scrollHeight;});
 document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
 document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
 document.getElementById('clr').addEventListener('click',function(){rendered=[];refreshFromRendered();});
-document.getElementById('copyTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}navigator.clipboard.writeText(txt).catch(function(){});});
+document.getElementById('copyTxt').addEventListener('click',function(){
+var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}
+if(!txt){connState.textContent='nothing to copy';return;}
+if(navigator.clipboard&&navigator.clipboard.writeText){
+navigator.clipboard.writeText(txt).then(function(){connState.textContent='copied';}).catch(function(){fallbackCopy(txt);});
+}else{fallbackCopy(txt);}
+});
+function fallbackCopy(txt){
+var ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','readonly');
+ta.style.position='fixed';ta.style.top='-1000px';document.body.appendChild(ta);ta.focus();ta.select();
+try{var ok=document.execCommand('copy');connState.textContent=ok?'copied':'copy failed';}
+catch(e){connState.textContent='copy failed';}
+document.body.removeChild(ta);
+}
 document.getElementById('dlTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}dl('spa-logs-'+Date.now()+'.log',txt,'text/plain');});
 document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
 document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetch('/api/logs/config');}).then(function(r){return r.json();}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
