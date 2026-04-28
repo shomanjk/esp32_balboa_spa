@@ -47,6 +47,13 @@ Rs485RawByte rs485RawCapture[RS485_RAW_CAPTURE_SIZE];
 uint16_t rs485RawCaptureHead = 0;
 uint16_t rs485RawCaptureCount = 0;
 uint32_t rs485LastRawCaptureMs = 0;
+uint32_t rs485LastCtsAtMs = 0;
+uint32_t rs485CtsSeenCount = 0;
+uint32_t rs485NextCtsArmSeenCount = 0;
+uint32_t rs485NextCtsFireSeenCount = 0;
+bool rs485NextCtsArmed = false;
+uint8_t rs485NextCtsFrame[BALBOA_MESSAGE_SIZE];
+int rs485NextCtsFrameLength = 0;
 
 #ifndef TX485_Tx
 #define TX485_Tx 17
@@ -304,6 +311,22 @@ void rs485ClearToSend()
   Log.notice(F("[BridgeDiag]: cts ms=%lu depth_before=%u" CR),
              millis(),
              static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)));
+  rs485LastCtsAtMs = millis();
+  rs485CtsSeenCount++;
+  if (rs485NextCtsArmed && rs485NextCtsFrameLength > 0)
+  {
+    for (int i = 0; i < rs485NextCtsFrameLength; i++)
+    {
+      dataBuffer.push(rs485NextCtsFrame[i]);
+    }
+    rs485NextCtsArmed = false;
+    rs485NextCtsFireSeenCount++;
+    Log.notice(F("[BridgeDiag]: cts_send next_cts_frame=%s cts_count=%lu" CR),
+               msgToString(dataBuffer).c_str(),
+               rs485CtsSeenCount);
+    rs485Write(dataBuffer);
+    return;
+  }
   if (xQueueReceive(spaWriteQueue, &message, 0) == pdTRUE)
   {
     for (int i = 0; i < message->length; i++)
@@ -328,6 +351,49 @@ void rs485ClearToSend()
     //    mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "Clear to Send");
     rs485Write(dataBuffer);
   }
+}
+
+uint32_t rs485LastCtsMs()
+{
+  return rs485LastCtsAtMs;
+}
+
+uint32_t rs485CtsCount()
+{
+  return rs485CtsSeenCount;
+}
+
+uint32_t rs485NextCtsArmCount()
+{
+  return rs485NextCtsArmSeenCount;
+}
+
+uint32_t rs485NextCtsFireCount()
+{
+  return rs485NextCtsFireSeenCount;
+}
+
+bool rs485ArmFrameOnNextCts(const uint8_t *frame, int length, uint32_t *outArmCount)
+{
+  if (frame == nullptr || length <= 0 || length > BALBOA_MESSAGE_SIZE)
+  {
+    return false;
+  }
+  for (int i = 0; i < length; i++)
+  {
+    rs485NextCtsFrame[i] = frame[i];
+  }
+  rs485NextCtsFrameLength = length;
+  rs485NextCtsArmed = true;
+  rs485NextCtsArmSeenCount++;
+  if (outArmCount != nullptr)
+  {
+    *outArmCount = rs485NextCtsArmSeenCount;
+  }
+  Log.notice(F("[BridgeDiag]: next_cts armed frame=%s arm_count=%lu" CR),
+             msgToString(const_cast<uint8_t *>(frame), length).c_str(),
+             rs485NextCtsArmSeenCount);
+  return true;
 }
 
 inline uint8_t crc8(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)

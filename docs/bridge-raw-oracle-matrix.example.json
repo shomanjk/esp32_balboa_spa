@@ -1,0 +1,29 @@
+{
+  "notes": [
+    "Capture these same cases from a known-good balboa_worldwide_app path first.",
+    "Then replay this matrix against firmware bridge host and compare runs."
+  ],
+  "cases": [
+    {
+      "label": "toggle_light1",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 2,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "toggle_pump1",
+      "frame_hex": "7e070abf110400137e",
+      "retries": 2,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "set_temp_80f",
+      "frame_hex": "7e060abf20504d7e",
+      "retries": 2,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    }
+  ]
+}

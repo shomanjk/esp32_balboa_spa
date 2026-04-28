@@ -189,3 +189,51 @@ SpaCommandResult spaSendToggleDiagnostic(
 
   return queueFrame(frame, includeZeroPad ? "toggle_diag_pad00" : "toggle_diag_nopad", source, outFrameHex);
 }
+
+SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
+    uint8_t itemCode,
+    bool useWifiDestination,
+    bool includeZeroPad,
+    SpaCommandSource source,
+    String *outFrameHex,
+    uint32_t *outArmCount)
+{
+  if (!spaCanAcceptCommands())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+  }
+
+  uint8_t dest = destinationIdForMode(useWifiDestination);
+  if (dest == 0)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid destination id"};
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(dest);
+  frame.push(kBroadcastChannel);
+  frame.push(Toggle_Item_Request_Type);
+  frame.push(itemCode);
+  if (includeZeroPad)
+  {
+    frame.push(0x00);
+  }
+  addFramingAndCrc(frame);
+  if (outFrameHex != nullptr)
+  {
+    *outFrameHex = msgToString(frame);
+  }
+
+  uint8_t raw[BALBOA_MESSAGE_SIZE];
+  int len = frame.size();
+  for (int i = 0; i < len; i++)
+  {
+    raw[i] = frame[i];
+  }
+  if (!rs485ArmFrameOnNextCts(raw, len, outArmCount))
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "failed to arm next_cts frame"};
+  }
+  Log.verbose(F("[Cmd ]: armed next_cts toggle from %s: %s" CR), sourceLabel(source), msgToString(frame).c_str());
+  return {true, SPA_COMMAND_ACCEPTED, "armed_next_cts"};
+}

@@ -33,5 +33,12 @@ SpaCommandResult spaSendToggleDiagnostic(
     bool includeZeroPad,
     SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN,
     String *outFrameHex = nullptr);
+SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
+    uint8_t itemCode,
+    bool useWifiDestination,
+    bool includeZeroPad,
+    SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN,
+    String *outFrameHex = nullptr,
+    uint32_t *outArmCount = nullptr);
 
 #endif

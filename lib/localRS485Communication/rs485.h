@@ -18,6 +18,11 @@ int rs485RxGpio();
 int rs485TxGpio();
 int rs485Baud();
 bool rs485AutoTxEnabled();
+uint32_t rs485LastCtsMs();
+uint32_t rs485CtsCount();
+uint32_t rs485NextCtsArmCount();
+uint32_t rs485NextCtsFireCount();
+bool rs485ArmFrameOnNextCts(const uint8_t *frame, int length, uint32_t *outArmCount = nullptr);
 
 // void rs485Send(uint8_t *data, int length, boolean addCrc, boolean force = false);
 // void rs485Send(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data, boolean addCrc, boolean force = false);

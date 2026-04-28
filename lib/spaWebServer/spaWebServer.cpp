@@ -35,6 +35,7 @@ void handleWifi(AsyncWebServerRequest *request);
 void handleStatusControlsApi(AsyncWebServerRequest *request);
 void handleDiagToggleApi(AsyncWebServerRequest *request);
 void handleDiagToggleSequenceApi(AsyncWebServerRequest *request);
+void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
 void handleRs485Raw(AsyncWebServerRequest *request);
 void handleRs485History(AsyncWebServerRequest *request);
@@ -256,6 +257,7 @@ void spaWebServerLoop()
     server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
     server.on("/api/diag/toggle", HTTP_GET, handleDiagToggleApi);
     server.on("/api/diag/toggle_sequence", HTTP_GET, handleDiagToggleSequenceApi);
+    server.on("/api/diag/light1_next_cts", HTTP_GET, handleDiagLight1NextCtsApi);
     server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
@@ -1366,6 +1368,97 @@ void handleDiagToggleSequenceApi(AsyncWebServerRequest *request)
   request->send(response);
 }
 
+void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(2048);
+
+  int observeMs = 2500;
+  if (request->hasParam("observe_ms"))
+  {
+    observeMs = request->getParam("observe_ms")->value().toInt();
+  }
+  observeMs = constrain(observeMs, 200, 12000);
+
+  String dest = "wifi";
+  if (request->hasParam("dest"))
+  {
+    dest = request->getParam("dest")->value();
+    dest.toLowerCase();
+  }
+  bool useWifiDestination = (dest != "id");
+
+  bool includeZeroPad = true;
+  if (request->hasParam("pad"))
+  {
+    String pad = request->getParam("pad")->value();
+    pad.toLowerCase();
+    includeZeroPad = !(pad == "none" || pad == "0");
+  }
+
+  JsonObject before = doc.createNestedObject("before");
+  fillPumpDiagSnapshot(before);
+  before["ctsMs"] = rs485LastCtsMs();
+  before["ctsCount"] = rs485CtsCount();
+  before["armCount"] = rs485NextCtsArmCount();
+  before["fireCount"] = rs485NextCtsFireCount();
+  before["queueDepth"] = static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue));
+
+  String frameHex;
+  uint32_t armCount = 0;
+  SpaCommandResult result = spaSendToggleOnNextCtsDiagnostic(
+      0x11,
+      useWifiDestination,
+      includeZeroPad,
+      SPA_COMMAND_SOURCE_WEB,
+      &frameHex,
+      &armCount);
+
+  doc["ok"] = result.accepted;
+  doc["result"] = result.reason;
+  doc["frame"] = frameHex;
+  doc["dest"] = useWifiDestination ? "wifi" : "id";
+  doc["pad"] = includeZeroPad ? "00" : "none";
+  doc["observeMs"] = observeMs;
+  doc["armedAt"] = armCount;
+
+  if (result.accepted)
+  {
+    const unsigned long waitStart = millis();
+    bool fired = false;
+    while (millis() - waitStart < static_cast<unsigned long>(observeMs))
+    {
+      if (rs485NextCtsFireCount() >= armCount)
+      {
+        fired = true;
+        break;
+      }
+      delay(20);
+    }
+    doc["fired"] = fired;
+    doc["firedAt"] = rs485NextCtsFireCount();
+    doc["waitElapsedMs"] = millis() - waitStart;
+  }
+  else
+  {
+    doc["fired"] = false;
+    doc["firedAt"] = rs485NextCtsFireCount();
+    doc["waitElapsedMs"] = 0;
+  }
+
+  JsonObject after = doc.createNestedObject("after");
+  fillPumpDiagSnapshot(after);
+  after["ctsMs"] = rs485LastCtsMs();
+  after["ctsCount"] = rs485CtsCount();
+  after["armCount"] = rs485NextCtsArmCount();
+  after["fireCount"] = rs485NextCtsFireCount();
+  after["queueDepth"] = static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue));
+
+  doc["light1Changed"] = before["light1"].as<int>() != after["light1"].as<int>();
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
 void handleRs485(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
@@ -1402,6 +1495,10 @@ void handleRs485(AsyncWebServerRequest *request)
   doc["detectPhase"] = rs485Stats.polarityLocked ? 2 : (rs485Stats.polarityInverted ? 1 : 0);
   doc["lastByteMs"] = rs485Stats.lastByteMs;
   doc["lastValidFrameMs"] = rs485Stats.lastValidFrameMs;
+  doc["lastCtsMs"] = rs485LastCtsMs();
+  doc["ctsCount"] = rs485CtsCount();
+  doc["nextCtsArmCount"] = rs485NextCtsArmCount();
+  doc["nextCtsFireCount"] = rs485NextCtsFireCount();
   doc["health"] = rs485HealthCode();
 
   serializeJson(doc, *response);

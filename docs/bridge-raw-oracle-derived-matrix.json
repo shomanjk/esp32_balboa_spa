@@ -1,0 +1,57 @@
+{
+  "notes": [
+    "Derived from ccutrer/balboa_worldwide_app source (ToggleItem, SetTargetTemperature).",
+    "Frame semantics mirror MESSAGE_TYPE bf11 (payload II 00) and bf20 (payload TT).",
+    "This is a source-derived oracle approximation, not a packet capture from a known-working host."
+  ],
+  "source_refs": [
+    "https://raw.githubusercontent.com/ccutrer/balboa_worldwide_app/master/lib/bwa/messages/toggle_item.rb",
+    "https://raw.githubusercontent.com/ccutrer/balboa_worldwide_app/master/lib/bwa/messages/set_target_temperature.rb",
+    "https://raw.githubusercontent.com/ccutrer/balboa_worldwide_app/master/lib/bwa/client.rb",
+    "https://raw.githubusercontent.com/ccutrer/balboa_worldwide_app/master/doc/protocol.md"
+  ],
+  "cases": [
+    {
+      "label": "toggle_light1_item11",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 1200,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "toggle_pump1_item04",
+      "frame_hex": "7e070abf110400137e",
+      "retries": 1,
+      "cooldown_ms": 1200,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "toggle_temp_range_item50",
+      "frame_hex": "7e070abf115000247e",
+      "retries": 1,
+      "cooldown_ms": 1200,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "toggle_heating_mode_item51",
+      "frame_hex": "7e070abf115100237e",
+      "retries": 1,
+      "cooldown_ms": 1200,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "set_temp_80f_tt50",
+      "frame_hex": "7e060abf20504d7e",
+      "retries": 1,
+      "cooldown_ms": 1500,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "set_temp_81f_tt51",
+      "frame_hex": "7e060abf20514a7e",
+      "retries": 1,
+      "cooldown_ms": 1500,
+      "timeout_ms": 1800
+    }
+  ]
+}
