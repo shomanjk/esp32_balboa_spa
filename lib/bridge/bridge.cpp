@@ -31,6 +31,7 @@ char packetBuffer[255]; // buffer to hold incoming packet
 char replyBuffer[30];
 
 bool bridgeStarted = false;
+static uint32_t bridgeIngressSequence = 0;
 
 void bridgeSetup()
 {
@@ -120,10 +121,19 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
   if (length > 0 && length < BALBOA_MESSAGE_SIZE)
   {
     u_int8_t *message = (u_int8_t *)buffer;
+    const uint32_t ingressId = ++bridgeIngressSequence;
+    const unsigned long ingressMs = millis();
     Log.verbose(F("[Bridge]: bridge/in %s" CR), msgToString(message, length).c_str());
+    Log.notice(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%p frame=%s" CR),
+               ingressId,
+               ingressMs,
+               static_cast<unsigned int>(length),
+               client->remoteIP(),
+               msgToString(message, length).c_str());
     mqtt.publish((mqttTopic + "bridge/in").c_str(), msgToString(message, length).c_str());
     if (message[2] == id && message[4] == 0x04)
     {
+      Log.notice(F("[BridgeDiag]: ingress=%lu handled=wifi_module_configuration" CR), ingressId);
       Q_out.clear();
       WiFi_Module_Configuration_Response(Q_out);
       bridgeSend(Q_out);
@@ -133,6 +143,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     {
       //  P_in.clear();
       publishBridge((String(length) + " Msg Received").c_str());
+      Log.notice(F("[BridgeDiag]: ingress=%lu forwarding=cacheRead" CR), ingressId);
       cacheRead(message, length);
     }
   }

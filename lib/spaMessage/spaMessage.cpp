@@ -649,6 +649,10 @@ void sendMessageToSpa(uint8_t *data, int length)
   else
   {
     Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+    Log.notice(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+               millis(),
+               static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
+               msgToString(messageToSend->message, messageToSend->length).c_str());
   }
 }
 
@@ -667,6 +671,10 @@ void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   else
   {
     Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+    Log.notice(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+               millis(),
+               static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
+               msgToString(messageToSend->message, messageToSend->length).c_str());
   }
 }
 

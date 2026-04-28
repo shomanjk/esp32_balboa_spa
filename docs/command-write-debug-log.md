@@ -70,3 +70,34 @@ Runs:
 Interpretation:
 - Timing/retry variation did not produce state convergence for Pump1 in this controller setup.
 - Transport/queue acceptance appears healthy; likely remaining issue is controller-specific command semantics (item mapping, destination/channel nuance, or additional prerequisites beyond current frame shape).
+
+## 2026-04 - Bridge-first raw troubleshooting harness
+
+- Added bridge observability breadcrumbs (`[BridgeDiag]`) across ingress, cache forwarding, queueing, CTS dequeue, and RS485 send.
+- Added raw bridge harness script: `scripts/bridge_raw_tester.py`.
+- Added repeatable matrix template: `docs/bridge-raw-command-matrix.example.json`.
+
+Harness I/O contract:
+
+- Input:
+  - `--host`, optional `--port` (default `4257`)
+  - single case: `--frame-hex`, optional `--label`, `--retries`, `--cooldown-ms`, `--timeout-ms`
+  - matrix mode: `--matrix <json>` where each case supports `label`, `frame_hex`, optional `retries`, `cooldown_ms`, `timeout_ms`, `expect_hex`
+- Output:
+  - stdout JSON plus optional `--out <file>`
+  - per-case attempts with `startedMs`, `sentHex`, `rxHex`, `ok`, `error`, `durationMs`, optional `expectMatched`
+
+Matrix execution status:
+
+- Dry-run validation completed:
+  - `python3 scripts/bridge_raw_tester.py --host 127.0.0.1 --matrix docs/bridge-raw-command-matrix.example.json --dry-run --out docs/bridge-raw-last-run.json`
+  - Result: parser/runner/output contract verified (`caseCount=2`, `ok=true` in dry-run mode)
+- Live matrix rows for command families under test:
+  - `0x11` (toggle): ready to execute via bridge using known frame `7e 07 0a bf 11 04 00 13 7e`
+  - `0x20` (set temp): matrix includes `set_temp_100f` frame `7e 06 0a bf 20 64 c1 7e`
+
+Phase-2 trigger (thin HTTP helper endpoint):
+
+- Move from bridge-only to typed HTTP helper when either threshold is met in a rolling 20-attempt window:
+  1. `>= 30%` attempts fail due to malformed/incorrectly assembled frames (operator/input errors), or
+  2. median case setup time exceeds `90s` because manual hex assembly/interpretation is the bottleneck.

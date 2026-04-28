@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "label": "toggle_pump1_item4",
+      "frame_hex": "7e070abf110400137e",
+      "retries": 1,
+      "cooldown_ms": 1200,
+      "timeout_ms": 1500
+    },
+    {
+      "label": "set_temp_100f",
+      "frame_hex": "7e060abf2064c17e",
+      "retries": 1,
+      "cooldown_ms": 1200,
+      "timeout_ms": 1500
+    }
+  ]
+}
