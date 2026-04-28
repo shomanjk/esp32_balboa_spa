@@ -8,9 +8,7 @@ where version numbers are used.
 
 ## [Unreleased]
 
-### Changed
-
-- **Command write scope lock** ([`README.md`](README.md), [`AGENTS.md`](AGENTS.md)): Defined implementation scope for spa command writes to reduce protocol risk: **v1** includes only Balboa **`0x11`** toggle/button and **`0x20`** set-temperature paths (web + MQTT). `SystemTime`, `TimeFormat`, and `TempUnits` are explicitly deferred until after v1 hardening.
+## [1.6.0] - 2026-04-28
 
 ### Added
 
@@ -18,10 +16,15 @@ where version numbers are used.
 
 ### Changed
 
+- **Command write scope lock** ([`README.md`](README.md), [`AGENTS.md`](AGENTS.md)): Defined implementation scope for spa command writes to reduce protocol risk: **v1** includes only Balboa **`0x11`** toggle/button and **`0x20`** set-temperature paths (web + MQTT). `SystemTime`, `TimeFormat`, and `TempUnits` are explicitly deferred until after v1 hardening.
 - **Web SCI command dispatch (v1)** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `device_request` now dispatches `target_name="Button"` and `target_name="SetTemp"` through the shared command layer, returning explicit accepted/rejected XML responses (including rejection reasons) instead of logging-only behavior.
 - **Toggle command frame fix** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): Balboa `0x11` toggle writes now include the required second payload byte (`II 00`) per protocol, fixing no-op button toggles on spa controls like `Light1`.
 - **Web button dispatch diagnostics + state-aware toggles** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added verbose logs for parsed `Button` requests (raw payload, item code, desired state, toggle count) and state-aware toggle count handling for pumps/lights. Pump requests now account for two-speed off transitions (`Low -> High -> Off`) when the web payload asks for `off`.
 - **`/status` interactive controls** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Equipment cards on the status page now include action buttons that post SCI `Button` commands to `/devices/sci`, plus a Set Temp control that sends `SetTemp`. Controls display immediate accepted/rejected response text and refresh status after command attempts.
+- **`/status` chart rendering hardening** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Improved history chart stability by capping canvas DPR/size, debouncing resize/orientation redraw with `requestAnimationFrame`, and adding context-loss guards to reduce intermittent browser sad-face/crash behavior while scrolling.
+- **`/status` command verification feedback** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added `GET /api/status/controls` and updated status-page command actions to poll for real state transitions after command acceptance, so the UI now distinguishes "accepted" from "accepted and reflected in spa state."
+- **`src/main.h`:** Firmware **`VERSION`** set to **1.6.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.6.0**).
 
 ## [1.5.0] - 2026-04-28
 
@@ -256,7 +259,10 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.3...v1.5.0
+[1.4.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.3.0...v1.4.0

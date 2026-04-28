@@ -32,6 +32,7 @@ void handleStatus(AsyncWebServerRequest *request);
 void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
+void handleStatusControlsApi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
 void handleRs485Raw(AsyncWebServerRequest *request);
 void handleRs485History(AsyncWebServerRequest *request);
@@ -250,6 +251,7 @@ void spaWebServerLoop()
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
+    server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
     server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
@@ -613,7 +615,7 @@ static void appendStatusHistoriesSection(String &html)
   html += "function statusScaleFilter(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/3600);return b;}";
   html += "function statusDrawLineChart(id,data,isTemp){";
   html += "var c=document.getElementById(id);if(!c||!data||data.length<1)return;";
-  html += "var ctx=c.getContext('2d');";
+  html += "var ctx=c.getContext('2d');if(!ctx)return;";
   html += "function fmtY(v){if(isTemp)return STATUS_TEMP_IS_C?Number(v).toFixed(1):String(Math.round(Number(v)));return Number(v).toFixed(2);}";
   html += "function draw(W,H){";
   html += "ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#ccc';ctx.strokeRect(0.5,0.5,W-1,H-1);";
@@ -627,10 +629,17 @@ static void appendStatusHistoriesSection(String &html)
   html += "ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();";
   html += "for(i=0;i<data.length;i++){var px=pad+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}";
   html += "ctx.stroke();}";
-  html += "function resize(){var p=c.parentElement;var W=p?Math.max(260,p.clientWidth-2):280;var H=parseInt(c.getAttribute('height')||'140',10)||140;";
-  html += "var dpr=window.devicePixelRatio||1;c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';";
+  html += "function render(){var p=c.parentElement;var W=p?Math.max(260,p.clientWidth-2):280;var H=parseInt(c.getAttribute('height')||'140',10)||140;";
+  html += "W=Math.min(1000,W);H=Math.min(260,H);";
+  html += "var dpr=Math.min(2,Math.max(1,window.devicePixelRatio||1));";
+  html += "c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';";
   html += "ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);draw(W,H);}";
-  html += "window.addEventListener('resize',resize);window.addEventListener('orientationchange',resize);resize();}";
+  html += "var raf=0;function scheduleRender(){if(raf)return;raf=window.requestAnimationFrame(function(){raf=0;render();});}";
+  html += "window.addEventListener('resize',scheduleRender,{passive:true});window.addEventListener('orientationchange',scheduleRender,{passive:true});";
+  html += "c.addEventListener('webglcontextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});";
+  html += "c.addEventListener('contextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});";
+  html += "c.addEventListener('contextrestored',scheduleRender,{passive:true});";
+  html += "scheduleRender();}";
   html += "statusDrawLineChart('statusTempHistChart',STATUS_TEMP_HIST,true);";
   html += "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(STATUS_HEAT_SEC),false);";
   html += "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(STATUS_FILTER_SEC),false);";
@@ -763,18 +772,45 @@ void handleStatus(AsyncWebServerRequest *request)
           "const r=await fetch('/devices/sci',{method:'POST',headers:{'Content-Type':'application/xml'},body});"
           "return await r.text();"
           "}"
+          "async function statusFetchControls(){const r=await fetch('/api/status/controls');return await r.json();}"
+          "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
+          "if(code===17)return (snap.light1>0)===on;"
+          "if(code===18)return (snap.light2>0)===on;"
+          "if(code===4)return on?(snap.pump1>0):(snap.pump1===0);"
+          "if(code===5)return on?(snap.pump2>0):(snap.pump2===0);"
+          "if(code===6)return on?(snap.pump3>0):(snap.pump3===0);"
+          "if(code===7)return on?(snap.pump4>0):(snap.pump4===0);"
+          "if(code===8)return on?(snap.pump5>0):(snap.pump5===0);"
+          "if(code===9)return on?(snap.pump6>0):(snap.pump6===0);"
+          "if(code===12)return on?(snap.blower>0):(snap.blower===0);"
+          "if(code===14)return (snap.mister>0)===on;"
+          "return false;}"
+          "async function statusWaitForButtonState(code,desired){"
+          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
+          "try{var snap=await statusFetchControls();if(statusButtonMatch(snap,code,desired))return true;}catch(e){}}"
+          "return false;}"
+          "async function statusWaitForSetTemp(target){"
+          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
+          "try{var snap=await statusFetchControls();if(Math.abs(Number(snap.setTemp)-Number(target))<0.26)return true;}catch(e){}}"
+          "return false;}"
           "function statusSetResult(id,text){var el=document.getElementById(id);if(el)el.textContent=text;}"
           "async function statusSendButton(btn){"
           "try{btn.disabled=true;const c=btn.getAttribute('data-button');const s=btn.getAttribute('data-state')||'on';"
           "const xml='<device_request target_name=\"Button\">'+c+':'+s+'</device_request>';"
-          "const out=await statusSendSci(xml);statusSetResult('statusButtonResult',out.indexOf('result=\\'accepted\\'')>=0?'Button command accepted':'Button command response: '+out);"
-          "setTimeout(function(){location.reload();},1200);}catch(e){statusSetResult('statusButtonResult','Button command failed: '+e);}finally{btn.disabled=false;}"
+          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusButtonResult','Button command response: '+out);return;}"
+          "statusSetResult('statusButtonResult','Button command accepted; waiting for spa status update...');"
+          "const changed=await statusWaitForButtonState(Number(c),s);"
+          "if(changed){statusSetResult('statusButtonResult','Button command accepted and state changed.');setTimeout(function(){location.reload();},500);}else{statusSetResult('statusButtonResult','Button command accepted, but state did not change yet.');}"
+          "}catch(e){statusSetResult('statusButtonResult','Button command failed: '+e);}finally{btn.disabled=false;}"
           "}"
           "async function statusSendSetTemp(){"
           "const input=document.getElementById('statusSetTempInput');if(!input)return;const v=input.value;"
           "try{const xml='<device_request target_name=\"SetTemp\">'+v+'</device_request>';"
-          "const out=await statusSendSci(xml);statusSetResult('statusSetTempResult',out.indexOf('result=\\'accepted\\'')>=0?'SetTemp accepted':'SetTemp response: '+out);"
-          "setTimeout(function(){location.reload();},1200);}catch(e){statusSetResult('statusSetTempResult','SetTemp failed: '+e);}"
+          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSetTempResult','SetTemp response: '+out);return;}"
+          "statusSetResult('statusSetTempResult','SetTemp accepted; waiting for spa status update...');"
+          "const changed=await statusWaitForSetTemp(v);"
+          "if(changed){statusSetResult('statusSetTempResult','SetTemp accepted and state changed.');setTimeout(function(){location.reload();},500);}else{statusSetResult('statusSetTempResult','SetTemp accepted, but setpoint did not change yet.');}"
+          "}catch(e){statusSetResult('statusSetTempResult','SetTemp failed: '+e);}"
           "}"
           "</script>";
   html += "</div></main></div></body></html>";
@@ -1030,6 +1066,27 @@ void handleWifi(AsyncWebServerRequest *request)
     doc["dns"] = "";
     doc["channel"] = 0;
   }
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleStatusControlsApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(768);
+  doc["lastUpdate"] = spaStatusData.lastUpdate;
+  doc["tempScaleCelsius"] = spaStatusData.tempScale ? true : false;
+  doc["setTemp"] = spaStatusData.setTemp;
+  doc["light1"] = spaStatusData.light1 ? 1 : 0;
+  doc["light2"] = spaStatusData.light2 ? 1 : 0;
+  doc["pump1"] = spaStatusData.pump1;
+  doc["pump2"] = spaStatusData.pump2;
+  doc["pump3"] = spaStatusData.pump3;
+  doc["pump4"] = spaStatusData.pump4;
+  doc["pump5"] = spaStatusData.pump5;
+  doc["pump6"] = spaStatusData.pump6;
+  doc["blower"] = spaStatusData.blower;
+  doc["mister"] = spaStatusData.mister ? 1 : 0;
   serializeJson(doc, *response);
   request->send(response);
 }
