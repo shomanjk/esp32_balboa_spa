@@ -1,7 +1,9 @@
 #include "spaWebServer.h"
 
 #include <ESPAsyncWebServer.h>
+#include <AsyncWebSocket.h>
 #include <ArduinoLog.h>
+#include <webLogBuffer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <AsyncJson.h>
@@ -47,6 +49,10 @@ void handleLoginData(AsyncWebServerRequest *request);
 void handleOptionsData(AsyncWebServerRequest *request);
 void handleOptionsLoginData(AsyncWebServerRequest *request);
 void handleepdpanel(AsyncWebServerRequest *request);
+void handleLogsApi(AsyncWebServerRequest *request);
+void handleLogsPage(AsyncWebServerRequest *request);
+void handleLogsConfigGet(AsyncWebServerRequest *request);
+void handleLogsConfigPost(AsyncWebServerRequest *request);
 String parseBody(String body);
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
 String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
@@ -211,7 +217,48 @@ static void appendWifiStateSection(String &html)
 }
 
 AsyncWebServer server(80);
+static AsyncWebSocket wsLog("/api/logs/ws");
+static uint32_t wsLogBroadcastSeq = 0;
 bool serverSetup = false;
+
+static void onWsLogEvent(AsyncWebSocket *wsServer, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+{
+  (void)arg;
+  (void)data;
+  (void)len;
+  if (type == WS_EVT_CONNECT)
+  {
+    String hist;
+    webLogBufferBuildJsonFull(hist);
+    client->text(hist);
+    wsLogBroadcastSeq = webLogBufferNewestSeq();
+  }
+  else if (type == WS_EVT_DISCONNECT && wsServer->count() == 0)
+  {
+    wsLogBroadcastSeq = webLogBufferNewestSeq();
+  }
+}
+
+static void spaWebServerLogPoll()
+{
+  wsLog.cleanupClients();
+  if (wsLog.count() == 0)
+  {
+    return;
+  }
+  const uint32_t newest = webLogBufferNewestSeq();
+  if (newest <= wsLogBroadcastSeq)
+  {
+    return;
+  }
+  String delta;
+  webLogBufferAppendJsonDelta(wsLogBroadcastSeq, newest, delta);
+  if (delta.length() > 0)
+  {
+    wsLog.textAll(delta);
+  }
+  wsLogBroadcastSeq = newest;
+}
 
 void spaWebServerSetup()
 {
@@ -261,6 +308,12 @@ void spaWebServerLoop()
     server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
+    server.on("/api/logs", HTTP_GET, handleLogsApi);
+    server.on("/api/logs/config", HTTP_GET, handleLogsConfigGet);
+    server.on("/api/logs/config", HTTP_POST, handleLogsConfigPost, NULL, handleBody);
+    server.on("/logs", HTTP_GET, handleLogsPage);
+    wsLog.onEvent(onWsLogEvent);
+    server.addHandler(&wsLog);
 #ifdef spaEpaper
     server.on("/panel.jpg", HTTP_GET, handleepdpanel);
 #endif
@@ -291,6 +344,7 @@ void spaWebServerLoop()
     serverSetup = true;
     Log.notice(F("[Web]: Web server started at http://%p/" CR), WiFi.localIP());
   }
+  spaWebServerLogPoll();
 }
 
 #ifdef spaEpaper
@@ -317,11 +371,15 @@ void handleepdpanel(AsyncWebServerRequest *request)
 
 #define head String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Web Server State</title>") + icon + style + String("</head>")
 
-#define webMenuStatus String("<nav aria-label='Portal navigation'><form class='top-nav'><button class='active' formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form></nav>")
+#define webMenuStatus String("<nav aria-label='Portal navigation'><form class='top-nav'><button class='active' formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/logs'>Logs</button><button formaction='/index.html'>SPA Website</button></form></nav>")
 
-#define webMenuConfig String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button class='active' formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form></nav>")
+#define webMenuConfig String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button class='active' formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button formaction='/logs'>Logs</button><button formaction='/index.html'>SPA Website</button></form></nav>")
 
-#define webMenuState String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button class='active' formaction='/state'>ESP State</button><button formaction='/index.html'>SPA Website</button></form></nav>")
+#define webMenuState String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button class='active' formaction='/state'>ESP State</button><button formaction='/logs'>Logs</button><button formaction='/index.html'>SPA Website</button></form></nav>")
+
+#define webMenuLogs String("<nav aria-label='Portal navigation'><form class='top-nav'><button formaction='/status'>SPA Status</button><button formaction='/config'>SPA Config</button><button formaction='/state'>ESP State</button><button class='active' formaction='/logs'>Logs</button><button formaction='/index.html'>SPA Website</button></form></nav>")
+
+#define headLogs String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Logs</title>") + icon + style + String("<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}</style></head>")
 
 #ifdef spaEpaper
 #define ePaper String("<img class='panel-image' src='panel.jpg' alt='Spa Panel'>")
@@ -1090,6 +1148,102 @@ void handleState(AsyncWebServerRequest *request)
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
+}
+
+void handleLogsApi(AsyncWebServerRequest *request)
+{
+  uint32_t since = 0;
+  if (request->hasParam("since"))
+  {
+    since = (uint32_t)request->getParam("since")->value().toInt();
+  }
+  unsigned limit = 120;
+  if (request->hasParam("limit"))
+  {
+    limit = (unsigned)request->getParam("limit")->value().toInt();
+  }
+  String body;
+  webLogBufferBuildJsonSince(since, limit, Log.getLevel(), body);
+  request->send(200, "application/json", body);
+}
+
+void handleLogsConfigGet(AsyncWebServerRequest *request)
+{
+  String body;
+  webLogBufferBuildJsonLogConfig(Log.getLevel(), body);
+  request->send(200, "application/json", body);
+}
+
+void handleLogsConfigPost(AsyncWebServerRequest *request)
+{
+  if (request->_tempObject == nullptr)
+  {
+    request->send(400, "application/json", "{\"error\":\"no_body\"}");
+    return;
+  }
+  String *bodyPtr = (String *)request->_tempObject;
+  String body = *bodyPtr;
+  delete bodyPtr;
+  request->_tempObject = nullptr;
+
+  DynamicJsonDocument doc(256);
+  DeserializationError err = deserializeJson(doc, body);
+  if (err)
+  {
+    request->send(400, "application/json", "{\"error\":\"bad_json\"}");
+    return;
+  }
+  if (!doc.containsKey("level"))
+  {
+    request->send(400, "application/json", "{\"error\":\"missing_level\"}");
+    return;
+  }
+  int level = doc["level"].as<int>();
+  if (level < LOG_LEVEL_SILENT)
+  {
+    level = LOG_LEVEL_SILENT;
+  }
+  if (level > LOG_LEVEL)
+  {
+    level = LOG_LEVEL;
+  }
+  Log.setLevel(level);
+  String reply = "{\"ok\":true,\"level\":";
+  reply += String(level);
+  reply += "}";
+  request->send(200, "application/json", reply);
+}
+
+void handleLogsPage(AsyncWebServerRequest *request)
+{
+  String html = "<html>" + headLogs + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuLogs + "<main id='mainContent'><section class='panel'><h1>Device logs</h1>";
+  html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. When <code>TELNET_LOG</code> is enabled, <code>nc &lt;host&gt; 23</code> is still the lowest-overhead tail.</p>";
+  html += "<div class='log-controls'><label>Include <input type='text' id='fInc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
+  html += "<label>Exclude <input type='text' id='fExc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
+  html += "<label><input type='checkbox' id='pause'/> Pause</label>";
+  html += "<label><input type='checkbox' id='useWs'/> WebSocket tail</label>";
+  html += "<button type='button' id='clr'>Clear view</button>";
+  html += "<label>Level <select id='lvl'><option value='0'>SILENT</option><option value='1'>FATAL</option><option value='2'>ERROR</option><option value='3'>WARNING</option><option value='4'>NOTICE</option><option value='5'>TRACE</option><option value='6'>VERBOSE</option></select></label>";
+  html += "<button type='button' id='applyLvl'>Apply level</button></div>";
+  html += "<pre id='logView' class='log-pre' aria-live='polite'></pre></section></main></div><script>";
+  html += "(function(){var pre=document.getElementById('logView');var since=0,pollMs=900,timer,ws,useWs=false;";
+  html += "var fInc=document.getElementById('fInc');var fExc=document.getElementById('fExc');var sel=document.getElementById('lvl');";
+  html += "function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.indexOf(i)<0)return false;if(x&&t.indexOf(x)>=0)return false;return true;}";
+  html += "function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){var t=arr[j].t;if(!passes(t))continue;var u=pre.textContent+t+'\\n';if(u.length>100000)u=u.slice(-80000);pre.textContent=u;}pre.scrollTop=pre.scrollHeight;}";
+  html += "function capSel(mx){if(!sel)return;var i,o;for(i=0;i<sel.options.length;i++){o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}";
+  html += "function poll(){if(document.hidden)return;fetch('/api/logs?since='+since+'&limit=120').then(function(r){return r.json();}).then(function(j){";
+  html += "if(typeof j.newestSeq==='number')since=j.newestSeq;if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);if(j.lines)appendLines(j.lines);}).catch(function(){});}";
+  html += "function startPoll(){stopPoll();timer=setInterval(poll,pollMs);poll();}";
+  html += "function stopPoll(){if(timer){clearInterval(timer);timer=null;}}";
+  html += "function connectWs(){var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');ws.onmessage=function(ev){try{var o=JSON.parse(ev.data);if(o.lines)appendLines(o.lines);if(o.d)appendLines(o.d);}catch(e){}};ws.onclose=function(){ws=null;};}";
+  html += "document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});";
+  html += "document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();if(ws){ws.close();ws=null;}if(!document.getElementById('pause').checked){if(useWs)connectWs();else startPoll();}});";
+  html += "document.getElementById('clr').addEventListener('click',function(){pre.textContent='';});";
+  html += "document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetch('/api/logs/config');}).then(function(r){return r.json();}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});";
+  html += "fetch('/api/logs/config').then(function(r){return r.json();}).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});";
+  html += "if(!document.getElementById('pause').checked)startPoll();})();</script></body></html>";
+  request->send(200, "text/html", html);
+  Log.verbose("[Web]: handleLogsPage %p" CR, request->client()->remoteIP());
 }
 
 void handleVersion(AsyncWebServerRequest *request)
