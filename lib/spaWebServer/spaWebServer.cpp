@@ -342,7 +342,7 @@ static String statusFormatEpochLocalHuman(time_t t)
   return String(buf);
 }
 
-/** Primary human time + optional collapsible raw epoch for spa status lastUpdate. */
+/** Primary local date/time + optional collapsible raw Unix epoch (seconds). */
 static String statusLastUpdateDisplayHtml(unsigned long epoch)
 {
   time_t t = static_cast<time_t>(epoch);
@@ -356,6 +356,15 @@ static String statusLastUpdateDisplayHtml(unsigned long epoch)
   out += formatNumberWithCommas(epoch);
   out += "</details>";
   return out;
+}
+
+static String webWallClockDisplayHtml(time_t t)
+{
+  if (t <= 0)
+  {
+    return statusLastUpdateDisplayHtml(0UL);
+  }
+  return statusLastUpdateDisplayHtml(static_cast<unsigned long>(t));
 }
 
 static void appendStatusKvRow(String &html, const char *label, const String &value)
@@ -667,7 +676,7 @@ void handleConfig(AsyncWebServerRequest *request)
   }
   else
   {
-    html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaConfigurationData.lastUpdate) + "</li>";
+    html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</li>";
     html += "<li><b>magicNumber: </b>" + String(spaConfigurationData.magicNumber) + "</li>";
     html += "<li><b>Pump 1: </b>" + String(spaConfigurationData.pump1) + "</li>";
     html += "<li><b>Pump 2: </b>" + String(spaConfigurationData.pump2) + "</li>";
@@ -683,7 +692,13 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "<li><b>Aux 2: </b>" + String(spaConfigurationData.aux2) + "</li>";
     html += "<li><b>Mister: </b>" + String(spaConfigurationData.mister) + "</li>";
     html += "<li><b>temp_scale: </b>" + String(spaConfigurationData.temp_scale) + "</li>";
-    html += "</ul></section><section class='panel'><h1>Filter Configuration</h1><ul>";
+    html += "</ul></section><section class='panel'><h1>Filter Configuration</h1>";
+    html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock. <b>Filter N Time</b> is the daily start of that filtration cycle. <b>Filter N Duration</b> is how long the pump runs for that cycle each day (circulation through the filter). Many tubs use two staggered cycles; the second may be unused on some packs.</p><ul>";
+    html += "<li><b>lastUpdate (filter settings): </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</li>";
+    if (spaFilterSettingsData.lastUpdate != 0)
+    {
+      html += "<li><b>Filter 2 enabled: </b>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</li>";
+    }
     html += "<li><b>Filter 1 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</li>";
     html += "<li><b>Filter 1 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</li>";
     html += "<li><b>Filter 2 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</li>";
@@ -716,9 +731,9 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
-  html += "<li><b>Uptime: </b>" + formatNumberWithCommas(millis() / 1000) + "</li>";
-  html += "<li><b>Time: </b>" + formatNumberWithCommas(getTime()) + "</li>";
-  html += "<li><b>Refresh Time: </b>" + formatNumberWithCommas(getTime() + 60 * 60) + "</li>";
+  html += "<li><b>Uptime: </b>" + formatNumberWithCommas(millis() / 1000) + " s</li>";
+  html += "<li><b>Time: </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
+  html += "<li><b>Refresh Time: </b>" + webWallClockDisplayHtml(getTime() + static_cast<time_t>(60 * 60)) + "</li>";
   html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
   html += "<li><b>Firmware Version: </b>" + String(VERSION) + "</li>";
   html += "<li><b>Firmware Build: </b>" + String(BUILD) + "</li>";
@@ -726,7 +741,7 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Release: </b>" + release + "</li>";
   html += "<li><b>Build Definition: </b>" + buildDefinitionString + "</li>";
 
-  html += "<li class='spacer'></li><li><b>getTime(): </b>" + formatNumberWithCommas(getTime()) + "</li>";
+  html += "<li class='spacer'></li><li><b>getTime(): </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
   html += "<li><b>getHour(testLastCheckedTime): </b>" + formatNumberWithCommas(getHour(testLastCheckedTime)) + "</li>";
   html += "<li><b>getHour(getTime()): </b>" + formatNumberWithCommas(getHour(getTime())) + "</li>";
   html += "<li><b>hasDayChanged(testLastCheckedTime): </b>" + String(hasDayChanged(testLastCheckedTime)) + "</li>";
@@ -795,47 +810,47 @@ void handleState(AsyncWebServerRequest *request)
 #endif
 
   appendWifiStateSection(html);
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaStatusData.lastUpdate) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaStatusData.lastUpdate) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
 
   html += "</ul></section><section class='panel'><h1>Configuration Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaConfigurationData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaConfigurationData.lastRequest) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</li>";
+  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaConfigurationData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaConfigurationData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaConfigurationData)) + "</li>";
 
   html += "</ul></section><section class='panel'><h1>Preferences Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaPreferencesData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaPreferencesData.lastRequest) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</li>";
+  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaPreferencesData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaPreferencesData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaPreferencesData)) + "</li>";
 
   html += "</ul></section><section class='panel'><h1>Filters Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaFilterSettingsData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaFilterSettingsData.lastRequest) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</li>";
+  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaFilterSettingsData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaFilterSettingsData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaFilterSettingsData)) + "</li>";
 
   html += "</ul></section><section class='panel'><h1>Information Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaInformationData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaInformationData.lastRequest) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaInformationData.lastUpdate) + "</li>";
+  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaInformationData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaInformationData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaInformationData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaInformationData)) + "</li>";
 
   html += "</ul></section><section class='panel'><h1>Fault Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaFaultLogData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaFaultLogData.lastRequest) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) + "</li>";
+  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaFaultLogData.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaFaultLogData.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaFaultLogData)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaFaultLogData)) + "</li>";
 
   html += "</ul></section><section class='panel'><h1>spaSettings0x04Data Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + formatNumberWithCommas(spaSettings0x04Data.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + formatNumberWithCommas(spaSettings0x04Data.lastRequest) + "</li>";
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) + "</li>";
+  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaSettings0x04Data.lastRequest) + "</li>";
   html += "<li><b>magicNumber: </b>" + String(spaSettings0x04Data.magicNumber) + "</li>";
   html += "<li><b>staleData: </b>" + String(staleData(spaSettings0x04Data)) + "</li>";
   html += "<li><b>retryRequest: </b>" + String(retryRequest(spaSettings0x04Data)) + "</li>";
