@@ -39,6 +39,15 @@ uint8_t destinationId()
   return WIFI_MODULE_ID;
 }
 
+uint8_t destinationIdForMode(bool useWifiDestination)
+{
+  if (useWifiDestination)
+  {
+    return WIFI_MODULE_ID;
+  }
+  return id;
+}
+
 uint8_t crc8(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
 {
   uint8_t crc = 0xB5;
@@ -71,9 +80,13 @@ void addFramingAndCrc(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   data.push(kEof);
 }
 
-SpaCommandResult queueFrame(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &frame, const char *logAction, SpaCommandSource source)
+SpaCommandResult queueFrame(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &frame, const char *logAction, SpaCommandSource source, String *outFrameHex = nullptr)
 {
   addFramingAndCrc(frame);
+  if (outFrameHex != nullptr)
+  {
+    *outFrameHex = msgToString(frame);
+  }
   sendMessageToSpa(frame);
   Log.verbose(F("[Cmd ]: accepted %s from %s: %s" CR), logAction, sourceLabel(source), msgToString(frame).c_str());
   return {true, SPA_COMMAND_ACCEPTED, "accepted"};
@@ -144,4 +157,35 @@ SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSour
   frame.push(Set_Temperature_Type);
   frame.push((uint8_t)encoded);
   return queueFrame(frame, "set_temp", source);
+}
+
+SpaCommandResult spaSendToggleDiagnostic(
+    uint8_t itemCode,
+    bool useWifiDestination,
+    bool includeZeroPad,
+    SpaCommandSource source,
+    String *outFrameHex)
+{
+  if (!spaCanAcceptCommands())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+  }
+
+  uint8_t dest = destinationIdForMode(useWifiDestination);
+  if (dest == 0)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid destination id"};
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(dest);
+  frame.push(kBroadcastChannel);
+  frame.push(Toggle_Item_Request_Type);
+  frame.push(itemCode);
+  if (includeZeroPad)
+  {
+    frame.push(0x00);
+  }
+
+  return queueFrame(frame, includeZeroPad ? "toggle_diag_pad00" : "toggle_diag_nopad", source, outFrameHex);
 }
