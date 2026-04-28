@@ -301,6 +301,9 @@ void rs485ClearToSend()
   //  mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "rs485ClearToSend");
   rs485WriteQueueMessage *message;
   CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> dataBuffer;
+  Log.notice(F("[BridgeDiag]: cts ms=%lu depth_before=%u" CR),
+             millis(),
+             static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)));
   if (xQueueReceive(spaWriteQueue, &message, 0) == pdTRUE)
   {
     for (int i = 0; i < message->length; i++)
@@ -308,6 +311,9 @@ void rs485ClearToSend()
       dataBuffer.push(message->message[i]);
     }
     //   mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "Queue Receive");
+    Log.notice(F("[BridgeDiag]: cts_send queued_frame=%s depth_after_pop=%u" CR),
+               msgToString(dataBuffer).c_str(),
+               static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)));
     rs485Write(dataBuffer);
     delete message;
   }
@@ -418,6 +424,7 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   if (data[4] != Nothing_to_Send_Type)
   {
     Log.verbose(F("[rs485]: Sent: %s" CR), msgToString(data).c_str());
+    Log.notice(F("[BridgeDiag]: rs485_sent ms=%lu frame=%s" CR), millis(), msgToString(data).c_str());
   }
   data.clear();
 }

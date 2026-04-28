@@ -13,10 +13,12 @@ where version numbers are used.
 - **Diagnostic toggle probe endpoint** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): Added `GET /api/diag/toggle` for low-risk A/B command-frame testing (`item`, optional `dest=wifi|id`, optional `pad=00|none`), returning the exact queued frame bytes and acceptance result to isolate controller-specific toggle semantics.
 - **Timed toggle sequence diagnostics** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added `GET /api/diag/toggle_sequence` to execute controlled retry/timing tests (`repeats`, `gap_ms`, `observe_ms`) with per-attempt frame metadata and before/after control snapshots.
 - **Command-write debug ledger** ([`docs/command-write-debug-log.md`](docs/command-write-debug-log.md), [`README.md`](README.md), [`AGENTS.md`](AGENTS.md)): Added a persistent troubleshooting log of attempted fixes, observed outcomes, and next diagnostic decision points to avoid duplicate effort.
+- **Bridge-first raw harness** ([`scripts/bridge_raw_tester.py`](scripts/bridge_raw_tester.py), [`docs/bridge-raw-command-matrix.example.json`](docs/bridge-raw-command-matrix.example.json), [`README.md`](README.md)): Added a no-reflash bridge command harness with retry/cooldown controls, matrix input format, and structured JSON result output for repeatable raw-command experiments.
 
 ### Changed
 
 - **Single-speed pump normalization for controls/status** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Status/control rendering and control-state matching now normalize configured 1-speed pumps to binary On/Off semantics (`pumpNOn`) while preserving raw pump values in diagnostics, reducing false multi-speed assumptions on single-speed spa setups.
+- **Bridge-to-RS485 observability** ([`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp), [`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)): Added `[BridgeDiag]` logs for ingress ids, forwarding decisions, queue depth at enqueue/dequeue, and RS485 send timing to correlate raw bridge injections with on-wire transmission.
 
 ## [1.6.1] - 2026-04-28
 

@@ -18,6 +18,7 @@ void processFragment(uint8_t *data, size_t length);
 
 void cacheRead(uint8_t *data, size_t length)
 {
+  Log.notice(F("[BridgeDiag]: cacheRead len=%u" CR), static_cast<unsigned int>(length));
   size_t pos = 0;
   while (pos < length)
   {
@@ -62,6 +63,10 @@ void cacheRead(uint8_t *data, size_t length)
 
 void processFragment(uint8_t *data, size_t length)
 {
+  Log.notice(F("[BridgeDiag]: fragment type=0x%02x len=%u frame=%s" CR),
+             data[4],
+             static_cast<unsigned int>(length),
+             msgToString(data, length).c_str());
   // Check if the fragment is a valid message
   if (data[4] == Settings_Request_Type)
   {
@@ -86,12 +91,14 @@ void processFragment(uint8_t *data, size_t length)
       break;
     default:
       Log.verbose(F("[Cache]: Unknown Request %x" CR), data[5]);
+      Log.notice(F("[BridgeDiag]: action=sendMessageToSpa reason=unknown_settings_request code=0x%02x" CR), data[5]);
       sendMessageToSpa(data, length);
       break;
     }
   }
   else
   {
+    Log.notice(F("[BridgeDiag]: action=sendMessageToSpa reason=pass_through type=0x%02x" CR), data[4]);
     sendMessageToSpa(data, length);
   }
 }

@@ -127,6 +127,38 @@ To avoid repeating dead-end experiments while command-write behavior is being de
 
 When **`BRIDGE`** is enabled at build time, the firmware exposes a **TCP server on port 4257** that can pair with the Homebridge plugin **[homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa)**. This path is **legacy/community** relative to the MQTT + HA focus of this fork; it remains in the codebase for compatibility. See compiler flags below.
 
+### Bridge-first raw troubleshooting harness
+
+For short-lived command-write troubleshooting, you can inject raw Balboa frames over the bridge without reflashing:
+
+- Harness script: [`scripts/bridge_raw_tester.py`](scripts/bridge_raw_tester.py)
+- Example matrix input: [`docs/bridge-raw-command-matrix.example.json`](docs/bridge-raw-command-matrix.example.json)
+- Troubleshooting ledger: [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md)
+
+Single-case run:
+
+```
+python3 scripts/bridge_raw_tester.py \
+  --host <spa-ip-or-hostname> \
+  --frame-hex "7e070abf110400137e" \
+  --label "toggle_pump1_item4"
+```
+
+Matrix run:
+
+```
+python3 scripts/bridge_raw_tester.py \
+  --host <spa-ip-or-hostname> \
+  --matrix docs/bridge-raw-command-matrix.example.json \
+  --out docs/bridge-raw-last-run.json
+```
+
+Guardrails:
+
+- Use one command sequence at a time and keep cooldowns between retries.
+- Record expected vs observed behavior for each run in the debug ledger.
+- If repeated runs are mostly malformed-frame/operator errors, consider phase 2: add a thin typed HTTP helper endpoint.
+
 ---
 
 ## Build with PlatformIO
