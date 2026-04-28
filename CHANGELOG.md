@@ -8,6 +8,18 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-04-28
+
+### Changed
+
+- **Home Assistant MQTT discovery semantics** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp), [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp)): `heating_state`, `spa_state`, `init_mode`, `heating_mode`, `filter_mode`, and `temp_range` are now discovered as enum sensors with explicit options and published as human-readable text (instead of measurement-like numeric semantics).
+- **Home Assistant lock/load entities** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp), [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp)): `panel_locked` and `settings_lock` now publish as binary sensors (`Locked`/`Unlocked` payloads), `mister` is now a binary sensor, and stale retained configs from prior sensor types are retracted.
+- **Home Assistant clock entity:** `spa_time` discovery was removed so HA no longer creates a rapidly changing clock entity/history stream.
+- **Home Assistant device link:** MQTT discovery now sets `device.configuration_url` to `http://<gatewayName>.local/status` so the HA device page can open the ESP web status endpoint.
+- **README MQTT/HA docs** ([`README.md`](README.md)): Added an entity-type matrix, documented clock removal, and described the HA web-link/mDNS behavior.
+- **`src/main.h`:** Firmware **`VERSION`** set to **1.5.0**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.5.0**).
+
 ## [1.4.3] - 2026-04-27
 
 ### Fixed
