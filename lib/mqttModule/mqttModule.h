@@ -26,6 +26,20 @@
 #define BROKER_PASS ""
 #endif
 
+/** Home Assistant MQTT Discovery (retained homeassistant/.../config). Set to 0 in config.h to disable. */
+#ifndef MQTT_HA_DISCOVERY
+#define MQTT_HA_DISCOVERY 1
+#endif
+
+#ifndef MQTT_DISCOVERY_PREFIX
+#define MQTT_DISCOVERY_PREFIX "homeassistant"
+#endif
+
+/** Static unit for HA temperature sensors (see README); tub °C vs °F is not auto-detected in discovery. */
+#ifndef MQTT_HA_TEMP_UNIT
+#define MQTT_HA_TEMP_UNIT "\xC2\xB0" "F"
+#endif
+
 #define publishDebug(...) mqtt.publish((mqttTopic + "debug/message").c_str(), __VA_ARGS__);
 #define publishError(...) mqtt.publish((mqttTopic + "debug/error").c_str(), __VA_ARGS__);
 #define publishNodeStatus(topic, ...) mqtt.publish((mqttTopic + "node/" + topic).c_str(), __VA_ARGS__);

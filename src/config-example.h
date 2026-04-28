@@ -9,6 +9,11 @@
 #define BROKER_LOGIN ""
 #define BROKER_PASS ""
 
+// Home Assistant MQTT Discovery (defaults also in mqttModule.h if omitted here)
+// #define MQTT_HA_DISCOVERY 0   /* set to 0 to skip publishing homeassistant/.../config */
+// #define MQTT_DISCOVERY_PREFIX "homeassistant"  /* broker discovery prefix */
+// #define MQTT_HA_TEMP_UNIT "\xC2\xB0" "C"      /* °C — discovery uses static unit; match your tub */
+
 // OTA controls
 // Keep false for trusted-LAN setups; set true + password before broader exposure.
 #define ENABLE_OTA_AUTH false
