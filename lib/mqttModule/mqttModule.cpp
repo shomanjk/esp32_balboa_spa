@@ -10,6 +10,7 @@
 #include <spaUtilities.h>
 #include <restartReason.h>
 #include "mqttModule.h"
+#include "haMqttDiscovery.h"
 #include <rs485.h>
 
 // Local Functions
@@ -32,7 +33,7 @@ void mqttModuleSetup()
   mqtt.setCallback(mqttMessage);
   mqtt.setKeepAlive(10);
   mqtt.setSocketTimeout(1);
-  mqtt.setBufferSize(512); // increase pubsubclient buffer size
+  mqtt.setBufferSize(4096); // discovery JSON + state publishes
   mqttTopic = mqttTopic + String(gatewayName) + "/";
   Log.notice("MQTT Server: %s:%d\n", MQTT_SERVER, MQTT_PORT);
   Log.notice("MQTT Topic: %s\n", mqttTopic.c_str());
@@ -70,6 +71,9 @@ void reconnect()
       publishError("MQTT Timeout - Reconnect Successfully Run");
       mqtt.subscribe((mqttTopic + "command").c_str());
       nodeStateReport();
+#if MQTT_HA_DISCOVERY
+      publishHomeAssistantDiscovery();
+#endif
     }
   }
 }

@@ -20,7 +20,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 ## Configuration (required before a useful build)
 
-- **`src/config.h`** is **gitignored** (see `.gitignore`). Copy from [`src/config-example.h`](src/config-example.h) and set Wi‑Fi, MQTT, **`TX485_Rx` / `TX485_Tx`**, **`AUTO_TX`**.
+- **`src/config.h`** is **gitignored** (see `.gitignore`). Copy from [`src/config-example.h`](src/config-example.h) and set Wi‑Fi, MQTT, **`TX485_Rx` / `TX485_Tx`**, **`AUTO_TX`**. Optional MQTT overrides: **`MQTT_HA_DISCOVERY`**, **`MQTT_DISCOVERY_PREFIX`**, **`MQTT_HA_TEMP_UNIT`** (see [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h) defaults).
 - **`VERSION`** string for serial logs: [`src/main.h`](src/main.h) (`#define VERSION`).
 
 ## Build system
@@ -50,6 +50,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 | RS485 framing, CTS, CRC, spa **ID** (`0x0A`) | [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp) | Inbound → `spaReadQueue`; outbound from `spaWriteQueue` on Clear-to-Send. |
 | Message parse, status, config requests | [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h) | `sendMessageToSpa()` enqueues to **`spaWriteQueue`**. |
 | MQTT publish | [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp) | Status/config topics under `Spa/<gateway>/…`. |
+| **Home Assistant MQTT Discovery** | [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp) | After connect, retained `homeassistant/<platform>/<object_id>/config` JSON; maps existing state topics; **`availability_topic`** = `Spa/<gateway>/node/state` (`ON`/`OFF` with LWT). See [HA MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery). |
 | MQTT subscribe / commands | [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp) | **Known gap:** callback currently **echoes** payloads; commands not implemented. |
 | Web / SCI emulation | [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) | **`parseBody`**: reads work; **`device_request` / buttons** not fully wired. Multi-chunk POST body handling is implemented. When no spa data exists yet, `/devices/sci` returns explicit not-ready XML (`ready=false`, `error=no_spa_data_yet`) instead of 404. JSON: **`GET /api/version`**, **`GET /api/wifi`** (Wi‑Fi status/RSSI for `/state` live section + chart). |
 | TCP bridge (LAN clients) | [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp) | Port **4257**; forwards to RS485 via [`cacheRead.cpp`](lib/spaMessage/cacheRead.cpp) / `sendMessageToSpa`. |

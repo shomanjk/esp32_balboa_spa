@@ -40,6 +40,22 @@ Currently the WebSite buttons are not working.  I never got around to wiring the
 
 Legacy firmware-served pages (`/status`, `/config`, `/state`) now include responsive/mobile-friendly layout behavior (viewport scaling, wrapping nav, fluid chart/image sizing) for better phone usability.
 
+### Screenshots: firmware pages
+
+Add your captures under [`docs/`](docs/) using the filenames below (or edit the paths in the markdown). Images are optional until you commit the files.
+
+#### Spa status (`/status`)
+
+![Spa status page](docs/spa-status.png)
+
+#### Spa configuration (`/config`)
+
+![Spa configuration page](docs/spa-config.png)
+
+#### ESP state (`/state`)
+
+![ESP state page](docs/esp-state.png)
+
 ### JSON API (GET)
 
 | Path | Query | Purpose |
@@ -203,8 +219,18 @@ Bonus: you may add several relays or such like I did ;-)
 # Appetiser using OpenHab...
 ![Example](https://github.com/cribskip/esp8266_spa/blob/master/spa_openhab.png)
 
-# HomeAssistant integration
-The system uses HomeAssistant autodiscover and should just appear in the MQTT Integration under "Esp Spa"
+# Home Assistant integration
+
+With the MQTT broker configured in `config.h`, the firmware publishes **Home Assistant MQTT Discovery** messages after each successful MQTT connect. Entities appear under the MQTT integration as a single device **Balboa Spa** (sensors for temperatures, pumps, modes, etc., and binary sensors for circulation, blower, and lights that match the firmware’s `On` / `Off` payloads).
+
+**Requirements:** Home Assistant [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) connected to the same broker; discovery uses the default prefix `homeassistant/` (override with `MQTT_DISCOVERY_PREFIX` in `config.h` if needed).
+
+**Temperature unit:** Discovery uses a static `unit_of_measurement` for HA temperature sensors (default **°F** in [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h)). For Celsius tubs, set `MQTT_HA_TEMP_UNIT` in `config.h` (see [`src/config-example.h`](src/config-example.h)).
+
+**Disable discovery:** `#define MQTT_HA_DISCOVERY 0` in `config.h`.
+
+**Commands:** MQTT `Spa/<gateway>/command` is not yet wired to the spa; discovery only exposes **read-only** entities until command handling is implemented.
+
 ![Example](https://github.com/EmmanuelLM/esp8266_spa/blob/master//Hassio.png)
 
 # TODO
