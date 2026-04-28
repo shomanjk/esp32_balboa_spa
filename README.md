@@ -105,6 +105,9 @@ To keep protocol risk low, command-write implementation is intentionally staged:
 All command frame semantics should be validated against the ccutrer protocol reference before enabling each command family:
 - [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)
 
+To avoid repeating dead-end experiments while command-write behavior is being debugged, keep the running attempt ledger up to date:
+- [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md)
+
 **Home Assistant MQTT Discovery:** After each successful MQTT connect, the firmware publishes **retained** discovery configs under `homeassistant/<platform>/<object_id>/config`. In Home Assistant, entities appear under the MQTT integration as device **Balboa Spa**.
 
 - **Temperature values:** `current_temp`, `set_temp`, `low_set_temp`, `high_set_temp`, `sensor_a`, `sensor_b` are numeric temperature sensors.

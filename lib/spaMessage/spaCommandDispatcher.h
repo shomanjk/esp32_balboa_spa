@@ -27,5 +27,11 @@ struct SpaCommandResult
 bool spaCanAcceptCommands();
 SpaCommandResult spaSendToggleCommand(uint8_t itemCode, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+SpaCommandResult spaSendToggleDiagnostic(
+    uint8_t itemCode,
+    bool useWifiDestination,
+    bool includeZeroPad,
+    SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN,
+    String *outFrameHex = nullptr);
 
 #endif

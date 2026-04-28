@@ -33,6 +33,8 @@ void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
 void handleStatusControlsApi(AsyncWebServerRequest *request);
+void handleDiagToggleApi(AsyncWebServerRequest *request);
+void handleDiagToggleSequenceApi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
 void handleRs485Raw(AsyncWebServerRequest *request);
 void handleRs485History(AsyncWebServerRequest *request);
@@ -252,6 +254,8 @@ void spaWebServerLoop()
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
     server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
+    server.on("/api/diag/toggle", HTTP_GET, handleDiagToggleApi);
+    server.on("/api/diag/toggle_sequence", HTTP_GET, handleDiagToggleSequenceApi);
     server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
@@ -392,6 +396,59 @@ static bool statusPumpConfiguredAbsent(unsigned pumpId)
   }
   const uint8_t *p = &spaConfigurationData.pump1;
   return p[pumpId - 1] == 0;
+}
+
+static uint8_t statusPumpConfigSpeed(unsigned pumpId)
+{
+  if (!statusSpaConfigReady() || pumpId < 1 || pumpId > 6)
+  {
+    return 0;
+  }
+  const uint8_t *p = &spaConfigurationData.pump1;
+  return p[pumpId - 1];
+}
+
+static uint8_t statusPumpRawState(unsigned pumpId)
+{
+  if (pumpId < 1 || pumpId > 6)
+  {
+    return 0;
+  }
+  const uint8_t *p = &spaStatusData.pump1;
+  return p[pumpId - 1];
+}
+
+static bool statusPumpIsOn(unsigned pumpId)
+{
+  return statusPumpRawState(pumpId) > 0;
+}
+
+static String statusPumpDisplayState(unsigned pumpId)
+{
+  const uint8_t cfg = statusPumpConfigSpeed(pumpId);
+  if (cfg == 1)
+  {
+    return getMapDescription(statusPumpIsOn(pumpId) ? 1 : 0, onOffMap);
+  }
+  return getMapDescription(statusPumpRawState(pumpId), pumpMap);
+}
+
+static void fillPumpDiagSnapshot(JsonObject obj)
+{
+  obj["statusLastUpdate"] = spaStatusData.lastUpdate;
+  obj["pump1"] = spaStatusData.pump1;
+  obj["pump2"] = spaStatusData.pump2;
+  obj["pump3"] = spaStatusData.pump3;
+  obj["pump4"] = spaStatusData.pump4;
+  obj["pump5"] = spaStatusData.pump5;
+  obj["pump6"] = spaStatusData.pump6;
+  obj["pump1On"] = statusPumpIsOn(1);
+  obj["pump2On"] = statusPumpIsOn(2);
+  obj["pump3On"] = statusPumpIsOn(3);
+  obj["pump4On"] = statusPumpIsOn(4);
+  obj["pump5On"] = statusPumpIsOn(5);
+  obj["pump6On"] = statusPumpIsOn(6);
+  obj["light1"] = spaStatusData.light1 ? 1 : 0;
 }
 
 /** Configuration byte 2: 0 = None, 1 = Present. */
@@ -751,12 +808,12 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
-  appendStatusControlCell(html, "Pump 1", getMapDescription(spaStatusData.pump1, pumpMap), statusPumpConfiguredAbsent(1), 4, spaStatusData.pump1 == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Pump 2", getMapDescription(spaStatusData.pump2, pumpMap), statusPumpConfiguredAbsent(2), 5, spaStatusData.pump2 == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Pump 3", getMapDescription(spaStatusData.pump3, pumpMap), statusPumpConfiguredAbsent(3), 6, spaStatusData.pump3 == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Pump 4", getMapDescription(spaStatusData.pump4, pumpMap), statusPumpConfiguredAbsent(4), 7, spaStatusData.pump4 == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Pump 5", getMapDescription(spaStatusData.pump5, pumpMap), statusPumpConfiguredAbsent(5), 8, spaStatusData.pump5 == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Pump 6", getMapDescription(spaStatusData.pump6, pumpMap), statusPumpConfiguredAbsent(6), 9, spaStatusData.pump6 == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Pump 1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 3", statusPumpDisplayState(3), statusPumpConfiguredAbsent(3), 6, statusPumpIsOn(3) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 4", statusPumpDisplayState(4), statusPumpConfiguredAbsent(4), 7, statusPumpIsOn(4) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 5", statusPumpDisplayState(5), statusPumpConfiguredAbsent(5), 8, statusPumpIsOn(5) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 6", statusPumpDisplayState(6), statusPumpConfiguredAbsent(6), 9, statusPumpIsOn(6) ? "off" : "on");
   appendStatusControlCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent(), 0, nullptr);
   appendStatusControlCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent(), 12, spaStatusData.blower == 0 ? "on" : "off");
   appendStatusControlCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1), 17, spaStatusData.light1 ? "off" : "on");
@@ -793,12 +850,12 @@ void handleStatus(AsyncWebServerRequest *request)
           "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
           "if(code===17)return (snap.light1>0)===on;"
           "if(code===18)return (snap.light2>0)===on;"
-          "if(code===4)return on?(snap.pump1>0):(snap.pump1===0);"
-          "if(code===5)return on?(snap.pump2>0):(snap.pump2===0);"
-          "if(code===6)return on?(snap.pump3>0):(snap.pump3===0);"
-          "if(code===7)return on?(snap.pump4>0):(snap.pump4===0);"
-          "if(code===8)return on?(snap.pump5>0):(snap.pump5===0);"
-          "if(code===9)return on?(snap.pump6>0):(snap.pump6===0);"
+          "if(code===4)return on?!!snap.pump1On:!snap.pump1On;"
+          "if(code===5)return on?!!snap.pump2On:!snap.pump2On;"
+          "if(code===6)return on?!!snap.pump3On:!snap.pump3On;"
+          "if(code===7)return on?!!snap.pump4On:!snap.pump4On;"
+          "if(code===8)return on?!!snap.pump5On:!snap.pump5On;"
+          "if(code===9)return on?!!snap.pump6On:!snap.pump6On;"
           "if(code===12)return on?(snap.blower>0):(snap.blower===0);"
           "if(code===14)return (snap.mister>0)===on;"
           "return false;}"
@@ -1102,8 +1159,209 @@ void handleStatusControlsApi(AsyncWebServerRequest *request)
   doc["pump4"] = spaStatusData.pump4;
   doc["pump5"] = spaStatusData.pump5;
   doc["pump6"] = spaStatusData.pump6;
+  doc["pump1On"] = statusPumpIsOn(1);
+  doc["pump2On"] = statusPumpIsOn(2);
+  doc["pump3On"] = statusPumpIsOn(3);
+  doc["pump4On"] = statusPumpIsOn(4);
+  doc["pump5On"] = statusPumpIsOn(5);
+  doc["pump6On"] = statusPumpIsOn(6);
   doc["blower"] = spaStatusData.blower;
   doc["mister"] = spaStatusData.mister ? 1 : 0;
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleDiagToggleApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(768);
+
+  if (!request->hasParam("item"))
+  {
+    doc["ok"] = false;
+    doc["error"] = "missing item query parameter";
+    serializeJson(doc, *response);
+    request->send(response);
+    return;
+  }
+
+  const String itemStr = request->getParam("item")->value();
+  int itemCode = itemStr.toInt();
+  if (itemCode <= 0 || itemCode > 255)
+  {
+    doc["ok"] = false;
+    doc["error"] = "invalid item query parameter";
+    doc["item"] = itemStr;
+    serializeJson(doc, *response);
+    request->send(response);
+    return;
+  }
+
+  String dest = "wifi";
+  if (request->hasParam("dest"))
+  {
+    dest = request->getParam("dest")->value();
+    dest.toLowerCase();
+  }
+  bool useWifiDestination = (dest != "id");
+
+  bool includeZeroPad = true;
+  if (request->hasParam("pad"))
+  {
+    String pad = request->getParam("pad")->value();
+    pad.toLowerCase();
+    includeZeroPad = !(pad == "none" || pad == "0");
+  }
+
+  String frameHex;
+  SpaCommandResult result = spaSendToggleDiagnostic(
+      (uint8_t)itemCode,
+      useWifiDestination,
+      includeZeroPad,
+      SPA_COMMAND_SOURCE_WEB,
+      &frameHex);
+
+  doc["ok"] = result.accepted;
+  doc["item"] = itemCode;
+  doc["dest"] = useWifiDestination ? "wifi" : "id";
+  doc["pad"] = includeZeroPad ? "00" : "none";
+  doc["result"] = result.reason;
+  doc["frame"] = frameHex;
+  JsonObject snapshot = doc.createNestedObject("snapshot");
+  fillPumpDiagSnapshot(snapshot);
+
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleDiagToggleSequenceApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(4096);
+
+  if (!request->hasParam("item"))
+  {
+    doc["ok"] = false;
+    doc["error"] = "missing item query parameter";
+    serializeJson(doc, *response);
+    request->send(response);
+    return;
+  }
+
+  const String itemStr = request->getParam("item")->value();
+  int itemCode = itemStr.toInt();
+  if (itemCode <= 0 || itemCode > 255)
+  {
+    doc["ok"] = false;
+    doc["error"] = "invalid item query parameter";
+    doc["item"] = itemStr;
+    serializeJson(doc, *response);
+    request->send(response);
+    return;
+  }
+
+  int repeats = 1;
+  if (request->hasParam("repeats"))
+  {
+    repeats = request->getParam("repeats")->value().toInt();
+  }
+  repeats = constrain(repeats, 1, 6);
+
+  int gapMs = 1200;
+  if (request->hasParam("gap_ms"))
+  {
+    gapMs = request->getParam("gap_ms")->value().toInt();
+  }
+  gapMs = constrain(gapMs, 200, 10000);
+
+  int observeMs = 5000;
+  if (request->hasParam("observe_ms"))
+  {
+    observeMs = request->getParam("observe_ms")->value().toInt();
+  }
+  observeMs = constrain(observeMs, 0, 20000);
+
+  String dest = "wifi";
+  if (request->hasParam("dest"))
+  {
+    dest = request->getParam("dest")->value();
+    dest.toLowerCase();
+  }
+  bool useWifiDestination = (dest != "id");
+
+  bool includeZeroPad = true;
+  if (request->hasParam("pad"))
+  {
+    String pad = request->getParam("pad")->value();
+    pad.toLowerCase();
+    includeZeroPad = !(pad == "none" || pad == "0");
+  }
+
+  doc["item"] = itemCode;
+  doc["dest"] = useWifiDestination ? "wifi" : "id";
+  doc["pad"] = includeZeroPad ? "00" : "none";
+  doc["repeats"] = repeats;
+  doc["gapMs"] = gapMs;
+  doc["observeMs"] = observeMs;
+
+  JsonObject before = doc.createNestedObject("before");
+  fillPumpDiagSnapshot(before);
+
+  JsonArray attempts = doc.createNestedArray("attempts");
+  bool acceptedAny = false;
+  bool rejectedAny = false;
+  const unsigned long startMs = millis();
+
+  for (int i = 0; i < repeats; i++)
+  {
+    String frameHex;
+    SpaCommandResult result = spaSendToggleDiagnostic(
+        (uint8_t)itemCode,
+        useWifiDestination,
+        includeZeroPad,
+        SPA_COMMAND_SOURCE_WEB,
+        &frameHex);
+
+    JsonObject attempt = attempts.createNestedObject();
+    attempt["index"] = i + 1;
+    attempt["accepted"] = result.accepted;
+    attempt["reason"] = result.reason;
+    attempt["frame"] = frameHex;
+    attempt["elapsedMs"] = millis() - startMs;
+
+    if (result.accepted)
+    {
+      acceptedAny = true;
+    }
+    else
+    {
+      rejectedAny = true;
+      break;
+    }
+
+    if (i < repeats - 1)
+    {
+      delay(gapMs);
+    }
+  }
+
+  if (observeMs > 0)
+  {
+    delay(observeMs);
+  }
+
+  JsonObject after = doc.createNestedObject("after");
+  fillPumpDiagSnapshot(after);
+
+  const bool pump1Changed = before["pump1"].as<int>() != after["pump1"].as<int>();
+  const bool light1Changed = before["light1"].as<int>() != after["light1"].as<int>();
+
+  doc["acceptedAny"] = acceptedAny;
+  doc["allAccepted"] = acceptedAny && !rejectedAny && (attempts.size() == static_cast<size_t>(repeats));
+  doc["pump1Changed"] = pump1Changed;
+  doc["light1Changed"] = light1Changed;
+  doc["ok"] = acceptedAny;
+
   serializeJson(doc, *response);
   request->send(response);
 }

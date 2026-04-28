@@ -79,6 +79,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 - **Bench:** [`emulator/spaEmulator.js`](emulator/spaEmulator.js) + [`emulator/README.md`](emulator/README.md) for crude serial injection.
 - **Logs:** `LOG_LEVEL_VERBOSE` in `platformio.ini` `[com]` `build_flags`.
+- **Command-write debug ledger:** keep attempted wire-level fixes and outcomes in [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md) to avoid duplicate troubleshooting passes.
 
 ## Flashing (PlatformIO CLI)
 
