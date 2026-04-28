@@ -9,6 +9,10 @@
 #include "../../src/main.h"
 #include "balboa.h"
 #include "spaMqttMessage.h"
+#include <mqttModule.h>
+#if MQTT_HA_DISCOVERY
+#include <haMqttDiscovery.h>
+#endif
 #include "rs485.h"
 #include "bridge.h"
 
@@ -408,6 +412,9 @@ void parseConfigurationResponse(u_int8_t *message, int length)
 
   // Log.verbose(F("[Mess]: Configuration Response: %s" CR), msgToString(hexArray, length - 7).c_str());
   publishSpaConfigurationData();
+#if MQTT_HA_DISCOVERY
+  publishHomeAssistantDiscoveryExpanded();
+#endif
 }
 
 /*
@@ -455,6 +462,9 @@ void parseInformationResponse(u_int8_t *message, int length)
 
   // Log.verbose(F("[Mess]: Information Response: %s" CR), msgToString(hexArray, length - 7).c_str());
   publishSpaInformationData();
+#if MQTT_HA_DISCOVERY
+  publishHomeAssistantDiscoveryExpanded();
+#endif
 }
 
 /*
