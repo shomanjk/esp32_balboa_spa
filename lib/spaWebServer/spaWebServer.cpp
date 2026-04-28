@@ -1279,9 +1279,16 @@ if(l.indexOf('depth_before=0')<0)return false;
 return true;
 }
 function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.toLowerCase().indexOf(i.toLowerCase())<0)return false;if(x&&t.toLowerCase().indexOf(x.toLowerCase())>=0)return false;return true;}
+function isVisibleRecord(rec){
+var line=rec.t;
+var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);
+if(hiddenByIdleCts&&!showHiddenEl.checked)return false;
+if(!passes(line))return false;
+return true;
+}
 function renderLine(rec){var tag=getTag(rec.t),cls=getLevelClass(rec.t);var body=esc(rec.t);if(tag){body=body.replace('['+tag+']','<span class=\"log-tag\">['+esc(tag)+']</span>');}
 return '<div class=\"log-line '+cls+'\"><span class=\"log-seq\">#'+rec.s+'</span><span>'+body+'</span></div>';}
-function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;if(!showHiddenEl.checked)continue;}if(!passes(line))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);logView.innerHTML=out;renderCount.textContent=n+' lines';if(autoScrollEl.checked){logView.scrollTop=logView.scrollHeight;}}
+function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;}if(!isVisibleRecord(rendered[i]))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);logView.innerHTML=out;renderCount.textContent=n+' lines';if(autoScrollEl.checked){logView.scrollTop=logView.scrollHeight;}}
 function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){rendered.push({s:arr[j].s,t:arr[j].t});if(rendered.length>maxRendered)rendered.shift();}refreshFromRendered();}
 function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;
 if(autoScrollEl.checked||atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
@@ -1314,7 +1321,7 @@ document.getElementById('pause').addEventListener('change',function(){if(this.ch
 document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
 document.getElementById('clr').addEventListener('click',function(){rendered=[];refreshFromRendered();});
 document.getElementById('copyTxt').addEventListener('click',function(){
-var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}
+var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}
 if(!txt){connState.textContent='nothing to copy';return;}
 if(navigator.clipboard&&navigator.clipboard.writeText){
 navigator.clipboard.writeText(txt).then(function(){connState.textContent='copied';}).catch(function(){fallbackCopy(txt);});
@@ -1327,8 +1334,8 @@ try{var ok=document.execCommand('copy');connState.textContent=ok?'copied':'copy 
 catch(e){connState.textContent='copy failed';}
 document.body.removeChild(ta);
 }
-document.getElementById('dlTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}dl('spa-logs-'+Date.now()+'.log',txt,'text/plain');});
-document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
+document.getElementById('dlTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}dl('spa-logs-'+Date.now()+'.log',txt,'text/plain');});
+document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
 document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetch('/api/logs/config');}).then(function(r){return r.json();}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
 fetch('/api/logs/config').then(function(r){return r.json();}).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});
 if(!pauseEl.checked)startPoll();
