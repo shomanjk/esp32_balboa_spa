@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <CircularBuffer.hpp>
 #include "balboa.h"
+#include "spaCommandDispatcher.h"
 
 extern RTC_NOINIT_ATTR SpaStatusData spaStatusData;
 extern RTC_NOINIT_ATTR SpaConfigurationData spaConfigurationData;

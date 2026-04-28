@@ -90,6 +90,21 @@ Place images under [`docs/`](docs/) or update paths below.
 
 **MQTT commands:** Subscribed `Spa/<gateway>/command` is **not** yet dispatched to the spa (handler still echoes); toggles/setpoint from MQTT are **not** implemented.
 
+### Command write scope (v1 locked)
+
+To keep protocol risk low, command-write implementation is intentionally staged:
+
+- **In scope (v1):**
+  - **Button toggle** commands (Balboa `0x11`) for supported on/off-style actions.
+  - **Set temperature** commands (Balboa `0x20`) with min/max and temp-scale validation.
+- **Deferred (post-v1):**
+  - `SystemTime`
+  - `TimeFormat`
+  - `TempUnits`
+
+All command frame semantics should be validated against the ccutrer protocol reference before enabling each command family:
+- [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)
+
 **Home Assistant MQTT Discovery:** After each successful MQTT connect, the firmware publishes **retained** discovery configs under `homeassistant/<platform>/<object_id>/config`. In Home Assistant, entities appear under the MQTT integration as device **Balboa Spa**.
 
 - **Temperature values:** `current_temp`, `set_temp`, `low_set_temp`, `high_set_temp`, `sensor_a`, `sensor_b` are numeric temperature sensors.

@@ -19,6 +19,18 @@
 #define PUBLISH_STATE_MAP(element, map) \
   publishElement(#element, "status", getMapDescription(spaStatusData.element, map).c_str());
 
+void publishElement(const char *element, const char *group, const char *value);
+
+static void publishStatusTemperature(const char *element, float value)
+{
+  char buffer[BUFFER_SIZE];
+  // Balboa reports °F in whole numbers and °C in half-steps.
+  // Publish whole numbers for °F and one decimal place for °C.
+  const char *format = spaStatusData.tempScale ? "%.1f" : "%.0f";
+  snprintf(buffer, sizeof(buffer), format, value);
+  publishElement(element, "status", buffer);
+}
+
 void publishElement(const char *element, const char *group, const char *value)
 {
   char topic[128];
@@ -51,9 +63,9 @@ void publishSpaStatusData()
 
   PUBLISH_STATE_MAP(spaState, spaStateMap);
   PUBLISH_STATE_MAP(initMode, initModeMap);
-  PUBLISH_STATUS_ELEMENT(currentTemp, "%.2f");
+  publishStatusTemperature("currentTemp", spaStatusData.currentTemp);
 
-  PUBLISH_STATUS_ELEMENT(currentTemp, "%.2f");
+  publishStatusTemperature("currentTemp", spaStatusData.currentTemp);
   PUBLISH_STATUS_ELEMENT(time, "%s");
   PUBLISH_STATE_MAP(heatingMode, heatingModeMap);
   PUBLISH_STATE_MAP(heatingState, heatingStateMap);
@@ -81,9 +93,9 @@ void publishSpaStatusData()
   PUBLISH_STATE_MAP(light2, onOffMap);
   PUBLISH_STATE_MAP(mister, onOffMap);
 
-  PUBLISH_STATUS_ELEMENT(setTemp, "%.2f");
-  PUBLISH_STATUS_ELEMENT(lowSetTemp, "%.2f");
-  PUBLISH_STATUS_ELEMENT(highSetTemp, "%.2f");
+  publishStatusTemperature("setTemp", spaStatusData.setTemp);
+  publishStatusTemperature("lowSetTemp", spaStatusData.lowSetTemp);
+  publishStatusTemperature("highSetTemp", spaStatusData.highSetTemp);
   PUBLISH_STATUS_ELEMENT(notification, "%u");
   PUBLISH_STATUS_ELEMENT(flags19, "%u");
   PUBLISH_STATE_MAP(settingsLock, lockedMap);
