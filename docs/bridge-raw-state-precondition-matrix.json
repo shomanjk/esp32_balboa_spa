@@ -1,0 +1,51 @@
+{
+  "notes": [
+    "State-precondition probe set for command-write troubleshooting.",
+    "Objective: test whether mode/range toggles immediately before set_temp improve application on controller.",
+    "All frames are low-risk and sourced from known Balboa message types."
+  ],
+  "cases": [
+    {
+      "label": "baseline_status_like_probe_settemp_76f",
+      "frame_hex": "7e060abf204cc97e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "toggle_temp_range_item50_then_wait",
+      "frame_hex": "7e070abf115000247e",
+      "retries": 1,
+      "cooldown_ms": 4000,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "settemp_80f_after_range_toggle",
+      "frame_hex": "7e060abf20504d7e",
+      "retries": 1,
+      "cooldown_ms": 3500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "toggle_heating_mode_item51_then_wait",
+      "frame_hex": "7e070abf115100237e",
+      "retries": 1,
+      "cooldown_ms": 4000,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "settemp_81f_after_heatingmode_toggle",
+      "frame_hex": "7e060abf20514a7e",
+      "retries": 1,
+      "cooldown_ms": 3500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "settemp_75f_after_mode_range_sequence",
+      "frame_hex": "7e060abf204bc07e",
+      "retries": 1,
+      "cooldown_ms": 3500,
+      "timeout_ms": 2000
+    }
+  ]
+}

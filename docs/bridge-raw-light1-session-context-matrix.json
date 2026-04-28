@@ -1,0 +1,79 @@
+{
+  "notes": [
+    "Session/context ownership probes for Light1 toggle behavior.",
+    "Inject client housekeeping frames observed in RS485 implementation before/around Light1 toggle.",
+    "Goal: determine whether channel/client context affects Light1 command application."
+  ],
+  "cases": [
+    {
+      "label": "light1_baseline_reference",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "session_nothing_to_send_bf07",
+      "frame_hex": "7e050abf077e7e",
+      "retries": 1,
+      "cooldown_ms": 600,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_after_bf07",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "session_id_ack_bf03",
+      "frame_hex": "7e050abf03627e",
+      "retries": 1,
+      "cooldown_ms": 600,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_after_bf03",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "session_existing_client_response_bf05",
+      "frame_hex": "7e080abf05043700ca7e",
+      "retries": 1,
+      "cooldown_ms": 600,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_after_bf05",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "session_combo_bf03_then_bf07",
+      "frame_hex": "7e050abf03627e",
+      "retries": 1,
+      "cooldown_ms": 100,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "session_combo_followup_bf07",
+      "frame_hex": "7e050abf077e7e",
+      "retries": 1,
+      "cooldown_ms": 600,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_after_combo",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    }
+  ]
+}

@@ -18,3 +18,11 @@ src/main.ino.cpp
 # Local Mosquitto in docker/mosquitto — optional secrets if you add password/TLS later
 docker/mosquitto/config/passwd
 docker/mosquitto/certs/
+
+# Generated bridge diagnostics outputs (keep matrix/example inputs tracked)
+docs/bridge-raw-*-live-run.json
+docs/bridge-raw-live-run.json
+docs/bridge-raw-live-*.json
+docs/bridge-raw-*-dry-run.json
+docs/bridge-raw-*-diff-*.json
+docs/bridge-raw-last-run.json

@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "label": "light1_toggle_dest0a_chanbf_pad00",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "light1_toggle_dest0a_chanaf_pad00",
+      "frame_hex": "7e070aaf111100627e",
+      "retries": 1,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "light1_toggle_dest0a_chanbf_nopad",
+      "frame_hex": "7e060abf1111617e",
+      "retries": 1,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "light1_toggle_destff_chanbf_pad00",
+      "frame_hex": "7e07ffbf111100e17e",
+      "retries": 1,
+      "cooldown_ms": 2000,
+      "timeout_ms": 1800
+    }
+  ]
+}

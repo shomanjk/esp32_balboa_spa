@@ -1,0 +1,71 @@
+{
+  "notes": [
+    "Light1-only deep diagnostics from recent findings.",
+    "Focus: state sequencing + cadence + channel/destination variations for 0x11 item 0x11."
+  ],
+  "cases": [
+    {
+      "label": "light1_ref_dest0a_chanbf_pad00_single",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_ref_dest0a_chanbf_pad00_double_100ms",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 2,
+      "cooldown_ms": 100,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_ref_dest0a_chanbf_pad00_triple_100ms",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 3,
+      "cooldown_ms": 100,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "pre_toggle_temp_range_item50",
+      "frame_hex": "7e070abf115000247e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_after_range_toggle_single",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 3000,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "pre_toggle_heating_mode_item51",
+      "frame_hex": "7e070abf115100237e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_after_heatingmode_toggle_single",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 3000,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_dest0a_chanaf_pad00_single",
+      "frame_hex": "7e070aaf111100627e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    },
+    {
+      "label": "light1_destff_chanbf_pad00_single",
+      "frame_hex": "7e07ffbf111100e17e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 2000
+    }
+  ]
+}

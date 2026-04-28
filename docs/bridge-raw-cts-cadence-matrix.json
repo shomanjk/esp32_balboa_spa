@@ -1,0 +1,44 @@
+{
+  "notes": [
+    "Timing cadence probe set inspired by spaControl and balboa_worldwide_app command pacing.",
+    "Objective: test whether short repeated toggles (100 ms cadence) improve command application.",
+    "Use on low-risk items first (light1, pump1) before any broader write tests."
+  ],
+  "cases": [
+    {
+      "label": "light1_single_toggle_reference",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "light1_double_toggle_100ms",
+      "frame_hex": "7e070abf111100057e",
+      "retries": 2,
+      "cooldown_ms": 100,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "pump1_single_toggle_reference",
+      "frame_hex": "7e070abf110400137e",
+      "retries": 1,
+      "cooldown_ms": 2500,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "pump1_double_toggle_100ms",
+      "frame_hex": "7e070abf110400137e",
+      "retries": 2,
+      "cooldown_ms": 100,
+      "timeout_ms": 1800
+    },
+    {
+      "label": "pump1_triple_toggle_100ms",
+      "frame_hex": "7e070abf110400137e",
+      "retries": 3,
+      "cooldown_ms": 100,
+      "timeout_ms": 1800
+    }
+  ]
+}
