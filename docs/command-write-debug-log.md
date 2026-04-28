@@ -501,3 +501,32 @@ Interpretation:
   - commands were armed and fired on next CTS as designed (`fired=true` every trial).
 - Even with confirmed CTS-edge execution, Light1 still did not transition in any trial.
 - This narrows likely root cause away from "missing ready-edge timing" and further toward controller-specific command acceptance semantics outside currently known `0x11` light toggle behavior.
+
+### 2026-04-28 decoded-byte CTS-edge trials (post-instrumentation update)
+
+Firmware:
+
+- `version=1.7.0`
+- `build=Apr 28 2026 - 12:42:13`
+- `restartReason=Software reset via esp_restart - OTA Update`
+
+Artifact:
+
+- `docs/diag-light1-next-cts-live-run-decoded.json`
+
+Trial groups:
+
+1. `default` (`observe_ms=4000`) x3
+2. `dest_id` (`observe_ms=4000`, `dest=id`) x2
+3. `pad_none` (`observe_ms=4000`, `pad=none`) x2
+
+Outcome:
+
+- `fired=true` across successful trials.
+- `light1Changed=0` in all successful trials.
+- Decoded status-byte snapshots (`hf`, `pp`, `lf`, `stRaw`) now included in each before/after payload for direct delta analysis.
+
+Interpretation:
+
+- Even with explicit CTS-edge firing and structured byte-level before/after decode in the endpoint, Light1 still shows no state transition.
+- This further de-risks timing-only explanations and reinforces controller-specific semantic mismatch hypotheses for this command family.

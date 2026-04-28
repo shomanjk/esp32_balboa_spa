@@ -38,6 +38,7 @@ void handleStatusControlsApi(AsyncWebServerRequest *request);
 void handleDiagToggleApi(AsyncWebServerRequest *request);
 void handleDiagToggleSequenceApi(AsyncWebServerRequest *request);
 void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request);
+void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
 void handleRs485Raw(AsyncWebServerRequest *request);
 void handleRs485History(AsyncWebServerRequest *request);
@@ -305,6 +306,7 @@ void spaWebServerLoop()
     server.on("/api/diag/toggle", HTTP_GET, handleDiagToggleApi);
     server.on("/api/diag/toggle_sequence", HTTP_GET, handleDiagToggleSequenceApi);
     server.on("/api/diag/light1_next_cts", HTTP_GET, handleDiagLight1NextCtsApi);
+    server.on("/api/diag/light1_next_cts_window", HTTP_GET, handleDiagLight1NextCtsWindowApi);
     server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
     server.on("/api/rs485", HTTP_GET, handleRs485);
@@ -509,6 +511,16 @@ static void fillPumpDiagSnapshot(JsonObject obj)
   obj["pump5On"] = statusPumpIsOn(5);
   obj["pump6On"] = statusPumpIsOn(6);
   obj["light1"] = spaStatusData.light1 ? 1 : 0;
+  obj["setTemp"] = spaStatusData.setTemp;
+  obj["heatingState"] = spaStatusData.heatingState;
+  if (spaStatusData.rawDataLength > 20)
+  {
+    JsonObject statusBytes = obj.createNestedObject("statusBytes");
+    statusBytes["hf"] = spaStatusData.rawData[10];
+    statusBytes["pp"] = spaStatusData.rawData[11];
+    statusBytes["lf"] = spaStatusData.rawData[14];
+    statusBytes["stRaw"] = spaStatusData.rawData[20];
+  }
 }
 
 /** Configuration byte 2: 0 = None, 1 = Present. */
@@ -1218,30 +1230,76 @@ void handleLogsPage(AsyncWebServerRequest *request)
 {
   String html = "<html>" + headLogs + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuLogs + "<main id='mainContent'><section class='panel'><h1>Device logs</h1>";
   html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. When <code>TELNET_LOG</code> is enabled, <code>nc &lt;host&gt; 23</code> is still the lowest-overhead tail.</p>";
+  html += R"HTML(<style>
+.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}
+.log-controls label{font-size:14px;color:var(--muted)}
+.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}
+.preset-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0}
+.preset-row button{flex:0 0 auto;padding:8px 11px;font-size:13px;min-height:36px}
+.status-row{display:flex;align-items:center;gap:10px;margin:0 0 10px 0;color:var(--muted);font-size:13px}
+.log-view{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:8px;border-radius:8px;border:1px solid var(--border)}
+.log-line{display:flex;gap:8px;padding:2px 4px;border-radius:4px;white-space:pre-wrap;word-break:break-word}
+.log-seq{color:#93a8c5;min-width:56px}
+.log-tag{display:inline-block;padding:0 6px;border-radius:999px;background:#233148;color:#d7e3f4;font-size:11px}
+.lvl-e{background:rgba(190,24,36,.2)} .lvl-w{background:rgba(202,138,4,.2)} .lvl-i{background:rgba(2,132,199,.16)} .lvl-v{background:rgba(71,85,105,.2)}
+#newBadge{display:none}
+</style>)HTML";
+  html += "<div class='preset-row'><button type='button' id='pAll'>All</button><button type='button' id='pErr'>Errors only</button><button type='button' id='pRs'>RS485</button><button type='button' id='pBridge'>BridgeDiag</button><button type='button' id='pWifi'>WiFi</button></div>";
   html += "<div class='log-controls'><label>Include <input type='text' id='fInc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
   html += "<label>Exclude <input type='text' id='fExc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
   html += "<label><input type='checkbox' id='pause'/> Pause</label>";
   html += "<label><input type='checkbox' id='useWs'/> WebSocket tail</label>";
-  html += "<button type='button' id='clr'>Clear view</button>";
+  html += "<label><input type='checkbox' id='autoScroll' checked/> Auto-scroll</label>";
+  html += "<button type='button' id='newBadge'>0 new lines</button>";
+  html += "<button type='button' id='clr'>Clear view</button><button type='button' id='copyTxt'>Copy</button><button type='button' id='dlTxt'>Download .log</button><button type='button' id='dlJson'>Download .json</button>";
   html += "<label>Level <select id='lvl'><option value='0'>SILENT</option><option value='1'>FATAL</option><option value='2'>ERROR</option><option value='3'>WARNING</option><option value='4'>NOTICE</option><option value='5'>TRACE</option><option value='6'>VERBOSE</option></select></label>";
   html += "<button type='button' id='applyLvl'>Apply level</button></div>";
-  html += "<pre id='logView' class='log-pre' aria-live='polite'></pre></section></main></div><script>";
-  html += "(function(){var pre=document.getElementById('logView');var since=0,pollMs=900,timer,ws,useWs=false;";
-  html += "var fInc=document.getElementById('fInc');var fExc=document.getElementById('fExc');var sel=document.getElementById('lvl');";
-  html += "function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.indexOf(i)<0)return false;if(x&&t.indexOf(x)>=0)return false;return true;}";
-  html += "function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){var t=arr[j].t;if(!passes(t))continue;var u=pre.textContent+t+'\\n';if(u.length>100000)u=u.slice(-80000);pre.textContent=u;}pre.scrollTop=pre.scrollHeight;}";
-  html += "function capSel(mx){if(!sel)return;var i,o;for(i=0;i<sel.options.length;i++){o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}";
-  html += "function poll(){if(document.hidden)return;fetch('/api/logs?since='+since+'&limit=120').then(function(r){return r.json();}).then(function(j){";
-  html += "if(typeof j.newestSeq==='number')since=j.newestSeq;if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);if(j.lines)appendLines(j.lines);}).catch(function(){});}";
-  html += "function startPoll(){stopPoll();timer=setInterval(poll,pollMs);poll();}";
-  html += "function stopPoll(){if(timer){clearInterval(timer);timer=null;}}";
-  html += "function connectWs(){var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');ws.onmessage=function(ev){try{var o=JSON.parse(ev.data);if(o.lines)appendLines(o.lines);if(o.d)appendLines(o.d);}catch(e){}};ws.onclose=function(){ws=null;};}";
-  html += "document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});";
-  html += "document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();if(ws){ws.close();ws=null;}if(!document.getElementById('pause').checked){if(useWs)connectWs();else startPoll();}});";
-  html += "document.getElementById('clr').addEventListener('click',function(){pre.textContent='';});";
-  html += "document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetch('/api/logs/config');}).then(function(r){return r.json();}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});";
-  html += "fetch('/api/logs/config').then(function(r){return r.json();}).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});";
-  html += "if(!document.getElementById('pause').checked)startPoll();})();</script></body></html>";
+  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='connState'></span></div>";
+  html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div><script>";
+  html += R"JS((function(){
+var logView=document.getElementById('logView'),since=0,pollMs=900,timer,ws,useWs=false,newBuffered=0;
+var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
+var pauseEl=document.getElementById('pause'),autoScrollEl=document.getElementById('autoScroll'),newBadge=document.getElementById('newBadge');
+var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),connState=document.getElementById('connState');
+var rendered=[],maxRendered=1200;
+function getTag(t){var m=t.match(/\[([^\]]+)\]/);return m?m[1]:'';}
+function getLevelClass(t){if(/\bE:|\bERROR\b/.test(t))return'lvl-e';if(/\bW:|\bWARNING\b/.test(t))return'lvl-w';if(/\bI:|\bNOTICE\b|\bINFO\b/.test(t))return'lvl-i';if(/\bTRACE\b|\bVERBOSE\b/.test(t))return'lvl-v';return'';}
+function esc(s){return s.replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.toLowerCase().indexOf(i.toLowerCase())<0)return false;if(x&&t.toLowerCase().indexOf(x.toLowerCase())>=0)return false;return true;}
+function renderLine(rec){var tag=getTag(rec.t),cls=getLevelClass(rec.t);var body=esc(rec.t);if(tag){body=body.replace('['+tag+']','<span class=\"log-tag\">['+esc(tag)+']</span>');}
+return '<div class=\"log-line '+cls+'\"><span class=\"log-seq\">#'+rec.s+'</span><span>'+body+'</span></div>';}
+function refreshFromRendered(){var out='',n=0;for(var i=0;i<rendered.length;i++){if(!passes(rendered[i].t))continue;out+=renderLine(rendered[i]);n++;}logView.innerHTML=out;renderCount.textContent=n+' lines';if(autoScrollEl.checked){logView.scrollTop=logView.scrollHeight;}}
+function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){rendered.push({s:arr[j].s,t:arr[j].t});if(rendered.length>maxRendered)rendered.shift();}refreshFromRendered();}
+function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;
+if(autoScrollEl.checked||atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
+else{newBuffered+=arr.length;newBadge.textContent=String(newBuffered)+' new lines';newBadge.style.display='inline-flex';for(var k=0;k<arr.length;k++){rendered.push({s:arr[k].s,t:arr[k].t});if(rendered.length>maxRendered)rendered.shift();}renderCount.textContent=rendered.length+' lines';}}
+function capSel(mx){for(var i=0;i<sel.options.length;i++){var o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}
+function poll(){if(document.hidden)return;fetch('/api/logs?since='+since+'&limit=120').then(function(r){return r.json();}).then(function(j){connState.textContent='ok';if(typeof j.newestSeq==='number')since=j.newestSeq;if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);receiveLines(j.lines||[]);}).catch(function(){connState.textContent='error';});}
+function startPoll(){stopPoll();streamMode.textContent='poll';timer=setInterval(poll,pollMs);poll();}
+function stopPoll(){if(timer){clearInterval(timer);timer=null;}}
+function connectWs(){streamMode.textContent='ws';var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');connState.textContent='connecting';
+ws.onopen=function(){connState.textContent='ws-open';};ws.onmessage=function(ev){try{var o=JSON.parse(ev.data);if(o.lines)receiveLines(o.lines);if(o.d)receiveLines(o.d);}catch(e){}};ws.onclose=function(){connState.textContent='ws-closed';ws=null;};}
+function setPreset(inc,exc){fInc.value=inc||'';fExc.value=exc||'';refreshFromRendered();}
+function dl(name,content,type){var b=new Blob([content],{type:type});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);}
+document.getElementById('pAll').addEventListener('click',function(){setPreset('','');});
+document.getElementById('pErr').addEventListener('click',function(){setPreset('E:','');});
+document.getElementById('pRs').addEventListener('click',function(){setPreset('[RS485]','');});
+document.getElementById('pBridge').addEventListener('click',function(){setPreset('[BridgeDiag]','');});
+document.getElementById('pWifi').addEventListener('click',function(){setPreset('[WiFi]','');});
+fInc.addEventListener('input',refreshFromRendered);fExc.addEventListener('input',refreshFromRendered);
+newBadge.addEventListener('click',function(){newBuffered=0;newBadge.style.display='none';refreshFromRendered();logView.scrollTop=logView.scrollHeight;});
+document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
+document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
+document.getElementById('clr').addEventListener('click',function(){rendered=[];refreshFromRendered();});
+document.getElementById('copyTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}navigator.clipboard.writeText(txt).catch(function(){});});
+document.getElementById('dlTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))txt+=rendered[i].t+'\n';}dl('spa-logs-'+Date.now()+'.log',txt,'text/plain');});
+document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(passes(rendered[i].t))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
+document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetch('/api/logs/config');}).then(function(r){return r.json();}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
+fetch('/api/logs/config').then(function(r){return r.json();}).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});
+if(!pauseEl.checked)startPoll();
+})();)JS";
+  html += "</script></body></html>";
   request->send(200, "text/html", html);
   Log.verbose("[Web]: handleLogsPage %p" CR, request->client()->remoteIP());
 }
@@ -1599,6 +1657,108 @@ void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request)
     doc["firedAt"] = rs485NextCtsFireCount();
     doc["waitElapsedMs"] = 0;
   }
+
+  JsonObject after = doc.createNestedObject("after");
+  fillPumpDiagSnapshot(after);
+  after["ctsMs"] = rs485LastCtsMs();
+  after["ctsCount"] = rs485CtsCount();
+  after["armCount"] = rs485NextCtsArmCount();
+  after["fireCount"] = rs485NextCtsFireCount();
+  after["queueDepth"] = static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue));
+
+  doc["light1Changed"] = before["light1"].as<int>() != after["light1"].as<int>();
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(16384);
+
+  int observeMs = 6000;
+  if (request->hasParam("observe_ms"))
+  {
+    observeMs = request->getParam("observe_ms")->value().toInt();
+  }
+  observeMs = constrain(observeMs, 500, 20000);
+
+  int sampleMs = 250;
+  if (request->hasParam("sample_ms"))
+  {
+    sampleMs = request->getParam("sample_ms")->value().toInt();
+  }
+  sampleMs = constrain(sampleMs, 100, 2000);
+
+  String dest = "wifi";
+  if (request->hasParam("dest"))
+  {
+    dest = request->getParam("dest")->value();
+    dest.toLowerCase();
+  }
+  bool useWifiDestination = (dest != "id");
+
+  bool includeZeroPad = true;
+  if (request->hasParam("pad"))
+  {
+    String pad = request->getParam("pad")->value();
+    pad.toLowerCase();
+    includeZeroPad = !(pad == "none" || pad == "0");
+  }
+
+  doc["dest"] = useWifiDestination ? "wifi" : "id";
+  doc["pad"] = includeZeroPad ? "00" : "none";
+  doc["observeMs"] = observeMs;
+  doc["sampleMs"] = sampleMs;
+
+  JsonObject before = doc.createNestedObject("before");
+  fillPumpDiagSnapshot(before);
+  before["ctsMs"] = rs485LastCtsMs();
+  before["ctsCount"] = rs485CtsCount();
+  before["armCount"] = rs485NextCtsArmCount();
+  before["fireCount"] = rs485NextCtsFireCount();
+  before["queueDepth"] = static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue));
+
+  String frameHex;
+  uint32_t armCount = 0;
+  SpaCommandResult result = spaSendToggleOnNextCtsDiagnostic(
+      0x11,
+      useWifiDestination,
+      includeZeroPad,
+      SPA_COMMAND_SOURCE_WEB,
+      &frameHex,
+      &armCount);
+  doc["ok"] = result.accepted;
+  doc["result"] = result.reason;
+  doc["frame"] = frameHex;
+  doc["armedAt"] = armCount;
+
+  JsonArray samples = doc.createNestedArray("samples");
+  const unsigned long startMs = millis();
+  const int maxSamples = 120;
+  bool fired = false;
+
+  while ((millis() - startMs) < static_cast<unsigned long>(observeMs))
+  {
+    JsonObject s = samples.createNestedObject();
+    s["tMs"] = millis() - startMs;
+    s["ctsCount"] = rs485CtsCount();
+    s["fireCount"] = rs485NextCtsFireCount();
+    fillPumpDiagSnapshot(s);
+    if (rs485NextCtsFireCount() >= armCount && result.accepted)
+    {
+      fired = true;
+    }
+    if (samples.size() >= static_cast<size_t>(maxSamples))
+    {
+      break;
+    }
+    delay(sampleMs);
+  }
+
+  doc["fired"] = fired;
+  doc["firedAt"] = rs485NextCtsFireCount();
+  doc["sampleCount"] = samples.size();
 
   JsonObject after = doc.createNestedObject("after");
   fillPumpDiagSnapshot(after);
