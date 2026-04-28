@@ -69,6 +69,7 @@ namespace
     dev["model"] = "ESP32 Balboa Gateway";
     dev["sw_version"] = VERSION;
     dev["manufacturer"] = "esp32_balboa_spa";
+    dev["configuration_url"] = String("http://") + String(gatewayName) + ".local/status";
   }
 
   String stateTopic(const char *group, const char *field)
@@ -144,7 +145,8 @@ namespace
   }
 
   void publishBinarySensor(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
-                           const char *group, const char *field, const char *icon = nullptr)
+                           const char *group, const char *field, const char *icon = nullptr,
+                           const char *payloadOn = "On", const char *payloadOff = "Off")
   {
     char objectId[48];
     buildObjectId(objectId, sizeof(objectId), objectSuffix);
@@ -158,14 +160,44 @@ namespace
     root["unique_id"] = uniqueId;
     root["object_id"] = objectId;
     root["state_topic"] = stateTopic(group, field);
-    root["payload_on"] = "On";
-    root["payload_off"] = "Off";
+    root["payload_on"] = payloadOn;
+    root["payload_off"] = payloadOff;
     addAvailability(root, mqttTopic);
     addDevice(root, macSlugStr);
     if (icon && icon[0])
       root["icon"] = icon;
 
     publishDoc("binary_sensor", objectId, doc);
+  }
+
+  void publishEnumSensor(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                         const char *group, const char *field, const char *const *options,
+                         size_t optionCount, const char *entityCategory = nullptr, const char *icon = nullptr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["device_class"] = "enum";
+    JsonArray opts = root.createNestedArray("options");
+    for (size_t i = 0; i < optionCount; i++)
+      opts.add(options[i]);
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (entityCategory && entityCategory[0])
+      root["entity_category"] = entityCategory;
+    if (icon && icon[0])
+      root["icon"] = icon;
+
+    publishDoc("sensor", objectId, doc);
   }
 
   /** Same rules as spaWebServer: pump/light two-bit 0 = not installed. */
@@ -242,6 +274,7 @@ namespace
       break;
     case HA_MISTER:
       retractDiscoveryConfig("sensor", "mister");
+      retractDiscoveryConfig("binary_sensor", "mister");
       break;
     case HA_MODEL:
       retractDiscoveryConfig("sensor", "model");
@@ -289,7 +322,8 @@ namespace
       publishBinarySensor(macSlugStr, "light2", "Spa light 2", "status", "light2");
       break;
     case HA_MISTER:
-      publishSensor(macSlugStr, "mister", "Spa mister", "status", "mister", nullptr, nullptr, nullptr, nullptr);
+      retractDiscoveryConfig("sensor", "mister");
+      publishBinarySensor(macSlugStr, "mister", "Spa mister", "status", "mister");
       break;
     case HA_MODEL:
       publishSensor(macSlugStr, "model", "Spa controller model", "information", "model", nullptr, nullptr, nullptr, "diagnostic");
@@ -304,6 +338,18 @@ namespace
 
   void publishMinimalDiscovery(const char *macSlugStr)
   {
+    static const char *HEATING_STATE_OPTIONS[] = {"Idle / not heating", "Heating (active)", "Heating (alternate stage)", "Reserved"};
+    static const char *SPA_STATE_OPTIONS[] = {"Running", "Initializing", "Hold Mode", "A/B Temps ON", "Test Mode"};
+    static const char *INIT_MODE_OPTIONS[] = {"Idle", "Priming Mode", "Fault", "Reminder", "Stage 1", "Stage 2", "Stage 3"};
+    static const char *HEATING_MODE_OPTIONS[] = {"Ready", "Rest", "Ready in Rest"};
+    static const char *FILTER_MODE_OPTIONS[] = {"Off", "Cycle 1", "Cycle 2", "Cycle 1 & 2"};
+    static const char *TEMP_RANGE_OPTIONS[] = {"Low Range", "High Range"};
+
+    // Retract retained discovery that changed platform/type.
+    retractDiscoveryConfig("sensor", "panel_locked");
+    retractDiscoveryConfig("sensor", "settings_lock");
+    retractDiscoveryConfig("sensor", "spa_time");
+
     publishSensor(macSlugStr, "current_temp", "Spa current temperature", "status", "currentTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
     publishSensor(macSlugStr, "set_temp", "Spa set temperature", "status", "setTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
     publishSensor(macSlugStr, "low_set_temp", "Spa low set temperature", "status", "lowSetTemp", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
@@ -311,17 +357,22 @@ namespace
     publishSensor(macSlugStr, "sensor_a", "Spa sensor A", "status", "sensorA", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
     publishSensor(macSlugStr, "sensor_b", "Spa sensor B", "status", "sensorB", "temperature", MQTT_HA_TEMP_UNIT, nullptr, nullptr, nullptr);
 
-    publishSensor(macSlugStr, "heating_state", "Spa heating state", "status", "heatingState", nullptr, nullptr, "measurement", nullptr, nullptr);
+    publishEnumSensor(macSlugStr, "heating_state", "Spa heating state", "status", "heatingState",
+                      HEATING_STATE_OPTIONS, sizeof(HEATING_STATE_OPTIONS) / sizeof(HEATING_STATE_OPTIONS[0]));
+    publishEnumSensor(macSlugStr, "spa_state", "Spa state", "status", "spaState", SPA_STATE_OPTIONS,
+                      sizeof(SPA_STATE_OPTIONS) / sizeof(SPA_STATE_OPTIONS[0]), nullptr, "mdi:hot-tub");
+    publishEnumSensor(macSlugStr, "init_mode", "Spa init mode", "status", "initMode", INIT_MODE_OPTIONS,
+                      sizeof(INIT_MODE_OPTIONS) / sizeof(INIT_MODE_OPTIONS[0]));
+    publishEnumSensor(macSlugStr, "heating_mode", "Spa heating mode", "status", "heatingMode",
+                      HEATING_MODE_OPTIONS, sizeof(HEATING_MODE_OPTIONS) / sizeof(HEATING_MODE_OPTIONS[0]));
+    publishEnumSensor(macSlugStr, "filter_mode", "Spa filter mode", "status", "filterMode",
+                      FILTER_MODE_OPTIONS, sizeof(FILTER_MODE_OPTIONS) / sizeof(FILTER_MODE_OPTIONS[0]), nullptr, "mdi:sync");
+    publishEnumSensor(macSlugStr, "temp_range", "Spa temperature range", "status", "tempRange",
+                      TEMP_RANGE_OPTIONS, sizeof(TEMP_RANGE_OPTIONS) / sizeof(TEMP_RANGE_OPTIONS[0]), nullptr,
+                      "mdi:thermometer-lines");
+    publishBinarySensor(macSlugStr, "panel_locked", "Spa panel locked", "status", "panelLocked", nullptr, "Locked", "Unlocked");
+    publishBinarySensor(macSlugStr, "settings_lock", "Spa settings lock", "status", "settingsLock", nullptr, "Locked", "Unlocked");
 
-    publishSensor(macSlugStr, "spa_state", "Spa state", "status", "spaState", nullptr, nullptr, nullptr, nullptr, "mdi:hot-tub");
-    publishSensor(macSlugStr, "init_mode", "Spa init mode", "status", "initMode", nullptr, nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "heating_mode", "Spa heating mode", "status", "heatingMode", nullptr, nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "filter_mode", "Spa filter mode", "status", "filterMode", nullptr, nullptr, nullptr, nullptr, "mdi:sync");
-    publishSensor(macSlugStr, "temp_range", "Spa temperature range", "status", "tempRange", nullptr, nullptr, nullptr, nullptr, "mdi:thermometer-lines");
-    publishSensor(macSlugStr, "panel_locked", "Spa panel locked", "status", "panelLocked", nullptr, nullptr, nullptr, nullptr, nullptr);
-    publishSensor(macSlugStr, "settings_lock", "Spa settings lock", "status", "settingsLock", nullptr, nullptr, nullptr, nullptr, nullptr);
-
-    publishSensor(macSlugStr, "spa_time", "Spa clock", "status", "time", nullptr, nullptr, nullptr, nullptr, nullptr);
     publishSensor(macSlugStr, "temp_scale", "Spa temperature scale", "status", "tempScale", nullptr, nullptr, nullptr, "diagnostic", nullptr);
   }
 

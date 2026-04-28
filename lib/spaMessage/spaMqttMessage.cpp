@@ -56,7 +56,7 @@ void publishSpaStatusData()
   PUBLISH_STATUS_ELEMENT(currentTemp, "%.2f");
   PUBLISH_STATUS_ELEMENT(time, "%s");
   PUBLISH_STATE_MAP(heatingMode, heatingModeMap);
-  PUBLISH_STATUS_ELEMENT(heatingState, "%u");
+  PUBLISH_STATE_MAP(heatingState, heatingStateMap);
 
   PUBLISH_STATUS_ELEMENT(reminderType, "%u");
   PUBLISH_STATUS_ELEMENT(sensorA, "%u");
@@ -81,13 +81,11 @@ void publishSpaStatusData()
   PUBLISH_STATE_MAP(light2, onOffMap);
   PUBLISH_STATE_MAP(mister, onOffMap);
 
-  PUBLISH_STATUS_ELEMENT(mister, "%u");
   PUBLISH_STATUS_ELEMENT(setTemp, "%.2f");
   PUBLISH_STATUS_ELEMENT(lowSetTemp, "%.2f");
   PUBLISH_STATUS_ELEMENT(highSetTemp, "%.2f");
   PUBLISH_STATUS_ELEMENT(notification, "%u");
   PUBLISH_STATUS_ELEMENT(flags19, "%u");
-  PUBLISH_STATUS_ELEMENT(settingsLock, "%u");
   PUBLISH_STATE_MAP(settingsLock, lockedMap);
   PUBLISH_STATUS_ELEMENT(m8CycleTime, "%u");
 

@@ -90,10 +90,17 @@ Place images under [`docs/`](docs/) or update paths below.
 
 **MQTT commands:** Subscribed `Spa/<gateway>/command` is **not** yet dispatched to the spa (handler still echoes); toggles/setpoint from MQTT are **not** implemented.
 
-**Home Assistant MQTT Discovery:** After each successful MQTT connect, the firmware publishes **retained** discovery configs under `homeassistant/<platform>/<object_id>/config`. In Home Assistant, entities appear under the MQTT integration as device **Balboa Spa** (sensors for temperatures, pumps, modes, etc.; binary sensors for loads that use **`On` / `Off`** payloads).
+**Home Assistant MQTT Discovery:** After each successful MQTT connect, the firmware publishes **retained** discovery configs under `homeassistant/<platform>/<object_id>/config`. In Home Assistant, entities appear under the MQTT integration as device **Balboa Spa**.
+
+- **Temperature values:** `current_temp`, `set_temp`, `low_set_temp`, `high_set_temp`, `sensor_a`, `sensor_b` are numeric temperature sensors.
+- **Enum/categorical values:** `heating_state`, `spa_state`, `init_mode`, `heating_mode`, `filter_mode`, `temp_range` publish human-readable strings and are discovered as enum sensors (not numeric measurements).
+- **Binary values:** `panel_locked`, `settings_lock`, `circ`, `blower`, `light1`, `light2`, `mister` are binary sensors with explicit on/off payloads.
+- **Clock entity:** `spa_time` is intentionally **not** discovered in HA to avoid noisy, non-actionable history churn.
+- **Device web link:** Discovery sets `device.configuration_url` to `http://<gatewayName>.local/status` so the HA device page can open the ESP web status page directly.
 
 - **Broker:** Use the Home Assistant [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) on the **same broker** as the ESP32. Default discovery prefix is `homeassistant/` (override with `MQTT_DISCOVERY_PREFIX` in `config.h` / defaults in [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h)).
 - **Temperature unit:** Discovery uses a static `unit_of_measurement` (default **°F**). For Celsius tubs, set `MQTT_HA_TEMP_UNIT` in `config.h` (see [`src/config-example.h`](src/config-example.h)).
+- **Web-link hostname:** `configuration_url` uses mDNS (`<gatewayName>.local`). If your network does not resolve mDNS, use a DHCP reservation + local DNS, or open the device by IP from HA.
 - **Disable discovery:** `#define MQTT_HA_DISCOVERY 0` in `config.h`.
 
 ---
