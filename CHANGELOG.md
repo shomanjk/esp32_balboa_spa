@@ -8,6 +8,14 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-04-28
+
+### Changed
+
+- **`/status` run-time readability** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Heater and filter run-time totals on the spa status page now render as **hours and minutes** (for example `2h 05m`) instead of raw seconds.
+- **`src/main.h`:** Firmware **`VERSION`** set to **1.6.1**.
+- **`lib/Analytics/Analytics.h`:** **`ANALYTICS_VERSION`** aligned with **`VERSION`** (**1.6.1**).
+
 ## [1.6.0] - 2026-04-28
 
 ### Added
@@ -259,7 +267,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.3...v1.5.0
 [1.4.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.2...v1.4.3

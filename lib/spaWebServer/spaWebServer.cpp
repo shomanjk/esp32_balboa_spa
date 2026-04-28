@@ -555,6 +555,23 @@ static String statusFormattedTempWithUnit(float v)
   return statusFormatTempValue(v) + statusTempDegreeSuffixStr();
 }
 
+static String statusFormatRuntimeHoursMinutes(unsigned long totalSeconds)
+{
+  const unsigned long totalMinutes = totalSeconds / 60UL;
+  const unsigned long hours = totalMinutes / 60UL;
+  const unsigned long minutes = totalMinutes % 60UL;
+
+  String out = formatNumberWithCommas(hours);
+  out += "h ";
+  if (minutes < 10UL)
+  {
+    out += "0";
+  }
+  out += String(minutes);
+  out += "m";
+  return out;
+}
+
 static String statusTempScaleDescription()
 {
   if (!statusSpaTempReady())
@@ -756,10 +773,10 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel\"><h2>Run times</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "Heater On Time Today", formatNumberWithCommas(spaStatusData.heaterOnTimeToday) + " (sec)");
-  appendStatusKvRow(html, "Heater On Time Yesterday", formatNumberWithCommas(spaStatusData.heaterOnTimeYesterday) + " (sec)");
-  appendStatusKvRow(html, "Filter On Time Today", formatNumberWithCommas(spaStatusData.filterOnTimeToday) + " (sec)");
-  appendStatusKvRow(html, "Filter On Time Yesterday", formatNumberWithCommas(spaStatusData.filterOnTimeYesterday) + " (sec)");
+  appendStatusKvRow(html, "Heater On Time Today", statusFormatRuntimeHoursMinutes(spaStatusData.heaterOnTimeToday));
+  appendStatusKvRow(html, "Heater On Time Yesterday", statusFormatRuntimeHoursMinutes(spaStatusData.heaterOnTimeYesterday));
+  appendStatusKvRow(html, "Filter On Time Today", statusFormatRuntimeHoursMinutes(spaStatusData.filterOnTimeToday));
+  appendStatusKvRow(html, "Filter On Time Yesterday", statusFormatRuntimeHoursMinutes(spaStatusData.filterOnTimeYesterday));
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Histories</h2>";
