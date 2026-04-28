@@ -8,7 +8,7 @@ This repo — **[shomanjk/esp32_balboa_spa](https://github.com/shomanjk/esp32_ba
 - **Fork workflow (push vs PR vs tags):** [FORK.md](FORK.md).
 - **AI / contributor orientation:** [AGENTS.md](AGENTS.md) (architecture, flags, known gaps, `config.h`).
 
-WiFI Enable your Balboa SPA using a ESP32 module connected to your spa controller using rs485 interface to Balboa SPA Controller.
+WiFi Enable your Balboa SPA using a ESP32 module connected to your spa controller using rs485 interface to Balboa SPA Controller.
 
 Multimode code base, with multiple user interfaces available.  Interfaces include MQTT, Web and ePaper display.
 
@@ -39,6 +39,16 @@ Credit for the code goes to https://github.com/jozefnad/balboa-spa
 Currently the WebSite buttons are not working.  I never got around to wiring them up.
 
 Legacy firmware-served pages (`/status`, `/config`, `/state`) now include responsive/mobile-friendly layout behavior (viewport scaling, wrapping nav, fluid chart/image sizing) for better phone usability.
+
+### JSON API (GET)
+
+| Path | Query | Purpose |
+| --- | --- | --- |
+| `/api/version` | — | Firmware `version`, `build`, `hostname`, `ip`, `restartReason`. |
+| `/api/wifi` | — | Wi‑Fi station: `connected`, `status` / `statusName`, `mac`, `hostname`; when connected: `ssid`, `rssi`, `ip`, `gateway`, `subnet`, `dns`, `channel`. |
+| `/api/rs485` | — | UART pins, baud, `autoTx`, byte/frame/CRC counters, polarity (`normal` / `inverted_rx_tx`), lock state, `health`. |
+| `/api/rs485/raw` | `limit` (default **80**, cap **256**) | Bounded recent RX bytes: `bytesHex`, `items[]` with `tMs`, `gapMs`, `byte`, `mode`, `uartAvailable`. |
+| `/api/rs485/history` | `limit` (default **20**, cap **60**) | Rolling RS485 snapshots (newest first): per-snapshot `health`, counters, `mode`, `detectPhase`. |
 
 ## Integration with Homebridge
 
