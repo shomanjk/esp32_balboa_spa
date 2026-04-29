@@ -72,6 +72,10 @@ Place images under [`docs/`](docs/) or update paths below.
 
 ![ESP state page](docs/esp-state.png)
 
+- Operator-first layout: Wi-Fi and system/RS485 health are surfaced at the top.
+- `Show advanced diagnostics` reveals low-level counters and time-debug internals on demand.
+- Advanced mode includes `API Shortcuts` links for `/api/wifi`, `/api/version`, `/api/rs485`, `/api/rs485/raw`, and `/api/rs485/history`.
+
 ### JSON API (`GET`)
 
 | Path | Query | Purpose |

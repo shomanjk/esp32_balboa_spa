@@ -1025,33 +1025,72 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}</style>";
-  String html = "<html>" + head + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper + "<div class='state-grid'><section class='panel'><h1>ESP State</h1><ul>";
-  html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
-  html += "<li><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
-  html += "<li><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
+  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}</style>";
+  String html = "<html>" + head + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
+  html += "<section class='panel'><div class='state-toolbar'><h1 style='margin:0'>ESP State</h1><label style='font-size:14px'><input id='toggleAdvanced' type='checkbox'/> Show advanced diagnostics</label></div>";
+  html += "<p style='margin:0 0 10px 0;font-size:14px;color:var(--muted)'>Signal-first layout keeps daily health visible. Data/API shortcuts are available below for direct endpoint access.</p></section>";
+  html += "<div class='state-grid'><section class='panel'><h1>System Health</h1><ul>";
   html += "<li><b>Uptime: </b>" + formatNumberWithCommas(millis() / 1000) + " s</li>";
-  html += "<li><b>Time: </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
-  html += "<li><b>Refresh Time: </b>" + webWallClockDisplayHtml(getTime() + static_cast<time_t>(60 * 60)) + "</li>";
+  html += "<li><b>Current Time: </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
   html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
   html += "<li><b>Firmware Version: </b>" + String(VERSION) + "</li>";
   html += "<li><b>Firmware Build: </b>" + String(BUILD) + "</li>";
+  html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
+  html += "<li class='advanced-only'><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
+  html += "<li class='advanced-only'><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
   String release = String(__DATE__) + " - " + String(__TIME__);
-  html += "<li><b>Release: </b>" + release + "</li>";
-  html += "<li><b>Build Definition: </b>" + buildDefinitionString + "</li>";
-
-  html += "<li class='spacer'></li><li><b>getTime(): </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
-  html += "<li><b>getHour(testLastCheckedTime): </b>" + formatNumberWithCommas(getHour(testLastCheckedTime)) + "</li>";
-  html += "<li><b>getHour(getTime()): </b>" + formatNumberWithCommas(getHour(getTime())) + "</li>";
-  html += "<li><b>hasDayChanged(testLastCheckedTime): </b>" + String(hasDayChanged(testLastCheckedTime)) + "</li>";
+  html += "<li class='advanced-only'><b>Release: </b>" + release + "</li>";
+  html += "<li class='advanced-only'><b>Build Definition: </b>" + buildDefinitionString + "</li>";
 
 #ifdef LOCAL_CLIENT
   String rsHealth = String(rs485HealthCode());
+  unsigned long rs485LastValidAgeMs = 0;
+  if (rs485Stats.lastValidFrameMs > 0)
+  {
+    rs485LastValidAgeMs = (millis() >= rs485Stats.lastValidFrameMs) ? (millis() - rs485Stats.lastValidFrameMs) : 0;
+  }
+  html += "<li class='spacer'></li><li><b>RS485 Health: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></li>";
+  html += "<li><b>RS485 Mode: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + String(rs485Stats.polarityInverted ? "#0f4a87" : "#4b5563") + "'>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</span></li>";
+  html += "<li><b>Valid Frames (today): </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
+  html += "<li><b>CRC Errors (today): </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
+  if (rs485Stats.lastValidFrameMs > 0)
+  {
+    html += "<li><b>Last Valid Frame Age: </b>" + formatNumberWithCommas(rs485LastValidAgeMs) + " ms</li>";
+  }
+  else
+  {
+    html += "<li><b>Last Valid Frame Age: </b>n/a</li>";
+  }
+#endif
 
-  html += "</ul></section><section class='panel'><h1>RS485 Diagnostics</h1><ul>";
-  html += "<li><b>Health: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></li>";
+  appendWifiStateSection(html);
+  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaStatusData.lastUpdate) + "</li>";
+  html += "<li class='advanced-only'><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
+
+  html += "</ul></section><section class='panel'><h1>Spa Data Freshness</h1>";
+  html += "<p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Core datasets summarize update age and retry pressure. Detailed internals remain under advanced diagnostics.</p>";
+  html += "<table class='state-freshness'><thead><tr><th>Dataset</th><th>Last Update</th><th>Stale</th><th>Retry</th></tr></thead><tbody>";
+  html += "<tr><td>Configuration</td><td>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</td><td>" + String(staleData(spaConfigurationData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaConfigurationData) ? "yes" : "no") + "</td></tr>";
+  html += "<tr><td>Preferences</td><td>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</td><td>" + String(staleData(spaPreferencesData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaPreferencesData) ? "yes" : "no") + "</td></tr>";
+  html += "<tr><td>Filters</td><td>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</td><td>" + String(staleData(spaFilterSettingsData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaFilterSettingsData) ? "yes" : "no") + "</td></tr>";
+  html += "<tr><td>Information</td><td>" + statusLastUpdateDisplayHtml(spaInformationData.lastUpdate) + "</td><td>" + String(staleData(spaInformationData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaInformationData) ? "yes" : "no") + "</td></tr>";
+  html += "<tr><td>Fault</td><td>" + statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) + "</td><td>" + String(staleData(spaFaultLogData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaFaultLogData) ? "yes" : "no") + "</td></tr>";
+  html += "<tr><td>spaSettings0x04Data</td><td>" + statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) + "</td><td>" + String(staleData(spaSettings0x04Data) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaSettings0x04Data) ? "yes" : "no") + "</td></tr>";
+  html += "</tbody></table></section>";
+
+  html += "<section class='panel'><h1 id='api-shortcuts'>API Shortcuts</h1><p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Raw/history endpoints can be noisy and large.</p><ul>";
+  html += "<li><b>Live Wi-Fi snapshot: </b><a href='/api/wifi' target='_blank' rel='noopener'>GET /api/wifi</a></li>";
+  html += "<li><b>Firmware metadata: </b><a href='/api/version' target='_blank' rel='noopener'>GET /api/version</a></li>";
+  html += "<li><b>RS485 summary diagnostics: </b><a href='/api/rs485' target='_blank' rel='noopener'>GET /api/rs485</a></li>";
+  html += "<li><b>RS485 raw byte trace: </b><a href='/api/rs485/raw?limit=200' target='_blank' rel='noopener'>GET /api/rs485/raw?limit=200</a></li>";
+  html += "<li><b>RS485 history snapshots: </b><a href='/api/rs485/history?limit=200' target='_blank' rel='noopener'>GET /api/rs485/history?limit=200</a></li>";
+  html += "</ul></section>";
+
+  html += "<section class='panel advanced-panel'><h1>Advanced Diagnostics</h1>";
+
+#ifdef LOCAL_CLIENT
+  html += "<details><summary>RS485 deep counters</summary><ul>";
   html += "<li><b>Hint: </b>" + rs485HealthHint(rsHealth) + "</li>";
-  html += "<li><b>Mode: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + String(rs485Stats.polarityInverted ? "#0f4a87" : "#4b5563") + "'>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</span></li>";
   html += "<li><b>Mode Hint: </b>" + rs485ModeHint(rs485Stats.polarityInverted) + "</li>";
   html += "<li><b>Detect Phase: </b>" + String(rs485Stats.polarityLocked ? "2 (locked)" : (rs485Stats.polarityInverted ? "1 (testing inverted_rx_tx)" : "0 (testing normal)")) + "</li>";
   html += "<li><b>Polarity Locked: </b>" + String(rs485Stats.polarityLocked ? "yes" : "no") + "</li>";
@@ -1060,8 +1099,6 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Raw Bytes (inverted today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
   html += "<li><b>Frame Attempts (today): </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
   html += "<li><b>0x7E Markers (today): </b>" + formatNumberWithCommas(rs485Stats.frameMarkersToday) + "</li>";
-  html += "<li><b>Valid Frames (today): </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
-  html += "<li><b>CRC Errors (today): </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
   html += "<li><b>Format Errors (today): </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
   html += "<li><b>Mode Switches (today): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesToday) + "</li>";
   html += "<li><b>Max UART Backlog (today): </b>" + formatNumberWithCommas(rs485Stats.maxUartAvailableToday) + "</li>";
@@ -1075,86 +1112,13 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Format Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
   html += "<li><b>Mode Switches (yesterday): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesYesterday) + "</li>";
   html += "<li><b>Max UART Backlog (yesterday): </b>" + formatNumberWithCommas(rs485Stats.maxUartAvailableYesterday) + "</li>";
-  html += "<li class='spacer'></li><li><b>Last Byte Millis: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
-  html += "<li><b>Last Valid Frame Millis: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
   html += "<li><b>UART Pins: </b>RX GPIO " + String(rs485RxGpio()) + ", TX GPIO " + String(rs485TxGpio()) + ", " + String(rs485Baud()) + " baud</li>";
   html += "<li><b>AUTO_TX: </b>" + String(rs485AutoTxEnabled() ? "true" : "false") + "</li>";
   html += "<li><b>Polarity Inverted (raw): </b>" + String(rs485Stats.polarityInverted) + "</li>";
   html += "<li><b>Health Code (raw): </b>" + rsHealth + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>RS485 Raw Counters</h1><ul>";
-  html += "<li class='spacer'></li><li><b>rs485 messagesToday: </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
-  html += "<li><b>rs485 rawBytesToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesToday) + "</li>";
-  html += "<li><b>rs485 rawBytesNormalToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</li>";
-  html += "<li><b>rs485 rawBytesInvertedToday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
-  html += "<li><b>rs485 framesToday: </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
-  html += "<li><b>rs485 frameMarkersToday: </b>" + formatNumberWithCommas(rs485Stats.frameMarkersToday) + "</li>";
-  html += "<li><b>rs485 crcToday: </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
-  html += "<li><b>rs485 messagesYesterday: </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
-  html += "<li><b>rs485 rawBytesYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
-  html += "<li><b>rs485 rawBytesNormalYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</li>";
-  html += "<li><b>rs485 rawBytesInvertedYesterday: </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</li>";
-  html += "<li><b>rs485 framesYesterday: </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
-  html += "<li><b>rs485 frameMarkersYesterday: </b>" + formatNumberWithCommas(rs485Stats.frameMarkersYesterday) + "</li>";
-  html += "<li><b>rs485 crcYesterday: </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
-  html += "<li><b>rs485 badFormatToday: </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
-  html += "<li><b>rs485 badFormatYesterday: </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
-  html += "<li><b>rs485 polarityInverted: </b>" + String(rs485Stats.polarityInverted) + "</li>";
-  html += "<li><b>rs485 polarityLocked: </b>" + String(rs485Stats.polarityLocked) + "</li>";
-  html += "<li><b>rs485 mode: </b>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</li>";
-  html += "<li><b>rs485 detectPhase: </b>" + String(rs485Stats.polarityLocked ? "2" : (rs485Stats.polarityInverted ? "1" : "0")) + "</li>";
-  html += "<li><b>rs485 lastByteMs: </b>" + formatNumberWithCommas(rs485Stats.lastByteMs) + "</li>";
-  html += "<li><b>rs485 lastValidFrameMs: </b>" + formatNumberWithCommas(rs485Stats.lastValidFrameMs) + "</li>";
-  html += "<li><b>rs485 raw endpoint: </b>/api/rs485/raw?limit=80</li>";
+  html += "</ul></details>";
 #endif
-
-  appendWifiStateSection(html);
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaStatusData.lastUpdate) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>Configuration Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastRequest) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaConfigurationData.magicNumber) + "</li>";
-  html += "<li><b>staleData: </b>" + String(staleData(spaConfigurationData)) + "</li>";
-  html += "<li><b>retryRequest: </b>" + String(retryRequest(spaConfigurationData)) + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>Preferences Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastRequest) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaPreferencesData.magicNumber) + "</li>";
-  html += "<li><b>staleData: </b>" + String(staleData(spaPreferencesData)) + "</li>";
-  html += "<li><b>retryRequest: </b>" + String(retryRequest(spaPreferencesData)) + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>Filters Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastRequest) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaFilterSettingsData.magicNumber) + "</li>";
-  html += "<li><b>staleData: </b>" + String(staleData(spaFilterSettingsData)) + "</li>";
-  html += "<li><b>retryRequest: </b>" + String(retryRequest(spaFilterSettingsData)) + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>Information Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaInformationData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaInformationData.lastRequest) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaInformationData.magicNumber) + "</li>";
-  html += "<li><b>staleData: </b>" + String(staleData(spaInformationData)) + "</li>";
-  html += "<li><b>retryRequest: </b>" + String(retryRequest(spaInformationData)) + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>Fault Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaFaultLogData.lastRequest) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaFaultLogData.magicNumber) + "</li>";
-  html += "<li><b>staleData: </b>" + String(staleData(spaFaultLogData)) + "</li>";
-  html += "<li><b>retryRequest: </b>" + String(retryRequest(spaFaultLogData)) + "</li>";
-
-  html += "</ul></section><section class='panel'><h1>spaSettings0x04Data Status</h1><ul>";
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) + "</li>";
-  html += "<li><b>lastRequest: </b>" + statusLastUpdateDisplayHtml(spaSettings0x04Data.lastRequest) + "</li>";
-  html += "<li><b>magicNumber: </b>" + String(spaSettings0x04Data.magicNumber) + "</li>";
-  html += "<li><b>staleData: </b>" + String(staleData(spaSettings0x04Data)) + "</li>";
-  html += "<li><b>retryRequest: </b>" + String(retryRequest(spaSettings0x04Data)) + "</li>";
-
-  html += "</ul></section></div></main></div></body></html>";
+  html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script></main></div></body></html>";
 
   request->send(200, "text/html", html);
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
