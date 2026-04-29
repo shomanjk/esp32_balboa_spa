@@ -8,6 +8,26 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-04-29
+
+### Highlights
+
+- **Reliable spa command writes (major milestone):** Tub-side **Balboa `0x11` (toggle)** and **`0x20` (set temperature)** frames built in [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp) now use the same **`addCRC`** path as [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp) (Balboa CRC-8 per [protocol.md](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)), fixing wire-invalid checksums that prevented the controller from acting on portal-issued commands. The web SCI layer (`device_request` **`Button`** / **`SetTemp`**) dispatches through this stack; **`spaSetTargetTemperature`** enforces protocol setpoint bands by **°F/°C** and **high/low range**. Together with **`/status`** controls, polling, and range UX below, **2.0.0** marks the fork line where operators can trust gateway-initiated writes in normal use. *(The CRC alignment first shipped as **1.8.1**; it is included in the story for this release.)*
+
+### Added
+
+- **`/status` temperature range UX** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): High/low setpoint bands with clear active highlighting, **Use high range** / **Use low range** buttons (Balboa toggle item **80** / `0x50`), scope label on Set temp, and polling updates for bands, range buttons, and setpoint input bounds.
+- **`/status` Spa and heating panel** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): At-a-glance hero (spa state + thermometer icon), colored chips for heating activity and needs-heat, short mode vs state hint, chart jump link to heater history, collapsible raw codes, and **polling** updates without reload.
+- **`spaProtocolActiveSetpointBand`** ([`lib/spaMessage/spaCommandDispatcher.h`](lib/spaMessage/spaCommandDispatcher.h), [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): Central Balboa **`0x20`** limits by °F/°C and active high/low range ([protocol.md](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)); **`spaSetTargetTemperature`** rejects out-of-band values before enqueueing.
+
+### Changed
+
+- **`/status` page header** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Removed the **Data sync** panel; **snapshot freshness** (relative age since last bus status apply + gateway-local timestamp) appears as muted text to the right of **Spa Status** (stacks on narrow view) and refreshes with the existing **`/api/status/controls`** poll.
+- **`/state` advanced** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **`spaStatusData.magicNumber`** is labeled **Spa status struct magic (ESP RAM)** with a short note that it is firmware-side (expected **`0x12345678`** after init), not from the spa controller.
+- **`/status` ESP memory panel removed** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Free heap / PSRAM / stack now appear only on **`/state`** (System Health; PSRAM and stack under **Show advanced diagnostics**), avoiding duplicate gateway metrics on the spa-focused page.
+- **`GET /api/status/controls`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): JSON now includes **`tempRange`**, **`highSetTemp`**, **`lowSetTemp`**, **`setTempMin`**, **`setTempMax`**, spa/heating fields (**`spaState`**, **`spaStateText`**, **`initMode`**, **`initModeText`**, **`heatingMode`**, **`heatingModeText`**, **`heatingState`**, **`heatingStateText`**, **`needsHeat`**), and snapshot helpers (**`snapshotAgeSec`**, **`snapshotAtLocal`**, **`snapshotMeta`**) for the `/status` header line (`DynamicJsonDocument` size **2048**).
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.0.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [1.8.1] - 2026-04-29
 
 ### Fixed
@@ -321,7 +341,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.1...v2.0.0
 [1.8.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.1...v1.7.2

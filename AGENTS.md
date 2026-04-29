@@ -4,7 +4,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 ## Project
 
-- **Purpose:** ESP32 firmware to talk **Balboa** spa controllers: read status (temperature, pumps, etc.) and (when implemented) send commands over the Balboa serial protocol.
+- **Purpose:** ESP32 firmware to talk **Balboa** spa controllers: read status (temperature, pumps, etc.) and **send v1 commands** over RS485 from the **firmware web portal** (`/devices/sci` **`Button`** / **`SetTemp`**, plus interactive **`/status`** controls) via [`spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp). **MQTT** command dispatch remains a known gap.
 - **Maintained fork:** Ongoing work lives in this repo; upstream ESP8266-era projects are archival. See [FORK.md](FORK.md) and [README.md](README.md) (“About this fork” + self-contained sections; **collapsed** verbatim snapshot of [NorthernMan54/esp32_balboa_spa](https://github.com/NorthernMan54/esp32_balboa_spa) `ESP32` README at the bottom for lineage).
 - **Protocol reference:** [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md) (linked from README).
 
@@ -52,7 +52,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 | MQTT publish | [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp) | Status/config topics under `Spa/<gateway>/…`. |
 | **Home Assistant MQTT Discovery** | [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp) | After connect: **minimal** discovery (core status only). **Equipment** discovery expands after spa **config** / **information** frames (same rules as web `/status`); retracts optional discovery for slots not in the desired set (clears stale retained broker configs, not only in-RAM this boot). **`availability_topic`** = `Spa/<gateway>/node/state`. See [HA MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery). |
 | MQTT subscribe / commands | [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp) | **Known gap:** callback currently **echoes** payloads; commands not implemented. |
-| Web / SCI emulation | [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) | **`parseBody`**: reads work; **`device_request` / buttons** not fully wired. Multi-chunk POST body handling is implemented. When no spa data exists yet, `/devices/sci` returns explicit not-ready XML (`ready=false`, `error=no_spa_data_yet`) instead of 404. JSON: **`GET /api/version`**, **`GET /api/wifi`** (Wi‑Fi status/RSSI for `/state` live section + chart). **Logs:** **`GET /logs`** (portal page), **`GET /api/logs?since=&limit=`**, **`WebSocket /api/logs/ws`**, **`GET/POST /api/logs/config`** (runtime log level); capture in [`lib/webLogBuffer/`](lib/webLogBuffer/) (tee on `Serial`). |
+| Web / SCI emulation | [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) | **`parseBody`**: reads work; **`device_request`** dispatches **`Button`** and **`SetTemp`** to [`spaCommandDispatcher`](lib/spaMessage/spaCommandDispatcher.cpp) (Balboa **`0x11`** / **`0x20`**) with accepted/rejected XML. Multi-chunk POST body handling is implemented. When no spa data exists yet, `/devices/sci` returns explicit not-ready XML (`ready=false`, `error=no_spa_data_yet`) instead of 404. **`GET /api/status/controls`** feeds live **`/status`** polling. JSON: **`GET /api/version`**, **`GET /api/wifi`**. **Logs:** **`GET /logs`**, **`GET /api/logs?since=&limit=`**, **`WebSocket /api/logs/ws`**, **`GET/POST /api/logs/config`**; capture in [`lib/webLogBuffer/`](lib/webLogBuffer/) (tee on `Serial`). |
 | TCP bridge (LAN clients) | [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp) | Port **4257**; forwards to RS485 via [`cacheRead.cpp`](lib/spaMessage/cacheRead.cpp) / `sendMessageToSpa`. |
 | Remote TCP to spa | [`lib/spaRemoteCommunication/spaCommunication.cpp`](lib/spaRemoteCommunication/spaCommunication.cpp) | Only when **`REMOTE_CLIENT`** is defined. |
 | Main loop / init | [`src/main.ino`](src/main.ino) | Conditional compilation per flags above. |
@@ -61,14 +61,13 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 ## Known product gaps (do not assume they work)
 
-1. **MQTT commands** — subscribe exists; handler does not dispatch commands to `sendMessageToSpa`.
-2. **Web UI buttons** — README states not wired; `parseBody` logs `device_request` but does not send toggles.
-3. **Command framing** — implement Balboa **0x11** (toggle) / **0x20** (set temp) etc. with correct CRC; reuse patterns from [`rs485.cpp`](lib/localRS485Communication/rs485.cpp) `addCRC` / [`balboa.h`](lib/spaMessage/balboa.h) prebuilt frames.
+1. **MQTT commands** — subscribe exists; handler still **echoes** payloads and does not dispatch to `sendMessageToSpa` / dispatcher.
+2. **LittleFS `balboa-spa` tab** — upstream-style SPA bundle may not expose the same controls as firmware **`/status`**; treat as read-first unless verified for your build.
 
 ## Active command-write scope
 
-- **v1 in scope:** web + MQTT command path for Balboa **`0x11`** (toggle/button) and **`0x20`** (set temperature) only.
-- **Deferred after v1:** `SystemTime`, `TimeFormat`, `TempUnits`, and broader settings writes.
+- **v1 shipped (web):** **`0x11`** toggles (including **`/status`** equipment + temp range item **80**) and **`0x20`** set temperature via shared dispatcher + RS485 **`addCRC`**; **`spaSetTargetTemperature`** enforces protocol setpoint bands.
+- **v1 deferred:** MQTT command topic; `SystemTime`, `TimeFormat`, `TempUnits`, and broader settings writes beyond **`0x11`** / **`0x20`**.
 - **Protocol authority for wire behavior:** [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md); validate frame bytes and payload semantics there before enabling each new command family.
 
 ## Roadmap (deferred)
