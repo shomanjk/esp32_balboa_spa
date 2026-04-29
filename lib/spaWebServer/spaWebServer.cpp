@@ -793,6 +793,8 @@ static void appendStatusHistoriesSection(String &html)
 void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
+  String html;
+  html.reserve(48000);
   const char *statusStyle =
       "<style>"
       ".status-page-title{color:#0f4a87;font-size:1.1rem;margin:0 0 var(--space-3) 0;line-height:1.3;}"
@@ -828,9 +830,9 @@ void handleStatus(AsyncWebServerRequest *request)
       ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       "</style>";
 
-  String html = "<html>" + head + String(statusStyle) +
-                "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus +
-                "<main id='mainContent'>" + ePaper + "<h1 class=\"status-page-title\">Spa Status</h1><div class=\"status-layout\">";
+  html = "<html>" + head + String(statusStyle) +
+         "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus +
+         "<main id='mainContent'>" + ePaper + "<h1 class=\"status-page-title\">Spa Status</h1><div class=\"status-layout\">";
 
   html += "<section class=\"panel\"><h2>Data sync</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "lastUpdate", statusLastUpdateDisplayHtml(spaStatusData.lastUpdate));
@@ -1011,7 +1013,9 @@ void handleConfig(AsyncWebServerRequest *request)
 {
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
 
-  String html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Configuration</h1><ul>";
+  String html;
+  html.reserve(24000);
+  html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Configuration</h1><ul>";
   if (spaConfigurationData.lastUpdate == 0)
   {
     html += "<li><b>Spa Configuration not available</b></li>";
@@ -1047,14 +1051,7 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "<li><b>Filter 2 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</li>";
     html += "</ul></section><section class='panel'><h1>LittleFS Configuration</h1><ul>";
 
-    if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED))
-    {
-      html += "<li><b>Error LittleFS Mount Failed </b></li>";
-    }
-    else
-    {
-      html += "<li>" + listDirToString(LittleFS, "/", 3) + "</li>";
-    }
+    html += "<li>" + listDirToString(LittleFS, "/", 3) + "</li>";
     // Add more fields as needed
   }
   html += "</ul></section></main></div></body></html>";
@@ -1069,7 +1066,9 @@ void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
   String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}</style>";
-  String html = "<html>" + head + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
+  String html;
+  html.reserve(32000);
+  html = "<html>" + head + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
   html += "<section class='panel'><div class='state-toolbar'><h1 style='margin:0'>ESP State</h1><label style='font-size:14px'><input id='toggleAdvanced' type='checkbox'/> Show advanced diagnostics</label></div>";
   html += "<p style='margin:0 0 10px 0;font-size:14px;color:var(--muted)'>Signal-first layout keeps daily health visible. Data/API shortcuts are available below for direct endpoint access.</p></section>";
   html += "<div class='state-grid'><section class='panel'><h1>System Health</h1><ul>";
@@ -1235,7 +1234,9 @@ void handleLogsConfigPost(AsyncWebServerRequest *request)
 
 void handleLogsPage(AsyncWebServerRequest *request)
 {
-  String html = "<html>" + headLogs + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuLogs + "<main id='mainContent'><section class='panel'><h1>Device logs</h1>";
+  String html;
+  html.reserve(28000);
+  html = "<html>" + headLogs + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuLogs + "<main id='mainContent'><section class='panel'><h1>Device logs</h1>";
   html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. When <code>TELNET_LOG</code> is enabled, <code>nc &lt;host&gt; 23</code> is still the lowest-overhead tail.</p>";
   html += R"HTML(<style>
 .log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
@@ -2263,12 +2264,42 @@ void handleSlash(AsyncWebServerRequest *request)
   request->send(response);
 }
 
+/** Cache-Control for static LittleFS files: hashed SPA chunks vs entry HTML. */
+static void addCacheControlForLittleFsPath(AsyncWebServerResponse *response, const String &urlPath)
+{
+  if (!response)
+  {
+    return;
+  }
+  const char *cacheControl;
+  if (urlPath.indexOf("/assets/") >= 0)
+  {
+    cacheControl = "public, max-age=31536000, immutable";
+  }
+  else if (urlPath == "/index.html" || urlPath.endsWith("/index.html"))
+  {
+    cacheControl = "no-cache";
+  }
+  else
+  {
+    cacheControl = "public, max-age=3600";
+  }
+  response->addHeader("Cache-Control", cacheControl);
+}
+
+static void sendLittleFsFileWithCache(AsyncWebServerRequest *request, const String &path)
+{
+  AsyncWebServerResponse *response = request->beginResponse(LittleFS, path, String(), false);
+  addCacheControlForLittleFsPath(response, path);
+  request->send(response);
+}
+
 void handleNotFound(AsyncWebServerRequest *request)
 {
   if (LittleFS.exists(request->url()))
   {
     Log.verbose("[Web]: LFS %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
-    request->send(LittleFS, request->url(), String(), false);
+    sendLittleFsFileWithCache(request, request->url());
     return;
   }
 

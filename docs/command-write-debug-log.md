@@ -2,6 +2,13 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-04-29 - Dispatcher CRC aligned with RS485 (`VERSION` 1.8.1)
+
+- **Change:** [`lib/spaMessage/spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) now calls shared [`addCRC`](../lib/localRS485Communication/rs485.cpp) (same CRC-8 as [`protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md) / RS485 path) instead of a divergent local implementation.
+- **OTA:** `M5AtomLite-tub-ota` upload to the tub-side unit succeeded when targeting the device **LAN IP** (`pio run -e M5AtomLite-tub-ota -t upload --upload-port <ip>`); hostname-only espota had been aborting mid-transfer in some environments.
+- **Outcome (Light 1):** After OTA, **`GET /api/diag/light1_next_cts`** reported the framed toggle as `7e 07 0a bf 11 11 00 93 7e` (CRC `0x93`). **Confirmed at the physical spa:** Light 1 was **on** (human observation at the tub), matching the intended command effect even though the short diagnostic window had previously reported `light1Changed=false` from sampled status alone.
+- **Outcome (Pump 2 on):** **`GET /api/diag/toggle?item=5`** (Balboa item `0x05` = pump 2) queued `7e 07 0a bf 11 05 00 90 7e`. **`GET /api/status/controls`** before: `pump2=0`, `pump2On=false`; after ~4s: `pump2=2`, `pump2On=true` (spa applied the toggle over RS485).
+
 ## 2026-04 - Command write bring-up (web + MQTT path)
 
 - Added shared dispatcher for outbound commands (`toggle` and `set_temp`) to centralize frame construction and queueing.
