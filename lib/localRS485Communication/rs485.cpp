@@ -20,7 +20,6 @@
 // Local functions
 
 void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
-void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 bool isMessageValid(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 void sendExistingClientResponse(uint8_t id);
 void applyRs485Polarity(bool inverted);

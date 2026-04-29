@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-04-29
+
+### Fixed
+
+- **Spa command CRC matches RS485 / protocol** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/localRS485Communication/rs485.h`](lib/localRS485Communication/rs485.h)): Outbound `0x11` / `0x20` frames from the shared dispatcher now use the same **`addCRC`** path as [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp) (Balboa CRC-8 per [protocol.md](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)) instead of a divergent CRC implementation that produced wire-invalid checksums.
+
+### Changed
+
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`1.8.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [1.8.0] - 2026-04-29
 
 ### Added
@@ -311,7 +321,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.1...v1.7.2
 [1.6.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.0...v1.6.1

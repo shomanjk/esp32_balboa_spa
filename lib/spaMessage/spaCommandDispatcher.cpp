@@ -12,9 +12,6 @@
 namespace
 {
 const uint8_t kBroadcastChannel = 0xBF;
-const uint8_t kSof = 0x7E;
-const uint8_t kEof = 0x7E;
-const uint8_t kCrcPolynomial = 0x07;
 
 const float kFallbackMinTempF = 50.0f;
 const float kFallbackMaxTempF = 110.0f;
@@ -48,41 +45,9 @@ uint8_t destinationIdForMode(bool useWifiDestination)
   return id;
 }
 
-uint8_t crc8(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
-{
-  uint8_t crc = 0xB5;
-
-  for (unsigned int cur = 0; cur < data.size(); cur++)
-  {
-    for (unsigned int i = 0x80; i != 0; i /= 2)
-    {
-      bool bit = crc & 0x80;
-      if (data[cur] & i)
-      {
-        bit = !bit;
-      }
-      crc <<= 1;
-      if (bit)
-      {
-        crc ^= kCrcPolynomial;
-      }
-    }
-    crc &= 0xFF;
-  }
-  return crc ^ 0x02;
-}
-
-void addFramingAndCrc(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
-{
-  data.unshift(data.size() + 2);
-  data.push(crc8(data));
-  data.unshift(kSof);
-  data.push(kEof);
-}
-
 SpaCommandResult queueFrame(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &frame, const char *logAction, SpaCommandSource source, String *outFrameHex = nullptr)
 {
-  addFramingAndCrc(frame);
+  addCRC(frame);
   if (outFrameHex != nullptr)
   {
     *outFrameHex = msgToString(frame);
@@ -218,7 +183,7 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
   {
     frame.push(0x00);
   }
-  addFramingAndCrc(frame);
+  addCRC(frame);
   if (outFrameHex != nullptr)
   {
     *outFrameHex = msgToString(frame);
