@@ -8,6 +8,8 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-04-29
+
 ### Added
 
 - **Web log viewer** ([`lib/webLogBuffer/`](lib/webLogBuffer/), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/main.ino`](src/main.ino)): Portal **`/logs`** tab with include/exclude filters, pause, HTTP poll of **`GET /api/logs`**, optional **`WebSocket /api/logs/ws`** tail (broadcast from main loop, not from the logger path), and **`GET`/`POST /api/logs/config`** for runtime **`Log.setLevel`** (clamped to compile-time `LOG_LEVEL`). Serial output unchanged; ring buffer holds the last 80 lines (~15 KB RAM).
@@ -29,6 +31,7 @@ where version numbers are used.
 
 ### Changed
 
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`1.7.2`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 - **Wi-Fi offline self-heal watchdog** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp), [`lib/wifiModule/wifiModule.h`](lib/wifiModule/wifiModule.h), [`src/config-example.h`](src/config-example.h)): Added timed offline restart recovery (default 10 minutes offline, minimum uptime 2 minutes, throttled progress logs). When connectivity returns, the watchdog state clears and logs recovery duration.
 - **Single-speed pump normalization for controls/status** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Status/control rendering and control-state matching now normalize configured 1-speed pumps to binary On/Off semantics (`pumpNOn`) while preserving raw pump values in diagnostics, reducing false multi-speed assumptions on single-speed spa setups.
 - **Bridge-to-RS485 observability** ([`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp), [`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)): Added `[BridgeDiag]` logs for ingress ids, forwarding decisions, queue depth at enqueue/dequeue, and RS485 send timing to correlate raw bridge injections with on-wire transmission.
@@ -293,7 +296,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.1...v1.7.2
 [1.6.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.4.3...v1.5.0
