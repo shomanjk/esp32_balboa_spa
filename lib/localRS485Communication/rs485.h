@@ -5,6 +5,9 @@
 #include <CircularBuffer.hpp>
 #include "../../src/main.h"
 
+/** Balboa wire framing: prepend length, append CRC-8 (per protocol), wrap 0x7E … 0x7E. Same as RS485 transmit path. */
+void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
+
 #define RS485_WRITE_QUEUE 10
 #define RS485_HISTORY_SIZE 60
 #define RS485_RAW_CAPTURE_SIZE 256
