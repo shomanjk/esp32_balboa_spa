@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **`/state` noise-reduction layout** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`README.md`](README.md)): Reorganized ESP State into an operator-first view (system health + Wi-Fi + compact spa freshness), moved low-value diagnostics behind a `Show advanced diagnostics` toggle, and added advanced `API Shortcuts` links (`/api/wifi`, `/api/version`, `/api/rs485`, `/api/rs485/raw`, `/api/rs485/history`) plus a header jump link.
+
 ## [1.7.2] - 2026-04-29
 
 ### Added
