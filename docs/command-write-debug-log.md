@@ -530,3 +530,47 @@ Interpretation:
 
 - Even with explicit CTS-edge firing and structured byte-level before/after decode in the endpoint, Light1 still shows no state transition.
 - This further de-risks timing-only explanations and reinforces controller-specific semantic mismatch hypotheses for this command family.
+
+### 2026-04-28 rolling window CTS-edge trials (`light1_next_cts_window`)
+
+Firmware behavior exercised:
+
+- Endpoint: `GET /api/diag/light1_next_cts_window`
+- Run params: `observe_ms=7000`, `sample_ms=120`
+- Live artifact: `docs/diag-light1-next-cts-window-live-run.json`
+
+Observed results:
+
+- 8/8 HTTP calls succeeded; 7/8 returned full structured payloads with rolling samples.
+- In each complete payload, arming and fire counters advanced by exactly one (`fireMax = fireBefore + 1`), confirming next-CTS execution.
+- Across all sampled windows, `light1` remained `0` and decoded light-field byte `lf` stayed constant at `0x04` (no transient flips detected).
+
+Interpretation:
+
+- Rolling multi-sample capture did not reveal short-lived state transitions that point-snapshot endpoints might miss.
+- This further reduces the probability of a timing-window-only issue and keeps focus on controller-specific write acceptance semantics / ownership context outside current `0x11` assumptions.
+
+### 2026-04-28 rolling-window A/B variants (`dest`, `pad`, pre-housekeeping)
+
+Artifact:
+
+- `docs/diag-light1-next-cts-window-ab-live-run.json`
+
+Matrix:
+
+- `default`
+- `dest=id`
+- `pad=none`
+- `dest=id&pad=none`
+- `pre_bf03_then_default` (inject `7e050abf03627e` to bridge before endpoint call)
+
+Result summary:
+
+- Stable variants (`default`, `dest=id`, `pad=none`) each returned 3/3 complete sampled windows with `result=armed_next_cts` and observed fire-counter advancement.
+- Across all complete sampled windows in those variants, `light1` never reached `1`, and `lf` remained fixed (`0x04` only, no transitions).
+- Mixed variants (`dest=id&pad=none`, `pre_bf03_then_default`) showed intermittent HTTP/output instability (partial read / timeout / empty object) but still showed no Light1 or `lf` transition in successful sampled runs.
+
+Interpretation:
+
+- A/B parameters did not produce any evidence of accepted/apply behavior for Light1.
+- The remaining evidence points away from simple destination/pad/CTS-edge timing differences and toward controller-specific command semantics and/or client-ownership constraints not yet modeled.
