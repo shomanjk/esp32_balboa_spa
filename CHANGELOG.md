@@ -8,9 +8,20 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-04-29
+
+### Added
+
+- **`/status` equipment live refresh (polling)** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): The status page now polls **`GET /api/status/controls`** every 2 seconds (skipped while the browser tab is hidden) and updates equipment values and **Turn On / Turn Off** button targets in place, so passive spa changes no longer require a manual full-page reload.
+
 ### Changed
 
+- **`GET /api/status/controls` payload** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Response now includes **`circ`** (circulation pump on/off) and **`pump1Config`–`pump6Config`** so the polled UI can match single-speed vs multi-speed pump display semantics used on `/status`.
+- **`/status` equipment markup** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Equipment cards expose stable **`data-equip`** and **`data-role="value"`** hooks for the polling script.
+- **Portal shared CSS / `<head>`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Top navigation link styles are consolidated into the shared `style` macro and the duplicate inline nav block was removed from `head`, avoiding redundant CSS and keeping nav appearance consistent across pages.
+- **Status `lastUpdate` display** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `lastUpdate` rows now show human-readable local time only (the collapsible raw Unix epoch detail was removed).
 - **`/state` noise-reduction layout** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`README.md`](README.md)): Reorganized ESP State into an operator-first view (system health + Wi-Fi + compact spa freshness), moved low-value diagnostics behind a `Show advanced diagnostics` toggle, and added advanced `API Shortcuts` links (`/api/wifi`, `/api/version`, `/api/rs485`, `/api/rs485/raw`, `/api/rs485/history`) plus a header jump link.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`1.8.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [1.7.2] - 2026-04-29
 
@@ -300,7 +311,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.1...v1.7.2
 [1.6.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.5.0...v1.6.0
