@@ -25,6 +25,8 @@ struct SpaCommandResult
 };
 
 bool spaCanAcceptCommands();
+/** Balboa 0x20 limits for current `spaStatusData.tempScale` + `tempRange` (see protocol.md). */
+void spaProtocolActiveSetpointBand(float &minBand, float &maxBand);
 SpaCommandResult spaSendToggleCommand(uint8_t itemCode, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSendToggleDiagnostic(

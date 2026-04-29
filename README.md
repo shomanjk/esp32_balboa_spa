@@ -8,7 +8,7 @@
 
 - **[M5 Atom Lite + Atomic RS485 Base](#m5-atom-lite--atomic-rs485-base-tub-side)** tub-side wiring, **`M5_ATOM_LED`**, and related **PlatformIO** environments in [`platformio.ini`](platformio.ini).
 - **RS485** robustness, diagnostics, and **JSON APIs** (`/api/rs485`, `/api/rs485/raw`, `/api/rs485/history`) — see [CHANGELOG.md](CHANGELOG.md).
-- **Web** portal behavior for `/status`, `/config`, `/state` (responsive layout, Wi‑Fi chart, firmware version on `/state`) and **`GET /api/version`**, **`/api/wifi`**, etc.
+- **Web** portal for `/status`, `/config`, `/state` (responsive layout, Wi‑Fi chart, **live spa + heating polling**, **RS485 command controls** on `/status`, firmware version on `/state`) and **`GET /api/version`**, **`/api/wifi`**, **`/api/status/controls`**, etc.
 - **MQTT** telemetry on `Spa/<gateway>/…` topics and **Home Assistant MQTT Discovery** (retained `homeassistant/…/config`); optional `config.h` overrides — see [MQTT and Home Assistant](#mqtt-and-home-assistant).
 - **OTA** workflow for tub-side Atom builds.
 
@@ -23,7 +23,7 @@
 
 ## What this project is
 
-Use an **ESP32** module on the **RS485** bus of a **Balboa** spa controller to read status (temperatures, pumps, configuration, etc.) and expose it over **MQTT**, the bundled **web UI**, and optionally a **remote ePaper** UI.
+Use an **ESP32** module on the **RS485** bus of a **Balboa** spa controller to read status (temperatures, pumps, configuration, etc.), **send v1 spa commands** from the firmware **web portal** (`/status` controls and `/devices/sci`), and expose state over **MQTT**, the bundled **web UI** (LittleFS SPA), and optionally a **remote ePaper** UI.
 
 The codebase supports multiple **build roles**: tub-side **RS485** gateway, **UDP discovery** (`LOCAL_CONNECT`), optional **TCP bridge**, **Telnet** logging, and a **TCP client + ePaper** role for a second device (e.g. kitchen display) talking to the tub-side unit.
 
@@ -52,7 +52,7 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 
 ![Web UI example](docs/balboa-spa-web.png)
 
-**Status:** On-device **control buttons** in the SPA are **not fully wired** to the spa (same gap as upstream). **Read-focused** pages work.
+**Status:** Firmware-served **`/status`** includes **wired** equipment and temperature controls (SCI **`Button`** / **`SetTemp`** to the spa over RS485). The **LittleFS** `balboa-spa` bundle may still differ from upstream; treat its control surfaces as **read-first** unless you verify them for your build.
 
 **Layout:** Firmware-served pages `/status`, `/config`, and `/state` use a responsive layout (viewport scaling, wrapping nav, fluid charts/images) for phone-sized screens.
 
@@ -85,6 +85,7 @@ Place images under [`docs/`](docs/) or update paths below.
 | `/api/rs485` | — | UART pins, baud, `autoTx`, byte/frame/CRC counters, polarity (`normal` / `inverted_rx_tx`), lock state, `health`. |
 | `/api/rs485/raw` | `limit` (default **80**, cap **256**) | Bounded recent RX bytes: `bytesHex`, `items[]` with `tMs`, `gapMs`, `byte`, `mode`, `uartAvailable`. |
 | `/api/rs485/history` | `limit` (default **20**, cap **60**) | Rolling RS485 snapshots (newest first): per-snapshot `health`, counters, `mode`, `detectPhase`. |
+| `/api/status/controls` | — | Live snapshot for **`/status`** polling: pumps, lights, temps, **spa/heating** fields, setpoint bounds, and snapshot freshness metadata. |
 
 ---
 
@@ -98,9 +99,9 @@ Place images under [`docs/`](docs/) or update paths below.
 
 To keep protocol risk low, command-write implementation is intentionally staged:
 
-- **In scope (v1):**
-  - **Button toggle** commands (Balboa `0x11`) for supported on/off-style actions.
-  - **Set temperature** commands (Balboa `0x20`) with min/max and temp-scale validation.
+- **In scope (v1) — implemented on web path:**
+  - **Button toggle** commands (Balboa `0x11`) from **`/devices/sci`** and firmware **`/status`** (including temp-range item **80** / `0x50`).
+  - **Set temperature** commands (Balboa `0x20`) with **protocol** min/max by °F/°C and active high/low range ([`spaProtocolActiveSetpointBand`](lib/spaMessage/spaCommandDispatcher.cpp)).
 - **Deferred (post-v1):**
   - `SystemTime`
   - `TimeFormat`

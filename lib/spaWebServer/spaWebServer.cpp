@@ -417,6 +417,54 @@ static String statusLastUpdateDisplayHtml(unsigned long epoch)
   return statusFormatEpochLocalHuman(t);
 }
 
+/** Seconds since last spa status frame was applied (gateway clock); 0 if unknown. */
+static unsigned long statusSnapshotAgeSec()
+{
+  time_t now = getTime();
+  if (now <= 0 || spaStatusData.lastUpdate == 0)
+  {
+    return 0;
+  }
+  if ((time_t)spaStatusData.lastUpdate > now)
+  {
+    return 0;
+  }
+  return (unsigned long)(now - (time_t)spaStatusData.lastUpdate);
+}
+
+/** One-line subtitle: relative age + gateway-local time of last bus status apply. */
+static String statusSnapshotSubtitle()
+{
+  if (spaStatusData.lastUpdate == 0)
+  {
+    return String("No spa status yet");
+  }
+  const String human = statusLastUpdateDisplayHtml(spaStatusData.lastUpdate);
+  const unsigned long age = statusSnapshotAgeSec();
+  if (age == 0 && getTime() <= 0)
+  {
+    return String("Snapshot at ") + human;
+  }
+  String out = "Updated ";
+  if (age < 60UL)
+  {
+    out += String(age) + "s ago";
+  }
+  else if (age < 3600UL)
+  {
+    out += String(age / 60UL) + "m " + String(age % 60UL) + "s ago";
+  }
+  else
+  {
+    const unsigned long h = age / 3600UL;
+    const unsigned long m = (age % 3600UL) / 60UL;
+    out += String(h) + "h " + String(m) + "m ago";
+  }
+  out += " \xc2\xb7 ";
+  out += human;
+  return out;
+}
+
 static String webWallClockDisplayHtml(time_t t)
 {
   if (t <= 0)
@@ -589,7 +637,19 @@ static int toggleCountForButtonRequest(uint8_t itemCode, bool requestHasState, b
     return 1;
   }
 
-  // Other items (blower/aux/range/mode) remain single-toggle for now.
+  // Balboa temp range: item 0x50 (80) toggles high/low (bit in status byte 10).
+  if (itemCode == 80)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+    const bool isHigh = (spaStatusData.tempRange != 0);
+    const bool wantHigh = desiredOn;
+    return (isHigh == wantHigh) ? 0 : 1;
+  }
+
+  // Other items (blower/aux/mode) remain single-toggle for now.
   return 1;
 }
 
@@ -682,6 +742,16 @@ static String statusFormattedTempWithUnit(float v)
   return statusFormatTempValue(v) + statusTempDegreeSuffixStr();
 }
 
+/** Stored high/low setpoint for a band; em dash when never populated (<=0). */
+static String statusBandStoredSetpointText(float v)
+{
+  if (!statusSpaTempReady() || v <= 0.0f)
+  {
+    return String("\xe2\x80\x94");
+  }
+  return statusFormattedTempWithUnit(v);
+}
+
 static String statusFormatRuntimeHoursMinutes(unsigned long totalSeconds)
 {
   const unsigned long totalMinutes = totalSeconds / 60UL;
@@ -724,14 +794,16 @@ static void appendStatusJsonFloatArrayOldestFirst(String &html, const float *arr
 
 static void appendStatusHistoriesSection(String &html)
 {
-  html += "<div class=\"history-block\"><h3>Temperature history</h3>";
+  html += "<div id=\"statusTempHistSection\" class=\"history-block status-temp-hist-anchor\">";
+  html += "<h3>Temperature history</h3>";
   html += "<p class=\"chart-caption\">Samples left (older) to right (newer). Raw list index 0 is newest.</p>";
   html += "<div class=\"chart-wrap\"><canvas id=\"statusTempHistChart\" height=\"140\" aria-label=\"Temperature history chart\"></canvas></div>";
   html += "<details class=\"history-raw\"><summary>Raw temperature values</summary><pre>";
   html += historyToString(spaStatusData.temperatureHistory);
   html += "</pre></details></div>";
 
-  html += "<div class=\"history-block\"><h3>Heater on-time history</h3>";
+  html += "<div id=\"statusHeatHistSection\" class=\"history-block status-temp-hist-anchor\">";
+  html += "<h3>Heater on-time history</h3>";
   html += "<p class=\"chart-caption\">Seconds per day (raw); chart uses minutes per day (div 60).</p>";
   html += "<div class=\"chart-wrap\"><canvas id=\"statusHeatHistChart\" height=\"140\" aria-label=\"Heater history chart\"></canvas></div>";
   html += "<details class=\"history-raw\"><summary>Raw heat history (seconds per day)</summary><pre>";
@@ -797,7 +869,12 @@ void handleStatus(AsyncWebServerRequest *request)
   html.reserve(48000);
   const char *statusStyle =
       "<style>"
-      ".status-page-title{color:#0f4a87;font-size:1.1rem;margin:0 0 var(--space-3) 0;line-height:1.3;}"
+      "html{scroll-behavior:smooth;}"
+      ".status-page-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 16px;margin:0 0 var(--space-3) 0;}"
+      ".status-page-head .status-page-title{margin:0;}"
+      ".status-page-title{color:#0f4a87;font-size:1.1rem;line-height:1.3;}"
+      ".status-snapshot-meta{margin:0;flex:1 1 220px;text-align:right;font-size:0.82rem;line-height:1.35;color:var(--muted);max-width:46em;}"
+      "@media (max-width:520px){.status-snapshot-meta{text-align:left;flex:1 1 100%;}}"
       ".status-layout{display:grid;grid-template-columns:1fr;gap:var(--space-3);}"
       "@media (min-width:720px){.status-layout{grid-template-columns:1fr 1fr;}}"
       ".status-layout .panel{margin-bottom:0;}"
@@ -809,6 +886,32 @@ void handleStatus(AsyncWebServerRequest *request)
       "dl.kv .kv-row:last-child{border-bottom:none;}"
       "dl.kv dt{margin:0;font-weight:600;color:var(--muted);font-size:0.92rem;}"
       "dl.kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
+      ".kv-dd-with-inline-action{display:flex;flex-wrap:wrap;align-items:center;gap:8px;column-gap:10px;}"
+      ".status-temp-chart-link{color:#0f4a87;display:inline-flex;align-items:center;vertical-align:middle;"
+      "text-decoration:none;border-radius:6px;padding:3px;line-height:0;}"
+      ".status-temp-chart-link:hover{background:#e8f0fa;}"
+      ".status-temp-chart-link:focus-visible{outline:2px solid #0f4a87;outline-offset:2px;}"
+      ".heat-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin:0 0 6px 0;}"
+      ".heat-panel-head h2{margin:0;}"
+      ".heat-hint{font-size:0.82rem;color:var(--muted);margin:0 0 12px 0;line-height:1.45;max-width:52em;}"
+      ".heat-hero{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);margin:0 0 12px 0;background:#fafbfc;}"
+      ".heat-hero-icon{flex-shrink:0;line-height:0;color:#0f4a87;}"
+      ".heat-hero--ok{border-color:#b8cfe8;background:#f2f7fc;}.heat-hero--ok .heat-hero-icon{color:#0f4a87;}"
+      ".heat-hero--init{border-color:#e6c200;background:#fffbeb;}.heat-hero--init .heat-hero-icon{color:#b8860b;}"
+      ".heat-hero--alert{border-color:#e57373;background:#fff5f5;}.heat-hero--alert .heat-hero-icon{color:#c62828;}"
+      ".heat-hero-label{font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.03em;}"
+      ".heat-hero-val{font-size:1.12rem;font-weight:700;margin-top:2px;line-height:1.25;}"
+      ".heat-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px 0;align-items:center;}"
+      ".heat-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:0.84rem;font-weight:600;border:1px solid var(--border);background:#fff;}"
+      ".heat-chip svg{flex-shrink:0;}"
+      ".heat-chip--heat-idle{color:#5f6c7b;background:#eef1f4;border-color:#dde2e8;}"
+      ".heat-chip--heat-on{color:#8b2500;background:#ffe8e0;border-color:#ffab91;}"
+      ".heat-chip--heat-alt{color:#6d4c00;background:#fff8e1;border-color:#ffe082;}"
+      ".heat-chip--need-yes{color:#b71c1c;background:#ffebee;border-color:#ffcdd2;}"
+      ".heat-chip--need-no{color:#455a64;background:#eceff1;border-color:#cfd8dc;}"
+      ".heat-chip-lbl{font-weight:500;opacity:0.88;margin-right:2px;}"
+      "details.heat-raw{margin-top:10px;}details.heat-raw summary{cursor:pointer;font-size:0.84rem;color:var(--muted);font-weight:600;}"
+      "details.heat-raw pre{margin:8px 0 0 0;padding:8px 10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;font-size:0.78rem;line-height:1.5;font-family:ui-monospace,Courier,monospace;}"
       ".equip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:var(--space-2);}"
       ".equip-cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fafbfc;}"
       ".equip-cell.equip-absent{opacity:0.58;background:#eef1f4;color:var(--muted);border-color:#dde2e8;}"
@@ -819,9 +922,19 @@ void handleStatus(AsyncWebServerRequest *request)
       ".equip-actions{margin-top:8px;}"
       ".equip-btn{background:#0f4a87;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:.84rem;}"
       ".equip-btn:disabled{opacity:.55;cursor:not-allowed;}"
+      ".range-bands{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0;}"
+      "@media (max-width:520px){.range-bands{grid-template-columns:1fr;}}"
+      ".range-band{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#fafbfc;}"
+      ".range-band-active-low{border-color:#0f4a87;background:#e8f0fa;box-shadow:0 0 0 2px rgba(15,74,135,0.12);}"
+      ".range-band-active-high{border-color:#b71c1c;background:#fde8e8;box-shadow:0 0 0 2px rgba(183,28,28,0.16);}"
+      ".range-band-title{font-size:0.82rem;font-weight:600;color:var(--muted);margin:0 0 6px 0;}"
+      ".range-band-temp{font-size:1.15rem;font-weight:700;margin:0;line-height:1.25;}"
+      ".range-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
+      ".range-hint{font-size:0.82rem;color:var(--muted);margin:8px 0 0 0;line-height:1.35;}"
       ".status-control-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
       ".status-control-row input{border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:90px;}"
       ".status-control-result{margin-top:8px;font-size:.84rem;color:var(--muted);}"
+      ".status-temp-hist-anchor{scroll-margin-top:16px;}"
       ".history-block{margin-top:var(--space-2);}"
       ".history-block h3{margin:0 0 6px 0;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       ".history-block pre{margin:0;padding:10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;"
@@ -832,46 +945,129 @@ void handleStatus(AsyncWebServerRequest *request)
 
   html = "<html>" + head + String(statusStyle) +
          "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus +
-         "<main id='mainContent'>" + ePaper + "<h1 class=\"status-page-title\">Spa Status</h1><div class=\"status-layout\">";
+         "<main id='mainContent'>" + ePaper +
+         "<div class=\"status-page-head\"><h1 class=\"status-page-title\">Spa Status</h1>"
+         "<p class=\"status-snapshot-meta\" id=\"statusSnapshotMeta\" title=\"Last spa status frame applied (gateway local time)\">" +
+         statusSnapshotSubtitle() + "</p></div><div class=\"status-layout\">";
 
-  html += "<section class=\"panel\"><h2>Data sync</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "lastUpdate", statusLastUpdateDisplayHtml(spaStatusData.lastUpdate));
-  appendStatusKvRow(html, "magicNumber", String(spaStatusData.magicNumber));
-  html += "</dl>";
-  html += "<p class=\"chart-caption\">magicNumber is a firmware RAM struct validity marker (expected 0x12345678 after init), not a spa model ID.</p>";
-  html += "</section>";
+  {
+    float setMin = 50.0f;
+    float setMax = 104.0f;
+    spaProtocolActiveSetpointBand(setMin, setMax);
+    const String setMinStr = String(setMin, spaStatusData.tempScale ? 1 : 0);
+    const String setMaxStr = String(setMax, spaStatusData.tempScale ? 1 : 0);
+    const bool activeHigh = (spaStatusData.tempRange != 0);
+    html += "<section class=\"panel\"><h2>Temperatures</h2><dl class=\"kv\">";
+    html += "<div class=\"kv-row\"><dt>Current Temp</dt><dd class=\"kv-dd-with-inline-action\"><span>";
+    html += statusFormattedTempWithUnit(spaStatusData.currentTemp);
+    html += "</span><a href=\"#statusTempHistSection\" class=\"status-temp-chart-link\" title=\"Jump to temperature chart\" aria-label=\"Jump to temperature chart\">";
+    html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">";
+    html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a></dd></div>";
+    appendStatusKvRow(html, "Temp Scale", statusTempScaleDescription());
+    html += "</dl>";
+    html += "<div class=\"range-bands\"><div id=\"statusBandLow\" data-range-band=\"low\" class=\"range-band";
+    html += activeHigh ? "" : " range-band-active-low";
+    html += "\"><div class=\"range-band-title\">Low range setpoint</div><div id=\"statusBandLowVal\" class=\"range-band-temp\">";
+    html += statusBandStoredSetpointText(spaStatusData.lowSetTemp);
+    html += "</div></div><div id=\"statusBandHigh\" data-range-band=\"high\" class=\"range-band";
+    html += activeHigh ? " range-band-active-high" : "";
+    html += "\"><div class=\"range-band-title\">High range setpoint</div><div id=\"statusBandHighVal\" class=\"range-band-temp\">";
+    html += statusBandStoredSetpointText(spaStatusData.highSetTemp);
+    html += "</div></div></div>";
+    html += "<div class=\"range-actions\">";
+    html += "<button id=\"statusRangeLowBtn\" class=\"equip-btn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\"";
+    html += activeHigh ? "" : " disabled";
+    html += ">Use low range</button>";
+    html += "<button id=\"statusRangeHighBtn\" class=\"equip-btn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"on\"";
+    html += activeHigh ? " disabled" : "";
+    html += ">Use high range</button></div>";
+    html += "<p class=\"range-hint\">Set temp applies to the highlighted range only.</p>";
+    html += "<div class=\"status-control-row\"><label for=\"statusSetTempInput\" class=\"equip-label\">Set temp <span id=\"statusSetTempScopeLabel\">";
+    html += activeHigh ? "(high range)" : "(low range)";
+    html += "</span></label>";
+    html += "<input id=\"statusSetTempInput\" type=\"number\" min=\"";
+    html += setMinStr;
+    html += "\" max=\"";
+    html += setMaxStr;
+    html += "\" step=\"";
+    html += (spaStatusData.tempScale ? "0.5" : "1");
+    html += "\" value=\"";
+    html += String(spaStatusData.setTemp, spaStatusData.tempScale ? 1 : 0);
+    html += "\" />";
+    html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSendSetTemp()\">Send</button></div>";
+    html += "<div id=\"statusSetTempResult\" class=\"status-control-result\"></div>";
+    html += "</section>";
+  }
 
-  html += "<section class=\"panel\"><h2>Device memory</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "Free Heap", formatNumberWithCommas(ESP.getFreeHeap()));
-  appendStatusKvRow(html, "Free PSRAM", formatNumberWithCommas(ESP.getFreePsram()));
-  appendStatusKvRow(html, "Free Stack", formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)));
-  html += "</dl></section>";
-
-  html += "<section class=\"panel\"><h2>Temperatures</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "Current Temp", statusFormattedTempWithUnit(spaStatusData.currentTemp));
-  appendStatusKvRow(html, "Set Temp", statusFormattedTempWithUnit(spaStatusData.setTemp));
-  appendStatusKvRow(html, "High Set Temp", statusFormattedTempWithUnit(spaStatusData.highSetTemp));
-  appendStatusKvRow(html, "Low Set Temp", statusFormattedTempWithUnit(spaStatusData.lowSetTemp));
-  appendStatusKvRow(html, "Temp Range", getMapDescription(spaStatusData.tempRange, tempRangeMap));
-  appendStatusKvRow(html, "Temp Scale", statusTempScaleDescription());
-  html += "</dl>";
-  html += "<div class=\"status-control-row\"><label for=\"statusSetTempInput\" class=\"equip-label\">Set Temp</label>";
-  html += "<input id=\"statusSetTempInput\" type=\"number\" step=\"";
-  html += (spaStatusData.tempScale ? "0.5" : "1");
-  html += "\" value=\"";
-  html += String(spaStatusData.setTemp, spaStatusData.tempScale ? 1 : 0);
-  html += "\" />";
-  html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSendSetTemp()\">Send</button></div>";
-  html += "<div id=\"statusSetTempResult\" class=\"status-control-result\"></div>";
-  html += "</section>";
-
-  html += "<section class=\"panel\"><h2>Spa and heating</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "Spa State", getMapDescription(spaStatusData.spaState, spaStateMap));
-  appendStatusKvRow(html, "Init Mode", getMapDescription(spaStatusData.initMode, initModeMap));
-  appendStatusKvRow(html, "Heating Mode", getMapDescription(spaStatusData.heatingMode, heatingModeMap));
-  appendStatusKvRow(html, "Heating State", getMapDescription(spaStatusData.heatingState, heatingStateMap));
-  appendStatusKvRow(html, "Needs Heat", String(spaStatusData.needsHeat));
-  html += "</dl></section>";
+  {
+    const String spaStateTxt = getMapDescription(spaStatusData.spaState, spaStateMap);
+    const String initTxt = getMapDescription(spaStatusData.initMode, initModeMap);
+    const String heatModeTxt = getMapDescription(spaStatusData.heatingMode, heatingModeMap);
+    const String heatStateTxt = getMapDescription(spaStatusData.heatingState, heatingStateMap);
+    const uint8_t ss = spaStatusData.spaState;
+    const uint8_t im = spaStatusData.initMode;
+    const uint8_t hs = spaStatusData.heatingState;
+    const bool needH = spaStatusData.needsHeat;
+    String heroClass = "heat-hero heat-hero--ok";
+    if (im == 2)
+    {
+      heroClass = "heat-hero heat-hero--alert";
+    }
+    else if (ss == 1 || im == 1)
+    {
+      heroClass = "heat-hero heat-hero--init";
+    }
+    String heatChipClass = "heat-chip heat-chip--heat-idle";
+    if (hs == 1)
+    {
+      heatChipClass = "heat-chip heat-chip--heat-on";
+    }
+    else if (hs == 2)
+    {
+      heatChipClass = "heat-chip heat-chip--heat-alt";
+    }
+    const String needChipClass = String("heat-chip ") + (needH ? "heat-chip--need-yes" : "heat-chip--need-no");
+    html += "<section class=\"panel\"><div class=\"heat-panel-head\"><h2>Spa and heating</h2>";
+    html += "<a href=\"#statusHeatHistSection\" class=\"status-temp-chart-link\" title=\"Jump to heater on-time chart\" aria-label=\"Jump to heater on-time chart\">";
+    html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\">";
+    html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a></div>";
+    html += "<p class=\"heat-hint\"><b>Heating mode</b> is what the spa is set up for (ready/rest). <b>Heating state</b> is what it is doing right now (idle vs actively heating).</p>";
+    html += "<div id=\"statusSpaHero\" class=\"";
+    html += heroClass;
+    html += "\"><span class=\"heat-hero-icon\" aria-hidden=\"true\">";
+    html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\">";
+    html += "<path d=\"M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z\"/></svg></span>";
+    html += "<div><div class=\"heat-hero-label\">Spa state</div><div id=\"statusSpaStateHero\" class=\"heat-hero-val\">";
+    html += spaStateTxt;
+    html += "</div></div></div>";
+    html += "<div class=\"heat-chips\"><div id=\"statusHeatStateChipWrap\" class=\"";
+    html += heatChipClass;
+    html += "\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><rect x=\"4\" y=\"14\" width=\"3\" height=\"6\" rx=\"0.5\"/><rect x=\"10.5\" y=\"10\" width=\"3\" height=\"10\" rx=\"0.5\"/><rect x=\"17\" y=\"6\" width=\"3\" height=\"14\" rx=\"0.5\"/></svg>";
+    html += "<span id=\"statusHeatStateChip\">";
+    html += heatStateTxt;
+    html += "</span></div><div id=\"statusNeedsHeatChipWrap\" class=\"";
+    html += needChipClass;
+    html += "\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 2c.5 3 4 4.5 4 9a4 4 0 1 1-8 0c0-4.5 3.5-6 4-9z\"/></svg>";
+    html += "<span class=\"heat-chip-lbl\">Needs heat</span><span id=\"statusNeedsHeatChip\">";
+    html += (needH ? String("Yes") : String("No"));
+    html += "</span></div></div><dl class=\"kv\">";
+    html += "<div class=\"kv-row\"><dt>Init mode</dt><dd id=\"statusInitModeVal\">";
+    html += initTxt;
+    html += "</dd></div><div class=\"kv-row\"><dt>Heating mode</dt><dd id=\"statusHeatingModeVal\">";
+    html += heatModeTxt;
+    html += "</dd></div></dl>";
+    html += "<details class=\"heat-raw\"><summary>Raw status codes</summary><pre id=\"statusHeatRawPre\">spaState=";
+    html += String(spaStatusData.spaState);
+    html += " initMode=";
+    html += String(spaStatusData.initMode);
+    html += " heatingMode=";
+    html += String(spaStatusData.heatingMode);
+    html += " heatingState=";
+    html += String(spaStatusData.heatingState);
+    html += " needsHeat=";
+    html += String(needH ? 1 : 0);
+    html += "</pre></details></section>";
+  }
 
   html += "<section class=\"panel\"><h2>Time and filtration</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "Time", String(spaStatusData.time));
@@ -926,6 +1122,26 @@ void handleStatus(AsyncWebServerRequest *request)
           "function statusPumpDisplay(raw){if(raw===0)return 'Off';if(raw===1)return 'Low';if(raw===2)return 'High';return String(raw);}"
           "function statusOnOff(v){return Number(v)>0?'On':'Off';}"
           "function statusPumpUiValue(snap,num){var cfg=Number(snap['pump'+num+'Config']||0);if(cfg===1)return statusOnOff(snap['pump'+num+'On']);return statusPumpDisplay(Number(snap['pump'+num]||0));}"
+          "function statusFormatBandTemp(snap,v){var n=Number(v);if(!isFinite(n)||n<=0)return'\xe2\x80\x94';var c=!!snap.tempScaleCelsius;"
+          "if(c)return n.toFixed(1)+'\\u00b0C';return String(Math.round(n))+'\\u00b0F';}"
+          "function statusApplySnapshotMeta(snap){var el=document.getElementById('statusSnapshotMeta');if(!el||!snap)return;"
+          "if(typeof snap.snapshotMeta==='string'){el.textContent=snap.snapshotMeta;"
+          "if(typeof snap.snapshotAtLocal==='string'&&snap.snapshotAtLocal.length)el.title=snap.snapshotAtLocal;}}"
+          "function statusApplyHeatingSnap(snap){"
+          "if(typeof snap.spaStateText==='undefined')return;"
+          "var hero=document.getElementById('statusSpaStateHero');if(hero)hero.textContent=snap.spaStateText;"
+          "var heroEl=document.getElementById('statusSpaHero');"
+          "if(heroEl){heroEl.className='heat-hero';var im=Number(snap.initMode||0);var ss=Number(snap.spaState||0);"
+          "if(im===2)heroEl.classList.add('heat-hero--alert');else if(ss===1||im===1)heroEl.classList.add('heat-hero--init');else heroEl.classList.add('heat-hero--ok');}"
+          "var hsn=Number(snap.heatingState||0);var hst=document.getElementById('statusHeatStateChip');if(hst)hst.textContent=snap.heatingStateText||'';"
+          "var hsw=document.getElementById('statusHeatStateChipWrap');if(hsw){hsw.className='heat-chip ';"
+          "if(hsn===1)hsw.className+='heat-chip--heat-on';else if(hsn===2)hsw.className+='heat-chip--heat-alt';else hsw.className+='heat-chip--heat-idle';}"
+          "var need=Number(snap.needsHeat)>0;var nh=document.getElementById('statusNeedsHeatChip');if(nh)nh.textContent=need?'Yes':'No';"
+          "var nhw=document.getElementById('statusNeedsHeatChipWrap');if(nhw)nhw.className='heat-chip '+(need?'heat-chip--need-yes':'heat-chip--need-no');"
+          "var imv=document.getElementById('statusInitModeVal');if(imv)imv.textContent=snap.initModeText||'';"
+          "var hmv=document.getElementById('statusHeatingModeVal');if(hmv)hmv.textContent=snap.heatingModeText||'';"
+          "var raw=document.getElementById('statusHeatRawPre');if(raw)raw.textContent='spaState='+snap.spaState+' initMode='+snap.initMode+' heatingMode='+snap.heatingMode+' heatingState='+snap.heatingState+' needsHeat='+snap.needsHeat;"
+          "}"
           "function statusApplySnapshot(snap){"
           "if(!snap)return;"
           "statusSetEquipValue('pump1',statusPumpUiValue(snap,1));"
@@ -949,8 +1165,19 @@ void handleStatus(AsyncWebServerRequest *request)
           "statusSetButtonState(17,Number(snap.light1)>0?'off':'on');"
           "statusSetButtonState(18,Number(snap.light2)>0?'off':'on');"
           "statusSetButtonState(14,Number(snap.mister)>0?'off':'on');"
+          "var tr=Number(snap.tempRange||0);var hi=document.getElementById('statusBandHigh');var lo=document.getElementById('statusBandLow');"
+          "if(hi){hi.classList.toggle('range-band-active-high',tr===1);hi.classList.remove('range-band-active-low');}"
+          "if(lo){lo.classList.toggle('range-band-active-low',tr===0);lo.classList.remove('range-band-active-high');}"
+          "var hv=document.getElementById('statusBandHighVal');var lv=document.getElementById('statusBandLowVal');"
+          "if(hv)hv.textContent=statusFormatBandTemp(snap,snap.highSetTemp);if(lv)lv.textContent=statusFormatBandTemp(snap,snap.lowSetTemp);"
+          "var lbl=document.getElementById('statusSetTempScopeLabel');if(lbl)lbl.textContent=tr===1?'(high range)':'(low range)';"
+          "var rh=document.getElementById('statusRangeHighBtn');var rl=document.getElementById('statusRangeLowBtn');"
+          "if(rh)rh.disabled=(tr===1);if(rl)rl.disabled=(tr===0);"
           "var setInput=document.getElementById('statusSetTempInput');"
-          "if(setInput&&document.activeElement!==setInput&&typeof snap.setTemp!=='undefined'){setInput.value=String(Number(snap.setTemp));}"
+          "if(setInput){if(typeof snap.setTempMin!=='undefined')setInput.min=String(snap.setTempMin);if(typeof snap.setTempMax!=='undefined')setInput.max=String(snap.setTempMax);"
+          "if(typeof snap.tempScaleCelsius!=='undefined')setInput.step=snap.tempScaleCelsius?'0.5':'1';"
+          "if(document.activeElement!==setInput&&typeof snap.setTemp!=='undefined')setInput.value=String(snap.tempScaleCelsius?Number(snap.setTemp).toFixed(1):Math.round(Number(snap.setTemp)));}"
+          "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
           "}"
           "let statusPollTimer=0;let statusPollBusy=false;"
           "async function statusPollOnce(){"
@@ -975,6 +1202,7 @@ void handleStatus(AsyncWebServerRequest *request)
           "if(code===9)return on?!!snap.pump6On:!snap.pump6On;"
           "if(code===12)return on?(snap.blower>0):(snap.blower===0);"
           "if(code===14)return (snap.mister>0)===on;"
+          "if(code===80)return on?(Number(snap.tempRange||0)===1):(Number(snap.tempRange||0)===0);"
           "return false;}"
           "async function statusWaitForButtonState(code,desired){"
           "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
@@ -996,6 +1224,8 @@ void handleStatus(AsyncWebServerRequest *request)
           "}"
           "async function statusSendSetTemp(){"
           "const input=document.getElementById('statusSetTempInput');if(!input)return;const v=input.value;"
+          "var pv=parseFloat(v);var mn=parseFloat(input.min);var mx=parseFloat(input.max);"
+          "if(isFinite(pv)&&isFinite(mn)&&isFinite(mx)&&(pv<mn-1e-6||pv>mx+1e-6)){statusSetResult('statusSetTempResult','Enter a value between '+mn+' and '+mx+' for the active range.');return;}"
           "try{const xml='<device_request target_name=\"SetTemp\">'+v+'</device_request>';"
           "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSetTempResult','SetTemp response: '+out);return;}"
           "statusSetResult('statusSetTempResult','SetTemp accepted; waiting for spa status update...');"
@@ -1107,7 +1337,8 @@ void handleState(AsyncWebServerRequest *request)
 
   appendWifiStateSection(html);
   html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaStatusData.lastUpdate) + "</li>";
-  html += "<li class='advanced-only'><b>magicNumber: </b>" + String(spaStatusData.magicNumber) + "</li>";
+  html += "<li class='advanced-only'><b>Spa status struct magic (ESP RAM): </b>" + String(spaStatusData.magicNumber) +
+          " <span style=\"font-size:12px;color:var(--muted)\">(expected 0x12345678 after init; not from spa controller)</span></li>";
 
   html += "</ul></section><section class='panel'><h1>Spa Data Freshness</h1>";
   html += "<p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Core datasets summarize update age and retry pressure. Detailed internals remain under advanced diagnostics.</p>";
@@ -1410,10 +1641,32 @@ void handleWifi(AsyncWebServerRequest *request)
 void handleStatusControlsApi(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(768);
+  DynamicJsonDocument doc(2048);
   doc["lastUpdate"] = spaStatusData.lastUpdate;
+  doc["snapshotAgeSec"] = statusSnapshotAgeSec();
+  doc["snapshotAtLocal"] = statusLastUpdateDisplayHtml(spaStatusData.lastUpdate);
+  doc["snapshotMeta"] = statusSnapshotSubtitle();
   doc["tempScaleCelsius"] = spaStatusData.tempScale ? true : false;
+  doc["tempRange"] = spaStatusData.tempRange;
+  doc["spaState"] = spaStatusData.spaState;
+  doc["spaStateText"] = getMapDescription(spaStatusData.spaState, spaStateMap);
+  doc["initMode"] = spaStatusData.initMode;
+  doc["initModeText"] = getMapDescription(spaStatusData.initMode, initModeMap);
+  doc["heatingMode"] = spaStatusData.heatingMode;
+  doc["heatingModeText"] = getMapDescription(spaStatusData.heatingMode, heatingModeMap);
+  doc["heatingState"] = spaStatusData.heatingState;
+  doc["heatingStateText"] = getMapDescription(spaStatusData.heatingState, heatingStateMap);
+  doc["needsHeat"] = spaStatusData.needsHeat ? 1 : 0;
+  doc["highSetTemp"] = spaStatusData.highSetTemp;
+  doc["lowSetTemp"] = spaStatusData.lowSetTemp;
   doc["setTemp"] = spaStatusData.setTemp;
+  {
+    float bandMin = 0;
+    float bandMax = 0;
+    spaProtocolActiveSetpointBand(bandMin, bandMax);
+    doc["setTempMin"] = bandMin;
+    doc["setTempMax"] = bandMax;
+  }
   doc["light1"] = spaStatusData.light1 ? 1 : 0;
   doc["light2"] = spaStatusData.light2 ? 1 : 0;
   doc["pump1"] = spaStatusData.pump1;

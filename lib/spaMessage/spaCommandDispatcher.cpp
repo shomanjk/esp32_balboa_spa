@@ -13,11 +13,6 @@ namespace
 {
 const uint8_t kBroadcastChannel = 0xBF;
 
-const float kFallbackMinTempF = 50.0f;
-const float kFallbackMaxTempF = 110.0f;
-const float kFallbackMinTempC = 10.0f;
-const float kFallbackMaxTempC = 43.0f;
-
 const char *sourceLabel(SpaCommandSource source)
 {
   switch (source)
@@ -56,21 +51,39 @@ SpaCommandResult queueFrame(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &frame,
   Log.verbose(F("[Cmd ]: accepted %s from %s: %s" CR), logAction, sourceLabel(source), msgToString(frame).c_str());
   return {true, SPA_COMMAND_ACCEPTED, "accepted"};
 }
-
-bool hasValidTempBounds(float &minTemp, float &maxTemp)
-{
-  minTemp = (spaStatusData.tempScale ? kFallbackMinTempC : kFallbackMinTempF);
-  maxTemp = (spaStatusData.tempScale ? kFallbackMaxTempC : kFallbackMaxTempF);
-
-  if (spaStatusData.lowSetTemp > 0 && spaStatusData.highSetTemp > 0 && spaStatusData.highSetTemp >= spaStatusData.lowSetTemp)
-  {
-    minTemp = spaStatusData.lowSetTemp;
-    maxTemp = spaStatusData.highSetTemp;
-    return true;
-  }
-  return false;
-}
 } // namespace
+
+void spaProtocolActiveSetpointBand(float &minBand, float &maxBand)
+{
+  const bool celsius = spaStatusData.tempScale != 0;
+  const bool highRange = spaStatusData.tempRange != 0;
+  if (!celsius)
+  {
+    if (highRange)
+    {
+      minBand = 80.0f;
+      maxBand = 104.0f;
+    }
+    else
+    {
+      minBand = 50.0f;
+      maxBand = 80.0f;
+    }
+  }
+  else
+  {
+    if (highRange)
+    {
+      minBand = 26.0f;
+      maxBand = 40.0f;
+    }
+    else
+    {
+      minBand = 10.0f;
+      maxBand = 26.0f;
+    }
+  }
+}
 
 bool spaCanAcceptCommands()
 {
@@ -100,12 +113,13 @@ SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSour
     return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
   }
 
-  float minTemp = 0;
-  float maxTemp = 0;
-  hasValidTempBounds(minTemp, maxTemp);
-  if (targetTemperature < minTemp || targetTemperature > maxTemp)
+  float minBand = 0;
+  float maxBand = 0;
+  spaProtocolActiveSetpointBand(minBand, maxBand);
+  const float tol = spaStatusData.tempScale ? 0.26f : 0.01f;
+  if (targetTemperature < minBand - tol || targetTemperature > maxBand + tol)
   {
-    return {false, SPA_COMMAND_INVALID_ARGUMENT, "target out of range"};
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "setpoint outside protocol range"};
   }
 
   // Balboa setpoint encoding uses 0.5-degree units for C mode, 1-degree units for F mode.

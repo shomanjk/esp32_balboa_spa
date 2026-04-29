@@ -2,6 +2,11 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-04-29 - Release **2.0.0** (major): trusted tub-side writes
+
+- **Milestone:** Tagged line **`2.0.0`** — firmware **`VERSION`** / **`ANALYTICS_VERSION`** ([`src/main.h`](../src/main.h), [`lib/Analytics/Analytics.h`](../lib/Analytics/Analytics.h)). [CHANGELOG.md](../CHANGELOG.md) summarizes portal command reliability, **`/status`** UX (range, heating panel, polling), and protocol setpoint validation.
+- **Operator expectation:** Balboa **`0x11`** / **`0x20`** frames from [`spaCommandDispatcher`](../lib/spaMessage/spaCommandDispatcher.cpp) use shared **`addCRC`** with the RS485 path; combined with SCI dispatch in [`spaWebServer.cpp`](../lib/spaWebServer/spaWebServer.cpp), **commands sent from the gateway web UI are expected to apply on real hardware** when the spa is ready and the frame matches the pack.
+
 ## 2026-04-29 - Dispatcher CRC aligned with RS485 (`VERSION` 1.8.1)
 
 - **Change:** [`lib/spaMessage/spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) now calls shared [`addCRC`](../lib/localRS485Communication/rs485.cpp) (same CRC-8 as [`protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md) / RS485 path) instead of a divergent local implementation.
