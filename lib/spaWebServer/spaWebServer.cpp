@@ -367,11 +367,11 @@ void handleepdpanel(AsyncWebServerRequest *request)
 }
 #endif
 
-#define style String("<style>:root{--bg:#f4f7f8;--panel:#fff;--text:#1f2933;--muted:#5f6c7b;--brand:#037e52;--brandActive:#4b5563;--border:#d4dbe1;--focus:#0f4a87;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;}*{box-sizing:border-box;}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}html,body{max-width:100%;overflow-x:hidden;}img,canvas{display:block;max-width:100%;height:auto;}.skip-link{position:absolute;left:10px;top:-48px;z-index:999;background:#0f4a87;color:#fff;padding:10px 12px;border-radius:6px;text-decoration:none;}.skip-link:focus{top:10px;outline:3px solid #fff;outline-offset:2px;}.page{max-width:980px;margin:0 auto;padding:var(--space-3);}h1{color:#0f4a87;font-size:1.05rem;margin:0 0 var(--space-2) 0;line-height:1.3;}.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:var(--space-3);margin-bottom:var(--space-3);box-shadow:0 1px 2px rgba(0,0,0,.04);}ul{list-style:none;margin:0;padding:0;}li{padding:var(--space-1) 0;border-bottom:1px dashed #e5eaef;overflow-wrap:anywhere;word-break:break-word;}li:last-child{border-bottom:none;}.spacer{height:8px;border-bottom:none;padding:0;}.top-nav{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-bottom:var(--space-3);}button{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease;}.active{background-color:var(--brandActive);color:#fff;}@media (hover:hover){button:hover{background-color:var(--brandActive);}}button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}button:active{transform:translateY(1px);}.panel-image{width:100%;max-width:600px;margin:0 auto var(--space-3) auto;border-radius:8px;}.chart-title{margin:12px 0 6px 0;color:var(--muted);}.chart-wrap{width:100%;max-width:100%;overflow:hidden;border:1px solid #ccc;background:#fff;border-radius:6px;}#wf-rssi,#wf-quality{font-weight:700;}@media (max-width:640px){.page{padding:var(--space-2);}button{flex:1 1 100%;width:100%;}.panel{padding:var(--space-2);}h1{font-size:1rem;}}@media (prefers-reduced-motion:reduce){button{transition:none;}}</style>")
+#define style String("<style>:root{--bg:#f4f7f8;--panel:#fff;--text:#1f2933;--muted:#5f6c7b;--brand:#037e52;--brandActive:#4b5563;--border:#d4dbe1;--focus:#0f4a87;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;}*{box-sizing:border-box;}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}html,body{max-width:100%;overflow-x:hidden;}img,canvas{display:block;max-width:100%;height:auto;}.skip-link{position:absolute;left:10px;top:-48px;z-index:999;background:#0f4a87;color:#fff;padding:10px 12px;border-radius:6px;text-decoration:none;}.skip-link:focus{top:10px;outline:3px solid #fff;outline-offset:2px;}.page{max-width:980px;margin:0 auto;padding:var(--space-3);}h1{color:#0f4a87;font-size:1.05rem;margin:0 0 var(--space-2) 0;line-height:1.3;}.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:var(--space-3);margin-bottom:var(--space-3);box-shadow:0 1px 2px rgba(0,0,0,.04);}ul{list-style:none;margin:0;padding:0;}li{padding:var(--space-1) 0;border-bottom:1px dashed #e5eaef;overflow-wrap:anywhere;word-break:break-word;}li:last-child{border-bottom:none;}.spacer{height:8px;border-bottom:none;padding:0;}.top-nav{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-bottom:var(--space-3);}.top-nav a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease}.top-nav a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav a:hover{background-color:var(--brandActive)}}.top-nav a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav a:active{transform:translateY(1px)}@media (max-width:640px){.top-nav a{flex:1 1 100%;width:100%}}@media (prefers-reduced-motion:reduce){.top-nav a{transition:none}}button{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease;}.active{background-color:var(--brandActive);color:#fff;}@media (hover:hover){button:hover{background-color:var(--brandActive);}}button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}button:active{transform:translateY(1px);}.panel-image{width:100%;max-width:600px;margin:0 auto var(--space-3) auto;border-radius:8px;}.chart-title{margin:12px 0 6px 0;color:var(--muted);}.chart-wrap{width:100%;max-width:100%;overflow:hidden;border:1px solid #ccc;background:#fff;border-radius:6px;}#wf-rssi,#wf-quality{font-weight:700;}@media (max-width:640px){.page{padding:var(--space-2);}button{flex:1 1 100%;width:100%;}.panel{padding:var(--space-2);}h1{font-size:1rem;}}@media (prefers-reduced-motion:reduce){button{transition:none;}}</style>")
 
 #define icon String("<link rel='icon' href='/assets/style/hottubbing.webp' type='image/x-icon' />")
 
-#define head String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Web Server State</title>") + icon + style + String("<style>.top-nav a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease}.top-nav a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav a:hover{background-color:var(--brandActive)}}.top-nav a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav a:active{transform:translateY(1px)}@media (max-width:640px){.top-nav a{flex:1 1 100%;width:100%}}@media (prefers-reduced-motion:reduce){.top-nav a{transition:none}}</style></head>")
+#define head String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Web Server State</title>") + icon + style + String("</head>")
 
 #define webMenuStatus String("<nav aria-label='Portal navigation'><div class='top-nav'><a class='active' aria-current='page' href='/status'>SPA Status</a><a href='/config'>SPA Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>SPA Website</a></div></nav>")
 
@@ -410,20 +410,11 @@ static String statusFormatEpochLocalHuman(time_t t)
   return String(buf);
 }
 
-/** Primary local date/time + optional collapsible raw Unix epoch (seconds). */
+/** Primary local date/time for UI display. */
 static String statusLastUpdateDisplayHtml(unsigned long epoch)
 {
   time_t t = static_cast<time_t>(epoch);
-  String primary = statusFormatEpochLocalHuman(t);
-  if (epoch == 0UL)
-  {
-    return primary;
-  }
-  String out = primary;
-  out += "<details class=\"history-raw\"><summary>Raw epoch (Unix s)</summary>";
-  out += formatNumberWithCommas(epoch);
-  out += "</details>";
-  return out;
+  return statusFormatEpochLocalHuman(t);
 }
 
 static String webWallClockDisplayHtml(time_t t)
@@ -618,19 +609,26 @@ static void appendStatusEquipCell(String &html, const char *label, const String 
   html += "</div></div>";
 }
 
-static void appendStatusControlCell(String &html, const char *label, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState)
+static void appendStatusControlCell(String &html, const char *label, const char *equipKey, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState)
 {
   if (configuredAbsent)
   {
-    html += "<div class=\"equip-cell equip-absent\" title=\"Not installed (spa configuration)\">";
+    html += "<div class=\"equip-cell equip-absent\" title=\"Not installed (spa configuration)\"";
   }
   else
   {
-    html += "<div class=\"equip-cell\">";
+    html += "<div class=\"equip-cell\"";
   }
+  if (equipKey != nullptr && equipKey[0] != '\0')
+  {
+    html += " data-equip=\"";
+    html += equipKey;
+    html += "\"";
+  }
+  html += ">";
   html += "<div class=\"equip-label\">";
   html += label;
-  html += "</div><div class=\"equip-val\">";
+  html += "</div><div class=\"equip-val\" data-role=\"value\">";
   html += value;
   html += "</div>";
 
@@ -880,17 +878,17 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
-  appendStatusControlCell(html, "Pump 1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 3", statusPumpDisplayState(3), statusPumpConfiguredAbsent(3), 6, statusPumpIsOn(3) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 4", statusPumpDisplayState(4), statusPumpConfiguredAbsent(4), 7, statusPumpIsOn(4) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 5", statusPumpDisplayState(5), statusPumpConfiguredAbsent(5), 8, statusPumpIsOn(5) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 6", statusPumpDisplayState(6), statusPumpConfiguredAbsent(6), 9, statusPumpIsOn(6) ? "off" : "on");
-  appendStatusControlCell(html, "Circulation Pump", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent(), 0, nullptr);
-  appendStatusControlCell(html, "Blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent(), 12, spaStatusData.blower == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Light 1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1), 17, spaStatusData.light1 ? "off" : "on");
-  appendStatusControlCell(html, "Light 2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2), 18, spaStatusData.light2 ? "off" : "on");
-  appendStatusControlCell(html, "Mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent(), 14, spaStatusData.mister ? "off" : "on");
+  appendStatusControlCell(html, "Pump 1", "pump1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 2", "pump2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 3", "pump3", statusPumpDisplayState(3), statusPumpConfiguredAbsent(3), 6, statusPumpIsOn(3) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 4", "pump4", statusPumpDisplayState(4), statusPumpConfiguredAbsent(4), 7, statusPumpIsOn(4) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 5", "pump5", statusPumpDisplayState(5), statusPumpConfiguredAbsent(5), 8, statusPumpIsOn(5) ? "off" : "on");
+  appendStatusControlCell(html, "Pump 6", "pump6", statusPumpDisplayState(6), statusPumpConfiguredAbsent(6), 9, statusPumpIsOn(6) ? "off" : "on");
+  appendStatusControlCell(html, "Circulation Pump", "circ", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent(), 0, nullptr);
+  appendStatusControlCell(html, "Blower", "blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent(), 12, spaStatusData.blower == 0 ? "on" : "off");
+  appendStatusControlCell(html, "Light 1", "light1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1), 17, spaStatusData.light1 ? "off" : "on");
+  appendStatusControlCell(html, "Light 2", "light2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2), 18, spaStatusData.light2 ? "off" : "on");
+  appendStatusControlCell(html, "Mister", "mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent(), 14, spaStatusData.mister ? "off" : "on");
   html += "</div><div id=\"statusButtonResult\" class=\"status-control-result\"></div></section>";
 
   html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";
@@ -919,6 +917,51 @@ void handleStatus(AsyncWebServerRequest *request)
           "return await r.text();"
           "}"
           "async function statusFetchControls(){const r=await fetch('/api/status/controls');return await r.json();}"
+          "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
+          "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
+          "function statusSetButtonState(code,desired){var btn=document.querySelector('button[data-button=\"'+code+'\"]');if(!btn)return;"
+          "btn.setAttribute('data-state',desired);btn.textContent='Turn '+(desired==='on'?'On':'Off');}"
+          "function statusPumpDisplay(raw){if(raw===0)return 'Off';if(raw===1)return 'Low';if(raw===2)return 'High';return String(raw);}"
+          "function statusOnOff(v){return Number(v)>0?'On':'Off';}"
+          "function statusPumpUiValue(snap,num){var cfg=Number(snap['pump'+num+'Config']||0);if(cfg===1)return statusOnOff(snap['pump'+num+'On']);return statusPumpDisplay(Number(snap['pump'+num]||0));}"
+          "function statusApplySnapshot(snap){"
+          "if(!snap)return;"
+          "statusSetEquipValue('pump1',statusPumpUiValue(snap,1));"
+          "statusSetEquipValue('pump2',statusPumpUiValue(snap,2));"
+          "statusSetEquipValue('pump3',statusPumpUiValue(snap,3));"
+          "statusSetEquipValue('pump4',statusPumpUiValue(snap,4));"
+          "statusSetEquipValue('pump5',statusPumpUiValue(snap,5));"
+          "statusSetEquipValue('pump6',statusPumpUiValue(snap,6));"
+          "if(typeof snap.circ!=='undefined')statusSetEquipValue('circ',statusOnOff(snap.circ));"
+          "statusSetEquipValue('blower',statusOnOff(snap.blower));"
+          "statusSetEquipValue('light1',statusOnOff(snap.light1));"
+          "statusSetEquipValue('light2',statusOnOff(snap.light2));"
+          "statusSetEquipValue('mister',statusOnOff(snap.mister));"
+          "statusSetButtonState(4,snap.pump1On?'off':'on');"
+          "statusSetButtonState(5,snap.pump2On?'off':'on');"
+          "statusSetButtonState(6,snap.pump3On?'off':'on');"
+          "statusSetButtonState(7,snap.pump4On?'off':'on');"
+          "statusSetButtonState(8,snap.pump5On?'off':'on');"
+          "statusSetButtonState(9,snap.pump6On?'off':'on');"
+          "statusSetButtonState(12,Number(snap.blower)>0?'off':'on');"
+          "statusSetButtonState(17,Number(snap.light1)>0?'off':'on');"
+          "statusSetButtonState(18,Number(snap.light2)>0?'off':'on');"
+          "statusSetButtonState(14,Number(snap.mister)>0?'off':'on');"
+          "var setInput=document.getElementById('statusSetTempInput');"
+          "if(setInput&&document.activeElement!==setInput&&typeof snap.setTemp!=='undefined'){setInput.value=String(Number(snap.setTemp));}"
+          "}"
+          "let statusPollTimer=0;let statusPollBusy=false;"
+          "async function statusPollOnce(){"
+          "if(statusPollBusy||document.hidden)return;"
+          "statusPollBusy=true;"
+          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);}catch(e){}"
+          "statusPollBusy=false;"
+          "}"
+          "function statusStartPolling(){if(statusPollTimer)return;statusPollOnce();statusPollTimer=setInterval(statusPollOnce,2000);}"
+          "function statusStopPolling(){if(!statusPollTimer)return;clearInterval(statusPollTimer);statusPollTimer=0;}"
+          "document.addEventListener('visibilitychange',function(){if(document.hidden){statusStopPolling();}else{statusStartPolling();}});"
+          "window.addEventListener('beforeunload',statusStopPolling);"
+          "statusStartPolling();"
           "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
           "if(code===17)return (snap.light1>0)===on;"
           "if(code===18)return (snap.light2>0)===on;"
@@ -1378,12 +1421,19 @@ void handleStatusControlsApi(AsyncWebServerRequest *request)
   doc["pump4"] = spaStatusData.pump4;
   doc["pump5"] = spaStatusData.pump5;
   doc["pump6"] = spaStatusData.pump6;
+  doc["pump1Config"] = statusPumpConfigSpeed(1);
+  doc["pump2Config"] = statusPumpConfigSpeed(2);
+  doc["pump3Config"] = statusPumpConfigSpeed(3);
+  doc["pump4Config"] = statusPumpConfigSpeed(4);
+  doc["pump5Config"] = statusPumpConfigSpeed(5);
+  doc["pump6Config"] = statusPumpConfigSpeed(6);
   doc["pump1On"] = statusPumpIsOn(1);
   doc["pump2On"] = statusPumpIsOn(2);
   doc["pump3On"] = statusPumpIsOn(3);
   doc["pump4On"] = statusPumpIsOn(4);
   doc["pump5On"] = statusPumpIsOn(5);
   doc["pump6On"] = statusPumpIsOn(6);
+  doc["circ"] = spaStatusData.circ ? 1 : 0;
   doc["blower"] = spaStatusData.blower;
   doc["mister"] = spaStatusData.mister ? 1 : 0;
   serializeJson(doc, *response);
