@@ -8,6 +8,14 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-04-30
+
+### Changed
+
+- **MQTT availability resilience** ([`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp)): Increased PubSubClient keepalive from 10s to 60s and socket timeout from 1s to 5s so brief broker latency or ESP32 loop stalls are less likely to trigger Home Assistant availability flapping through the retained `node/state` Last Will topic.
+- **ESP32 Wi-Fi stability** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)): Disabled station Wi-Fi sleep for the always-powered gateway to reduce MQTT reconnect churn on marginal links.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.4.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.3.0] - 2026-04-30
 
 ### Fixed
@@ -411,7 +419,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.3...v2.3.0
 [2.2.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.1...v2.2.2

@@ -44,6 +44,7 @@ void wifiModuleSetup()
           s.c_str() + 15);
 
   WiFi.setTxPower(WIFI_POWER_19_5dBm); // this sets wifi to highest power
+  WiFi.setSleep(false);
   WiFi.setHostname(gatewayName);
   ArduinoOTA.setHostname(gatewayName);
   Log.notice(F("[WiFi]: Hostname: %s" CR), WiFi.getHostname());
