@@ -36,6 +36,9 @@ void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
 void handleStatusControlsApi(AsyncWebServerRequest *request);
+void handleStatusSummaryApi(AsyncWebServerRequest *request);
+void handleStatusHistoriesApi(AsyncWebServerRequest *request);
+void handleStateLittleFsApi(AsyncWebServerRequest *request);
 void handleDiagToggleApi(AsyncWebServerRequest *request);
 void handleDiagToggleSequenceApi(AsyncWebServerRequest *request);
 void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request);
@@ -58,6 +61,45 @@ void handleLogsConfigPost(AsyncWebServerRequest *request);
 String parseBody(String body);
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
 String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
+
+static bool sendNotModifiedIfEtagMatches(AsyncWebServerRequest *request, const String &etag)
+{
+  if (!request || etag.length() == 0 || !request->hasHeader("If-None-Match"))
+  {
+    return false;
+  }
+  const AsyncWebHeader *matchHeader = request->getHeader("If-None-Match");
+  if (!matchHeader)
+  {
+    return false;
+  }
+  const String matchValue = matchHeader->value();
+  if (matchValue.indexOf(etag) < 0)
+  {
+    return false;
+  }
+  AsyncWebServerResponse *notModified = request->beginResponse(304);
+  notModified->addHeader("ETag", etag);
+  notModified->addHeader("Cache-Control", "no-cache");
+  request->send(notModified);
+  return true;
+}
+
+static void sendHtmlWithEtag(AsyncWebServerRequest *request, const String &html, const String &etag)
+{
+  if (!request)
+  {
+    return;
+  }
+  if (sendNotModifiedIfEtagMatches(request, etag))
+  {
+    return;
+  }
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", html);
+  response->addHeader("ETag", etag);
+  response->addHeader("Cache-Control", "no-cache");
+  request->send(response);
+}
 
 static const char *wifiStatusName(wl_status_t s)
 {
@@ -304,6 +346,9 @@ void spaWebServerLoop()
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
     server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
+    server.on("/api/status/summary", HTTP_GET, handleStatusSummaryApi);
+    server.on("/api/status/histories", HTTP_GET, handleStatusHistoriesApi);
+    server.on("/api/state/littlefs", HTTP_GET, handleStateLittleFsApi);
     server.on("/api/diag/toggle", HTTP_GET, handleDiagToggleApi);
     server.on("/api/diag/toggle_sequence", HTTP_GET, handleDiagToggleSequenceApi);
     server.on("/api/diag/light1_next_cts", HTTP_GET, handleDiagLight1NextCtsApi);
@@ -1096,7 +1141,9 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "</dl></section>";
 
   html += "<section class=\"panel status-span-full\"><h2>Histories</h2>";
-  appendStatusHistoriesSection(html);
+  html += "<p class=\"chart-caption\">Load this on demand to keep first render fast on weak Wi-Fi.</p>";
+  html += "<button class=\"equip-btn\" type=\"button\" id=\"statusLoadHistoriesBtn\">Load history charts</button>";
+  html += "<div id=\"statusHistoriesContainer\"></div>";
   html += "</section>";
 
   html += "<script>"
@@ -1105,7 +1152,10 @@ void handleStatus(AsyncWebServerRequest *request)
           "const r=await fetch('/devices/sci',{method:'POST',headers:{'Content-Type':'application/xml'},body});"
           "return await r.text();"
           "}"
-          "async function statusFetchControls(){const r=await fetch('/api/status/controls');return await r.json();}"
+          "function statusBackoffMs(base,max,fails){var e=Math.min(max,base*Math.pow(2,Math.min(6,fails)));var j=Math.floor(Math.random()*Math.max(250,Math.floor(e*0.35)));return Math.min(max,e+j);}"
+          "async function statusFetchJson(url,timeoutMs){const ctl=new AbortController();const t=setTimeout(function(){ctl.abort();},timeoutMs||5000);"
+          "try{const r=await fetch(url,{cache:'no-store',signal:ctl.signal});if(!r.ok)throw new Error('http_'+r.status);return await r.json();}finally{clearTimeout(t);}}"
+          "async function statusFetchControls(){return await statusFetchJson('/api/status/summary',4200);}"
           "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
           "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
           "function statusSetButtonState(code,desired){var btn=document.querySelector('button[data-button=\"'+code+'\"]');if(!btn)return;"
@@ -1174,17 +1224,21 @@ void handleStatus(AsyncWebServerRequest *request)
           "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
           "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
           "}"
-          "let statusPollTimer=0;let statusPollBusy=false;"
+          "let statusPollTimer=0;let statusPollBusy=false;let statusPollFailures=0;const statusPollBaseMs=2000;const statusPollMaxMs=25000;"
+          "function statusConnState(msg){var el=document.getElementById('statusButtonResult');if(el&&msg)el.textContent=msg;}"
+          "function statusSchedulePoll(ms){statusStopPolling();statusPollTimer=setTimeout(statusPollOnce,Math.max(250,ms||statusPollBaseMs));}"
           "async function statusPollOnce(){"
           "if(statusPollBusy||document.hidden)return;"
           "statusPollBusy=true;"
-          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);}catch(e){}"
+          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);statusPollFailures=0;statusConnState('');statusSchedulePoll(statusPollBaseMs);}catch(e){statusPollFailures++;statusConnState('Connection is flaky, showing last known values...');statusSchedulePoll(statusBackoffMs(statusPollBaseMs,statusPollMaxMs,statusPollFailures));}"
           "statusPollBusy=false;"
           "}"
-          "function statusStartPolling(){if(statusPollTimer)return;statusPollOnce();statusPollTimer=setInterval(statusPollOnce,2000);}"
-          "function statusStopPolling(){if(!statusPollTimer)return;clearInterval(statusPollTimer);statusPollTimer=0;}"
+          "function statusStartPolling(){if(statusPollTimer||statusPollBusy)return;statusPollFailures=0;statusPollOnce();}"
+          "function statusStopPolling(){if(!statusPollTimer)return;clearTimeout(statusPollTimer);statusPollTimer=0;}"
           "document.addEventListener('visibilitychange',function(){if(document.hidden){statusStopPolling();}else{statusStartPolling();}});"
           "window.addEventListener('beforeunload',statusStopPolling);"
+          "document.getElementById('statusLoadHistoriesBtn').addEventListener('click',async function(){var c=document.getElementById('statusHistoriesContainer');if(!c||c.getAttribute('data-loaded')==='1')return;"
+          "this.disabled=true;this.textContent='Loading...';try{var j=await statusFetchJson('/api/status/histories',9000);c.innerHTML=(j&&j.html)||'';c.setAttribute('data-loaded','1');this.textContent='History loaded';}catch(e){this.disabled=false;this.textContent='Retry history load';}});"
           "statusStartPolling();"
           "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
           "if(code===17)return (snap.light1>0)===on;"
@@ -1256,7 +1310,8 @@ void handleStatus(AsyncWebServerRequest *request)
           "}"
           "</script>";
   html += "</div></main></div></body></html>";
-  request->send(200, "text/html", html);
+  String etag = String("W/\"status-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
+  sendHtmlWithEtag(request, html, etag);
   Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
 }
 
@@ -1270,6 +1325,7 @@ void handleConfig(AsyncWebServerRequest *request)
   if (spaConfigurationData.lastUpdate == 0)
   {
     html += "<li><b>Spa Configuration not available</b></li>";
+    html += "</ul></section>";
   }
   else
   {
@@ -1300,13 +1356,19 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "<li><b>Filter 1 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</li>";
     html += "<li><b>Filter 2 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</li>";
     html += "<li><b>Filter 2 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</li>";
-    html += "</ul></section><section class='panel'><h1>LittleFS Configuration</h1><ul>";
-
-    html += "<li>" + listDirToString(LittleFS, "/", 3) + "</li>";
+    html += "</ul></section><section class='panel'><h1>LittleFS Configuration</h1>";
+    html += "<p class='chart-caption'>Load on demand to avoid large payloads on weak links.</p>";
+    html += "<button class='equip-btn' type='button' id='cfgLoadLittleFsBtn'>Load LittleFS file list</button>";
+    html += "<ul id='cfgLittleFsContainer'></ul>";
     // Add more fields as needed
+    html += "</section><script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');if(!btn||!box)return;"
+            "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
+            "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
+            "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
   }
-  html += "</ul></section></main></div></body></html>";
-  request->send(200, "text/html", html);
+  html += "</main></div></body></html>";
+  String etag = String("W/\"cfg-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaConfigurationData.lastUpdate) + "-" + String(spaFilterSettingsData.lastUpdate) + "\"";
+  sendHtmlWithEtag(request, html, etag);
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
   Log.verbose("[Web]: handleConfig %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 }
@@ -1386,6 +1448,9 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>RS485 raw byte trace: </b><a href='/api/rs485/raw?limit=200' target='_blank' rel='noopener'>GET /api/rs485/raw?limit=200</a></li>";
   html += "<li><b>RS485 history snapshots: </b><a href='/api/rs485/history?limit=200' target='_blank' rel='noopener'>GET /api/rs485/history?limit=200</a></li>";
   html += "</ul></section>";
+  html += "<section class='panel'><h1>LittleFS Inventory</h1><p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Load on demand when needed for debugging.</p>"
+          "<button type='button' id='stateLoadLittleFs' class='fw-check-btn'>Load LittleFS files</button>"
+          "<ul id='stateLittleFsBox' style='margin-top:10px'></ul></section>";
 
   html += "<section class='panel advanced-panel'><h1>Advanced Diagnostics</h1>";
 
@@ -1420,9 +1485,14 @@ void handleState(AsyncWebServerRequest *request)
   html += "</ul></details>";
 #endif
   html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script>";
+  html += "<script>(function(){var btn=document.getElementById('stateLoadLittleFs');var box=document.getElementById('stateLittleFsBox');if(!btn||!box)return;"
+          "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
+          "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
+          "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
   html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}btn.addEventListener('click',function(){el.textContent='Checking...';fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';var c=cmpSemver(fw,tag);if(c>=0)el.textContent='Up to date (gateway '+fw+', latest GitHub release '+tag+').';else el.textContent='Update available: gateway '+fw+', latest '+tag+'. Use Releases link above to upgrade.';}).catch(function(){el.textContent='';el.appendChild(document.createTextNode('Could not reach GitHub. '));var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
 
-  request->send(200, "text/html", html);
+  String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
+  sendHtmlWithEtag(request, html, etag);
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
@@ -1529,7 +1599,8 @@ void handleLogsPage(AsyncWebServerRequest *request)
   html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='hiddenCount'>hidden idle CTS: 0</span><span id='connState'></span></div>";
   html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div><script>";
   html += R"JS((function(){
-var logView=document.getElementById('logView'),since=0,pollMs=900,timer,ws,useWs=false,newBuffered=0;
+var logView=document.getElementById('logView'),since=0,pollMs=1000,pollMaxMs=20000,timer,ws,useWs=true,newBuffered=0;
+var pollFailures=0,wsRetryTimer=null,wsOpenEver=false;
 var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
 var pauseEl=document.getElementById('pause'),autoScrollEl=document.getElementById('autoScroll'),newBadge=document.getElementById('newBadge');
 var hideIdleCtsEl=document.getElementById('hideIdleCts'),showHiddenEl=document.getElementById('showHidden');
@@ -1562,18 +1633,26 @@ function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scr
 if(autoScrollEl.checked||atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
 else{newBuffered+=arr.length;newBadge.textContent=String(newBuffered)+' new lines';newBadge.style.display='inline-flex';for(var k=0;k<arr.length;k++){rendered.push({s:arr[k].s,t:arr[k].t});if(rendered.length>maxRendered)rendered.shift();}renderCount.textContent=rendered.length+' lines';}}
 function capSel(mx){for(var i=0;i<sel.options.length;i++){var o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}
-function poll(){if(document.hidden)return;fetch('/api/logs?since='+since+'&limit=120').then(function(r){return r.json();}).then(function(j){
-connState.textContent='ok';
+function nextPollDelay(){var e=Math.min(pollMaxMs,pollMs*Math.pow(2,Math.min(6,pollFailures)));var j=Math.floor(Math.random()*Math.max(250,Math.floor(e*0.35)));return Math.min(pollMaxMs,e+j);}
+function schedulePoll(ms){stopPoll();timer=setTimeout(poll,Math.max(250,ms||pollMs));}
+function fetchJsonTimeout(url,timeoutMs){var ctl=new AbortController();var t=setTimeout(function(){ctl.abort();},timeoutMs||5000);return fetch(url,{cache:'no-store',signal:ctl.signal}).then(function(r){if(!r.ok)throw new Error('http_'+r.status);return r.json();}).finally(function(){clearTimeout(t);});}
+function poll(){if(document.hidden)return;schedulePoll(pollMs);fetchJsonTimeout('/api/logs?since='+since+'&limit=120',4200).then(function(j){
+pollFailures=0;connState.textContent='ok';
 if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);
 var lines=j.lines||[];
 receiveLines(lines);
 if(lines.length>0&&typeof lines[lines.length-1].s==='number'){since=lines[lines.length-1].s;}
 else if(typeof j.newestSeq==='number'){since=j.newestSeq;}
-}).catch(function(){connState.textContent='error';});}
-function startPoll(){stopPoll();streamMode.textContent='poll';timer=setInterval(poll,pollMs);poll();}
-function stopPoll(){if(timer){clearInterval(timer);timer=null;}}
-function connectWs(){streamMode.textContent='ws';var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');connState.textContent='connecting';
-ws.onopen=function(){connState.textContent='ws-open';};ws.onmessage=function(ev){try{var o=JSON.parse(ev.data);if(o.lines)receiveLines(o.lines);if(o.d)receiveLines(o.d);}catch(e){}};ws.onclose=function(){connState.textContent='ws-closed';ws=null;};}
+}).catch(function(){pollFailures++;connState.textContent='poll retrying...';schedulePoll(nextPollDelay());});}
+function startPoll(){stopPoll();streamMode.textContent='poll';pollFailures=0;poll();}
+function stopPoll(){if(timer){clearTimeout(timer);timer=null;}}
+function clearWsRetry(){if(wsRetryTimer){clearTimeout(wsRetryTimer);wsRetryTimer=null;}}
+function scheduleWsReconnect(){clearWsRetry();if(document.hidden||pauseEl.checked||!useWs)return;var wait=Math.min(20000,1000*Math.pow(2,Math.min(6,pollFailures)));wsRetryTimer=setTimeout(connectWs,wait);}
+function connectWs(){if(document.hidden||pauseEl.checked||!useWs)return;streamMode.textContent='ws';clearWsRetry();var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');connState.textContent='connecting';
+ws.onopen=function(){pollFailures=0;wsOpenEver=true;connState.textContent='ws-open';};
+ws.onmessage=function(ev){try{var o=JSON.parse(ev.data);if(o.lines)receiveLines(o.lines);if(o.d)receiveLines(o.d);}catch(e){}};
+ws.onerror=function(){connState.textContent='ws-error';};
+ws.onclose=function(){ws=null;pollFailures++;if(!useWs)return;connState.textContent='ws-closed';if(wsOpenEver){startPoll();}scheduleWsReconnect();};}
 function setPreset(inc,exc){fInc.value=inc||'';fExc.value=exc||'';refreshFromRendered();}
 function dl(name,content,type){var b=new Blob([content],{type:type});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);}
 document.getElementById('pAll').addEventListener('click',function(){setPreset('','');});
@@ -1585,8 +1664,8 @@ fInc.addEventListener('input',refreshFromRendered);fExc.addEventListener('input'
 hideIdleCtsEl.addEventListener('change',refreshFromRendered);
 showHiddenEl.addEventListener('change',refreshFromRendered);
 newBadge.addEventListener('click',function(){newBuffered=0;newBadge.style.display='none';refreshFromRendered();logView.scrollTop=logView.scrollHeight;});
-document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
-document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
+document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();clearWsRetry();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
+document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();clearWsRetry();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
 document.getElementById('clr').addEventListener('click',function(){rendered=[];refreshFromRendered();});
 document.getElementById('copyTxt').addEventListener('click',function(){
 var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}
@@ -1604,12 +1683,14 @@ document.body.removeChild(ta);
 }
 document.getElementById('dlTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}dl('spa-logs-'+Date.now()+'.log',txt,'text/plain');});
 document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
-document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetch('/api/logs/config');}).then(function(r){return r.json();}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
-fetch('/api/logs/config').then(function(r){return r.json();}).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});
-if(!pauseEl.checked)startPoll();
+document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetchJsonTimeout('/api/logs/config',5000);}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
+fetchJsonTimeout('/api/logs/config',5000).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});
+document.addEventListener('visibilitychange',function(){if(document.hidden){stopPoll();clearWsRetry();if(ws){ws.close();ws=null;}}else if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
+if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 })();)JS";
   html += "</script></body></html>";
-  request->send(200, "text/html", html);
+  String etag = String("W/\"logs-") + String(VERSION) + "-" + String(BUILD) + "\"";
+  sendHtmlWithEtag(request, html, etag);
   Log.verbose("[Web]: handleLogsPage %p" CR, request->client()->remoteIP());
 }
 
@@ -1670,10 +1751,8 @@ void handleWifi(AsyncWebServerRequest *request)
   request->send(response);
 }
 
-void handleStatusControlsApi(AsyncWebServerRequest *request)
+static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(2560);
   doc["lastUpdate"] = spaStatusData.lastUpdate;
   doc["snapshotAgeSec"] = statusSnapshotAgeSec();
   doc["snapshotAtLocal"] = statusLastUpdateDisplayHtml(spaStatusData.lastUpdate);
@@ -1727,6 +1806,51 @@ void handleStatusControlsApi(AsyncWebServerRequest *request)
   doc["clockModeRaw"] = spaStatusData.clockMode;
   doc["filterModeText"] = String(getMapDescription(spaStatusData.filterMode, filterModeMap));
   doc["gatewayTimeHHMM"] = statusGatewayLocalTimeHHMM();
+}
+
+void handleStatusControlsApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(2560);
+  fillStatusSnapshotDoc(doc);
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleStatusSummaryApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(2560);
+  fillStatusSnapshotDoc(doc);
+  wl_status_t st = WiFi.status();
+  doc["wifiConnected"] = (st == WL_CONNECTED);
+  doc["wifiStatus"] = static_cast<int>(st);
+  doc["wifiStatusName"] = wifiStatusName(st);
+  if (st == WL_CONNECTED)
+  {
+    doc["wifiRssi"] = WiFi.RSSI();
+  }
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleStatusHistoriesApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(8192);
+  String historiesHtml;
+  historiesHtml.reserve(7000);
+  appendStatusHistoriesSection(historiesHtml);
+  doc["html"] = historiesHtml;
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleStateLittleFsApi(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(6144);
+  doc["html"] = listDirToString(LittleFS, "/", 3);
   serializeJson(doc, *response);
   request->send(response);
 }

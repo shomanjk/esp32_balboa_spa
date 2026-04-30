@@ -8,9 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
-### Fixed
+## [2.2.3] - 2026-04-30
 
-- **HA optional-entity discovery churn on reconnect** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Expanded discovery now waits for spa configuration/information frames before retracting optional retained entities, reducing remove/recreate or disable-like behavior when Wi-Fi/MQTT reconnects happen before spa metadata is available.
+### Added
+
+- **Firmware portal lazy-load endpoints for weak Wi-Fi** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added `GET /api/status/histories` and `GET /api/state/littlefs` so heavy history charts and LittleFS inventory can be loaded on demand instead of inflating initial `/status`, `/state`, and `/config` page payloads.
+
+### Changed
+
+- **Firmware portal polling resilience on flaky links** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `/status` now polls compact `GET /api/status/summary` with request timeouts, exponential backoff + jitter, and stale-data messaging; `/logs` now defaults websocket-first with reconnect/backoff and adaptive polling fallback.
+- **Conditional page revalidation (ETag/304)** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `/status`, `/state`, `/config`, and `/logs` now emit weak `ETag` headers and honor `If-None-Match` with `304 Not Modified` to reduce reload bandwidth over unreliable Wi-Fi.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.2.3`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.2.2] - 2026-04-30
 
@@ -391,7 +399,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.2...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.3...HEAD
+[2.2.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.1.0...v2.2.0
