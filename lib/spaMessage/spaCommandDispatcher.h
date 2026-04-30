@@ -35,6 +35,10 @@ SpaCommandResult spaSendButtonForPumpSpeed(uint8_t pumpId, uint8_t desiredSpeed,
 SpaCommandResult spaSetHeatingMode(bool ready, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSetTempRange(bool high, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Balboa `0x27` set temperature scale (`0x00` Fahrenheit, `0x01` Celsius). */
+SpaCommandResult spaSetTemperatureScale(bool celsius, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Balboa `0x21` set panel 12h/24h display bit while preserving current panel time value. */
+SpaCommandResult spaSetSpaPanelClockFormat(bool use24Hour, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 /** Balboa `0x21` set panel clock (hour 0–23, minute 0–59). High bit of hour follows current `spaStatusData.clockMode` (24h vs 12h display). */
 SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSendToggleDiagnostic(

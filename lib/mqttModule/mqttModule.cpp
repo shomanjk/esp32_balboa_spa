@@ -212,6 +212,21 @@ void mqttMessage(char *p_topic, byte *p_payload, unsigned int p_length)
       result = {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid_preset_payload"};
     }
   }
+  else if (suffix == "tempUnits")
+  {
+    if (equalsIgnoreCaseTrimmed(payload, "c") || equalsIgnoreCaseTrimmed(payload, "celsius"))
+    {
+      result = spaSetTemperatureScale(true, SPA_COMMAND_SOURCE_MQTT);
+    }
+    else if (equalsIgnoreCaseTrimmed(payload, "f") || equalsIgnoreCaseTrimmed(payload, "fahrenheit"))
+    {
+      result = spaSetTemperatureScale(false, SPA_COMMAND_SOURCE_MQTT);
+    }
+    else
+    {
+      result = {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid_temp_units_payload"};
+    }
+  }
   else if (suffix.startsWith("button/"))
   {
     String codeRaw = suffix.substring(7);
