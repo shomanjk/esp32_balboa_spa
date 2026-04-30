@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-04-30
+
+### Fixed
+
+- **Home Assistant climate discovery temperature unit validation** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): MQTT discovery for `climate` now publishes `temperature_unit` as Home Assistant-required `F` or `C` (instead of degree-symbol variants), preventing HA discovery rejection and associated entity disable/unavailable churn.
+
+### Changed
+
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.2.2`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.2.1] - 2026-04-30
 
 ### Fixed
@@ -377,7 +387,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.2...HEAD
+[2.2.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.0.0...v2.1.0

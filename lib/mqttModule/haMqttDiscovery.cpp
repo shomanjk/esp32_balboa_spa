@@ -337,8 +337,10 @@ namespace
     JsonArray presets = root.createNestedArray("preset_modes");
     presets.add("Low Range");
     presets.add("High Range");
-    root["temperature_unit"] = MQTT_HA_TEMP_UNIT;
-    if (String(MQTT_HA_TEMP_UNIT).endsWith("C"))
+    const String configuredTempUnit = String(MQTT_HA_TEMP_UNIT);
+    const bool isCelsius = configuredTempUnit.endsWith("C") || configuredTempUnit.endsWith("c");
+    root["temperature_unit"] = isCelsius ? "C" : "F";
+    if (isCelsius)
     {
       root["min_temp"] = 10;
       root["max_temp"] = 40;
