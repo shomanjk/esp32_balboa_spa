@@ -1,5 +1,12 @@
 // Update as needed and copy to config.h
 
+// Optional: override firmware repo URLs (defaults in main.h). Define before any header
+// that includes main.h, or use build_flags -DFIRMWARE_REPO_OWNER=\"you\" in platformio.ini.
+// #undef FIRMWARE_REPO_OWNER
+// #define FIRMWARE_REPO_OWNER "myuser"
+// #undef FIRMWARE_REPO_NAME
+// #define FIRMWARE_REPO_NAME "esp32_balboa_spa"
+
 #define WIFI_SSID "xxxxxx"
 #define WIFI_PASSWORD "xxxxxx"
 
