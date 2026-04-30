@@ -1,5 +1,7 @@
 # esp32_balboa_spa
 
+**Changelog:** [CHANGELOG.md](CHANGELOG.md) (release history and compare links).
+
 ## About this fork
 
 **Lineage:** Firmware and documentation build on the ESP32 port **[NorthernMan54/esp32_balboa_spa](https://github.com/NorthernMan54/esp32_balboa_spa)** (branch **`ESP32`**). Ongoing changes are tracked from **[shomanjk/esp32_balboa_spa](https://github.com/shomanjk/esp32_balboa_spa)** (`origin` for typical clones). The ESP8266-era appendix in the [collapsed snapshot](#inherited-readme-snapshot) comes from [cribskip/esp8266_spa](https://github.com/cribskip/esp8266_spa) via NorthernMan54’s README; those older repos are **not** the target for day-to-day pull requests from this line.

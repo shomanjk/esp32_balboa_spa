@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-04-30
+
+### Fixed
+
+- **Home Assistant pump status for single-speed installs** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Single-speed pumps now publish as HA `switch` entities with normalized state mapping so reported pump states (`Low`/`High`/`On`) resolve to switch **ON** and `Off` resolves to **OFF**, fixing cases where the spa/web status showed pump on but HA immediately flipped the switch back off.
+
+### Changed
+
+- **Pump discovery by capability remains automatic** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Single-speed pumps use `switch` controls while two-speed pumps continue to use `select` (`Off`/`Low`/`High`), keeping compatibility across spa configurations.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.2.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.2.0] - 2026-04-30
 
 ### Added
@@ -20,9 +31,6 @@ where version numbers are used.
 
 - **Pump HA platform by capability** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Installed single-speed pumps are discovered as `switch` entities (`Off`/`Low`), while two-speed pumps are discovered as `select` entities (`Off`/`Low`/`High`) with stable slot naming (`Spa pump N`).
 - **Shared button-state toggle logic** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Web SCI and MQTT command paths now share centralized toggle-count helpers for pump/load/range/mode state convergence.
-
-### Changed
-
 - **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.2.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.1.0] - 2026-04-30
@@ -369,7 +377,9 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.1...v2.0.0
 [1.8.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.0...v1.8.1
