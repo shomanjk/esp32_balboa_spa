@@ -2,6 +2,12 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-04-30 - MQTT command path parity with web dispatcher
+
+- **Implementation:** MQTT callback in [`mqttModule.cpp`](../lib/mqttModule/mqttModule.cpp) now dispatches `Spa/<gateway>/cmd/#` topics to shared helpers in [`spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) (`setTemp`, `setTime`, `syncTime`, `mode`, `preset`, `button/<code>`), and publishes JSON outcomes on `Spa/<gateway>/cmd/result`.
+- **Parity hardening:** Web SCI `Button` path now calls shared `spaToggleCountForButtonRequest` logic, so web and MQTT compute the same multi-toggle sequences (including pump/range/mode cases).
+- **Outcome:** Pending hardware confirmation for each MQTT topic family; use the smoke checklist from the HA MQTT control plan and record accepted/rejected `cmd/result` payloads here after tub-side verification.
+
 ## 2026-04-29 - Panel clock write (`0x21` / `SystemTime`)
 
 - **Implementation:** [`spaSetSpaPanelClockTime`](../lib/spaMessage/spaCommandDispatcher.cpp) queues **`0a bf 21 HH MM`** with CRC; hour byte bit 7 set when status **`clockMode`** has **`0x02`** (24-hour panel format). Web SCI **`SystemTime`** and **`/status`** controls dispatch the same path.

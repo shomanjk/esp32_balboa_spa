@@ -93,19 +93,32 @@ Place images under [`docs/`](docs/) or update paths below.
 
 **Telemetry:** With Wi‑Fi and broker settings in `config.h` (`MQTT_SERVER`, `MQTT_PORT`, credentials), the gateway publishes spa state under `Spa/<gateway>/…` (see [AGENTS.md](AGENTS.md)).
 
-**MQTT commands:** Subscribed `Spa/<gateway>/command` is **not** yet dispatched to the spa (handler still echoes); toggles/setpoint from MQTT are **not** implemented.
+**MQTT commands:** The gateway subscribes `Spa/<gateway>/cmd/#` and dispatches commands to the shared spa dispatcher. Command outcomes are published as JSON on `Spa/<gateway>/cmd/result`.
 
-### Command write scope (v1 locked)
+### Command write scope (v1)
 
 To keep protocol risk low, command-write implementation is intentionally staged:
 
-- **In scope (v1) — implemented on web path:**
+- **In scope (v1) — implemented on web + MQTT paths:**
   - **Button toggle** commands (Balboa `0x11`) from **`/devices/sci`** and firmware **`/status`** (including temp-range item **80** / `0x50`).
   - **Set temperature** commands (Balboa `0x20`) with **protocol** min/max by °F/°C and active high/low range ([`spaProtocolActiveSetpointBand`](lib/spaMessage/spaCommandDispatcher.cpp)).
+- **Also in scope (v1):**
+  - **Set panel clock** (`SystemTime`, Balboa `0x21`) via `HH:MM` or gateway sync.
 - **Deferred (post-v1):**
-  - `SystemTime`
   - `TimeFormat`
   - `TempUnits`
+
+### MQTT command topics (v1)
+
+- `Spa/<gateway>/cmd/setTemp` -> numeric payload (`102`, `39.5`)
+- `Spa/<gateway>/cmd/setTime` -> `HH:MM`
+- `Spa/<gateway>/cmd/syncTime` -> any non-empty payload (uses gateway local time)
+- `Spa/<gateway>/cmd/mode` -> `heat` or `off` (Ready/Rest)
+- `Spa/<gateway>/cmd/preset` -> `Low Range` or `High Range`
+- `Spa/<gateway>/cmd/button/<code>` ->
+  - non-pump: `on`, `off`, `toggle`
+  - pumps: `Off`, `Low`, `High` (single-speed pumps accept `Off`/`Low`)
+- Result telemetry: `Spa/<gateway>/cmd/result` JSON (`target`, `value`, `accepted`, `reason`)
 
 All command frame semantics should be validated against the ccutrer protocol reference before enabling each command family:
 - [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)
@@ -116,6 +129,7 @@ To avoid repeating dead-end experiments while command-write behavior is being de
 **Home Assistant MQTT Discovery:** After each successful MQTT connect, the firmware publishes **retained** discovery configs under `homeassistant/<platform>/<object_id>/config`. In Home Assistant, entities appear under the MQTT integration as device **Balboa Spa**.
 
 - **Temperature values:** `current_temp`, `set_temp`, `low_set_temp`, `high_set_temp`, `sensor_a`, `sensor_b` are numeric temperature sensors.
+- **Writable controls:** `climate` (`spa_controls`), load `switch` entities (`light1`, `light2`, `blower`, `mister`), pump controls by capability (**1-speed pumps as `switch`**, **2-speed pumps as `select`**), a `button` for panel-time sync, and diagnostic `sensor` for last command result.
 - **Enum/categorical values:** `heating_state`, `spa_state`, `init_mode`, `heating_mode`, `filter_mode`, `temp_range` publish human-readable strings and are discovered as enum sensors (not numeric measurements).
 - **Binary values:** `panel_locked`, `settings_lock`, `circ`, `blower`, `light1`, `light2`, `mister` are binary sensors with explicit on/off payloads.
 - **Clock entity:** `spa_time` is intentionally **not** discovered in HA to avoid noisy, non-actionable history churn.

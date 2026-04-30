@@ -8,6 +8,23 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-30
+
+### Added
+
+- **MQTT command dispatch (`cmd/#`)** ([`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp), [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): MQTT now subscribes `Spa/<gateway>/cmd/#` and dispatches `setTemp`, `setTime`, `syncTime`, `mode`, `preset`, and `button/<code>` to the shared command dispatcher (`0x11` / `0x20` / `0x21`) instead of echoing payloads.
+- **MQTT command result telemetry** ([`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp)): Each command publish emits JSON result on `Spa/<gateway>/cmd/result` with `target`, `value`, `accepted`, and `reason` for HA automations and troubleshooting.
+- **Writable HA discovery controls** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Discovery now includes writable `climate` (`spa_controls`), load switches, per-pump controls, panel-time sync button, and diagnostic last-command-result sensor.
+
+### Changed
+
+- **Pump HA platform by capability** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Installed single-speed pumps are discovered as `switch` entities (`Off`/`Low`), while two-speed pumps are discovered as `select` entities (`Off`/`Low`/`High`) with stable slot naming (`Spa pump N`).
+- **Shared button-state toggle logic** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Web SCI and MQTT command paths now share centralized toggle-count helpers for pump/load/range/mode state convergence.
+
+### Changed
+
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.2.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.1.0] - 2026-04-30
 
 ### Added

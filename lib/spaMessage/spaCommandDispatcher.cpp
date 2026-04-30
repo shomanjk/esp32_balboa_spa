@@ -106,6 +106,155 @@ SpaCommandResult spaSendToggleCommand(uint8_t itemCode, SpaCommandSource source)
   return queueFrame(frame, "toggle", source);
 }
 
+int spaPumpToggleCountForSpeed(uint8_t pumpId, uint8_t desiredSpeed)
+{
+  if (pumpId < 1 || pumpId > 6 || desiredSpeed > 2)
+  {
+    return -1;
+  }
+  const uint8_t pumpStatus[] = {spaStatusData.pump1, spaStatusData.pump2, spaStatusData.pump3, spaStatusData.pump4, spaStatusData.pump5, spaStatusData.pump6};
+  const uint8_t pumpConfig[] = {spaConfigurationData.pump1, spaConfigurationData.pump2, spaConfigurationData.pump3, spaConfigurationData.pump4, spaConfigurationData.pump5, spaConfigurationData.pump6};
+  const uint8_t state = pumpStatus[pumpId - 1];
+  const uint8_t speedConfig = pumpConfig[pumpId - 1];
+  if (speedConfig == 0)
+  {
+    return -1;
+  }
+  if (speedConfig <= 1)
+  {
+    // Single-speed pumps map 0->Off and 1->On. "High" is invalid for these pumps.
+    if (desiredSpeed == 2)
+    {
+      return -1;
+    }
+    const uint8_t desiredOnOff = desiredSpeed > 0 ? 1 : 0;
+    const uint8_t currentOnOff = state > 0 ? 1 : 0;
+    return (desiredOnOff == currentOnOff) ? 0 : 1;
+  }
+
+  if (state > 2)
+  {
+    return -1;
+  }
+  const int delta = ((int)desiredSpeed - (int)state + 3) % 3;
+  return delta;
+}
+
+int spaToggleCountForButtonRequest(uint8_t itemCode, bool requestHasState, bool desiredOn)
+{
+  // Lights are binary; one toggle transitions state.
+  if (itemCode == 17 || itemCode == 18)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+    const bool isOn = (itemCode == 17 ? spaStatusData.light1 : spaStatusData.light2);
+    return (isOn == desiredOn) ? 0 : 1;
+  }
+
+  // Pumps can be single-speed or two-speed.
+  if (itemCode >= 4 && itemCode <= 9)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+    const uint8_t pumpId = (itemCode - 3);
+    const uint8_t desiredSpeed = desiredOn ? 1 : 0;
+    return spaPumpToggleCountForSpeed(pumpId, desiredSpeed);
+  }
+
+  // Balboa temp range: item 0x50 (80) toggles high/low.
+  if (itemCode == 80)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+    const bool isHigh = (spaStatusData.tempRange != 0);
+    const bool wantHigh = desiredOn;
+    return (isHigh == wantHigh) ? 0 : 1;
+  }
+
+  // Heating mode item 0x51 (81) toggles Ready/Rest.
+  if (itemCode == 81)
+  {
+    if (!requestHasState)
+    {
+      return 1;
+    }
+    const bool inRest = (spaStatusData.heatingMode == 1);
+    const bool wantReady = desiredOn;
+    return (wantReady == !inRest) ? 0 : 1;
+  }
+
+  // Other items remain single-toggle for now.
+  return 1;
+}
+
+SpaCommandResult spaSendButtonForBinaryState(uint8_t itemCode, bool desiredOn, SpaCommandSource source)
+{
+  const int togglesToSend = spaToggleCountForButtonRequest(itemCode, true, desiredOn);
+  if (togglesToSend < 0)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid button request"};
+  }
+  if (togglesToSend == 0)
+  {
+    return {true, SPA_COMMAND_ACCEPTED, "accepted"};
+  }
+
+  SpaCommandResult result = {false, SPA_COMMAND_INVALID_ARGUMENT, "unknown"};
+  for (int i = 0; i < togglesToSend; i++)
+  {
+    result = spaSendToggleCommand(itemCode, source);
+    if (!result.accepted)
+    {
+      return result;
+    }
+  }
+  return result;
+}
+
+SpaCommandResult spaSendButtonForPumpSpeed(uint8_t pumpId, uint8_t desiredSpeed, SpaCommandSource source)
+{
+  if (pumpId < 1 || pumpId > 6)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid pump id"};
+  }
+  const int togglesToSend = spaPumpToggleCountForSpeed(pumpId, desiredSpeed);
+  if (togglesToSend < 0)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid pump speed"};
+  }
+  if (togglesToSend == 0)
+  {
+    return {true, SPA_COMMAND_ACCEPTED, "accepted"};
+  }
+  const uint8_t itemCode = (uint8_t)(pumpId + 3);
+  SpaCommandResult result = {false, SPA_COMMAND_INVALID_ARGUMENT, "unknown"};
+  for (int i = 0; i < togglesToSend; i++)
+  {
+    result = spaSendToggleCommand(itemCode, source);
+    if (!result.accepted)
+    {
+      return result;
+    }
+  }
+  return result;
+}
+
+SpaCommandResult spaSetHeatingMode(bool ready, SpaCommandSource source)
+{
+  return spaSendButtonForBinaryState(81, ready, source);
+}
+
+SpaCommandResult spaSetTempRange(bool high, SpaCommandSource source)
+{
+  return spaSendButtonForBinaryState(80, high, source);
+}
+
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source)
 {
   if (!spaCanAcceptCommands())
