@@ -138,6 +138,37 @@ SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSour
   return queueFrame(frame, "set_temp", source);
 }
 
+SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source)
+{
+  if (!spaCanAcceptCommands())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+  }
+  if (minute > 59)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "minute out of range"};
+  }
+  if (hour24 > 23)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "hour out of range"};
+  }
+
+  // protocol.md: Set Time 0x21 payload HH MM; bit 7 of HH selects 24-hour panel format.
+  uint8_t hourByte = hour24 & 0x7F;
+  if ((spaStatusData.clockMode & 0x02) != 0)
+  {
+    hourByte |= 0x80;
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(destinationId());
+  frame.push(kBroadcastChannel);
+  frame.push(Set_Time_Type);
+  frame.push(hourByte);
+  frame.push(minute);
+  return queueFrame(frame, "set_time", source);
+}
+
 SpaCommandResult spaSendToggleDiagnostic(
     uint8_t itemCode,
     bool useWifiDestination,

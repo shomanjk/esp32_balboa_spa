@@ -2,6 +2,11 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-04-29 - Panel clock write (`0x21` / `SystemTime`)
+
+- **Implementation:** [`spaSetSpaPanelClockTime`](../lib/spaMessage/spaCommandDispatcher.cpp) queues **`0a bf 21 HH MM`** with CRC; hour byte bit 7 set when status **`clockMode`** has **`0x02`** (24-hour panel format). Web SCI **`SystemTime`** and **`/status`** controls dispatch the same path.
+- **Outcome:** *Pending tub-side confirmation* — add a line here after you verify the physical panel clock advances to the requested `HH:MM`.
+
 ## 2026-04-29 - Release **2.0.0** (major): trusted tub-side writes
 
 - **Milestone:** Tagged line **`2.0.0`** — firmware **`VERSION`** / **`ANALYTICS_VERSION`** ([`src/main.h`](../src/main.h), [`lib/Analytics/Analytics.h`](../lib/Analytics/Analytics.h)). [CHANGELOG.md](../CHANGELOG.md) summarizes portal command reliability, **`/status`** UX (range, heating panel, polling), and protocol setpoint validation.

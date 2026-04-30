@@ -29,6 +29,8 @@ bool spaCanAcceptCommands();
 void spaProtocolActiveSetpointBand(float &minBand, float &maxBand);
 SpaCommandResult spaSendToggleCommand(uint8_t itemCode, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Balboa `0x21` set panel clock (hour 0–23, minute 0–59). High bit of hour follows current `spaStatusData.clockMode` (24h vs 12h display). */
+SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 SpaCommandResult spaSendToggleDiagnostic(
     uint8_t itemCode,
     bool useWifiDestination,
