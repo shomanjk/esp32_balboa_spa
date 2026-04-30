@@ -69,8 +69,8 @@ void mqttModuleSetup()
 {
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
   mqtt.setCallback(mqttMessage);
-  mqtt.setKeepAlive(10);
-  mqtt.setSocketTimeout(1);
+  mqtt.setKeepAlive(60);
+  mqtt.setSocketTimeout(5);
   mqtt.setBufferSize(4096); // discovery JSON + state publishes
   mqttTopic = mqttTopic + String(gatewayName) + "/";
   Log.notice("MQTT Server: %s:%d\n", MQTT_SERVER, MQTT_PORT);
