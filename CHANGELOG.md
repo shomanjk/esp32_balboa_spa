@@ -8,6 +8,29 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-04-30
+
+### Fixed
+
+- **ESP State empty Spa Status panel removal** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Removed a leftover HTML section opener that rendered an empty **Spa Status** block on `/state`, and corrected section transitions so Wi-Fi and MQTT panels render cleanly.
+
+### Changed
+
+- **ESP State firmware comparison badges** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added **Current** and **Latest** version badges near Firmware Version and wired latest badge updates from the GitHub release check.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.5.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.5.0] - 2026-04-30
+
+### Added
+
+- **ESP State MQTT visibility** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h)): Added an `/state` MQTT panel and `GET /api/mqtt` snapshot endpoint with broker/topic/discovery status and reconnect-attempt age telemetry; portal explicitly hides credentials and points operators to `src/config.h` for `MQTT_SERVER`, `MQTT_PORT`, `BROKER_LOGIN`, and `BROKER_PASS`.
+
+### Changed
+
+- **ESP State firmware update UX** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Moved **Check for updates** inline with **Firmware Version** and color-coded result states (checking, up-to-date, update available, error) for faster operator interpretation.
+- **ESP State freshness labeling** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Moved status `lastUpdate` into the **Spa Data Freshness** table as **Status Snapshot** and clarified how it differs from configuration/info dataset freshness rows.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.5.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.4.0] - 2026-04-30
 
 ### Changed
