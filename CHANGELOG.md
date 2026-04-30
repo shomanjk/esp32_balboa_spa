@@ -8,6 +8,18 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-04-30
+
+### Fixed
+
+- **Web/MQTT command readiness gate for status-driven commands** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): Command dispatch no longer requires both `spaStatusData` and `spaConfigurationData` to be fresh for toggle/range/time/setpoint paths; these now gate on fresh status only, fixing false `Button` rejections such as `80:off` (`error='spa status/config not ready'`) when status was present but configuration was not yet populated.
+- **Home Assistant spa light entity platform** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Writable `light1`/`light2` discovery now publishes as HA `light` entities (instead of `switch`) for correct domain semantics; discovery retraction now also clears stale retained `switch`/`binary_sensor` light configs from prior firmware behavior.
+- **Home Assistant light discovery churn/auto-disable risk** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Expanded equipment discovery no longer republishes spa lights as legacy `binary_sensor`/`switch` alongside writable `light` entities, and writable light discovery now publishes only when those lights are installed per spa configuration, reducing entity registry churn that can appear as entities auto-disabling/removing.
+
+### Changed
+
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.3.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.2.3] - 2026-04-30
 
 ### Added
@@ -399,7 +411,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.3...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.3...v2.3.0
 [2.2.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.0...v2.2.1

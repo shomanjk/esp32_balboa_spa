@@ -231,6 +231,32 @@ namespace
     publishDoc("switch", objectId, doc);
   }
 
+  void publishLight(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                    const char *group, const char *field, const char *commandSuffix,
+                    const char *icon = nullptr, const char *payloadOn = "On", const char *payloadOff = "Off")
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["command_topic"] = commandTopic(commandSuffix);
+    root["payload_on"] = payloadOn;
+    root["payload_off"] = payloadOff;
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    publishDoc("light", objectId, doc);
+  }
+
   void publishOneSpeedPumpSwitch(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
                                  const char *group, const char *field, const char *commandSuffix,
                                  const char *icon = nullptr)
@@ -391,6 +417,8 @@ namespace
     retractDiscoveryConfig("sensor", "pump6");
     retractDiscoveryConfig("binary_sensor", "light1");
     retractDiscoveryConfig("binary_sensor", "light2");
+    retractDiscoveryConfig("switch", "light1");
+    retractDiscoveryConfig("switch", "light2");
     retractDiscoveryConfig("binary_sensor", "blower");
     retractDiscoveryConfig("binary_sensor", "mister");
   }
@@ -460,12 +488,17 @@ namespace
       break;
     case HA_BLOWER:
       retractDiscoveryConfig("binary_sensor", "blower");
+      retractDiscoveryConfig("switch", "blower");
       break;
     case HA_LIGHT1:
       retractDiscoveryConfig("binary_sensor", "light1");
+      retractDiscoveryConfig("switch", "light1");
+      retractDiscoveryConfig("light", "light1");
       break;
     case HA_LIGHT2:
       retractDiscoveryConfig("binary_sensor", "light2");
+      retractDiscoveryConfig("switch", "light2");
+      retractDiscoveryConfig("light", "light2");
       break;
     case HA_MISTER:
       retractDiscoveryConfig("sensor", "mister");
@@ -511,10 +544,16 @@ namespace
       publishBinarySensor(macSlugStr, "blower", "Spa blower", "status", "blower");
       break;
     case HA_LIGHT1:
-      publishBinarySensor(macSlugStr, "light1", "Spa light 1", "status", "light1");
+      // Writable light entities are published in publishWritableEntities().
+      // Keep expanded equipment publish from creating a second entity platform for the same object.
+      retractDiscoveryConfig("binary_sensor", "light1");
+      retractDiscoveryConfig("switch", "light1");
       break;
     case HA_LIGHT2:
-      publishBinarySensor(macSlugStr, "light2", "Spa light 2", "status", "light2");
+      // Writable light entities are published in publishWritableEntities().
+      // Keep expanded equipment publish from creating a second entity platform for the same object.
+      retractDiscoveryConfig("binary_sensor", "light2");
+      retractDiscoveryConfig("switch", "light2");
       break;
     case HA_MISTER:
       retractDiscoveryConfig("sensor", "mister");
@@ -659,8 +698,14 @@ namespace
   {
     retractWritableOverlapConfigs();
     publishClimate(macSlugStr);
-    publishSwitch(macSlugStr, "light1", "Spa light 1", "status", "light1", "button/17", nullptr, "On", "Off");
-    publishSwitch(macSlugStr, "light2", "Spa light 2", "status", "light2", "button/18", nullptr, "On", "Off");
+    if (desired & HA_LIGHT1)
+      publishLight(macSlugStr, "light1", "Spa light 1", "status", "light1", "button/17", "mdi:lightbulb", "On", "Off");
+    else
+      retractDiscoveryConfig("light", "light1");
+    if (desired & HA_LIGHT2)
+      publishLight(macSlugStr, "light2", "Spa light 2", "status", "light2", "button/18", "mdi:lightbulb", "On", "Off");
+    else
+      retractDiscoveryConfig("light", "light2");
     publishSwitch(macSlugStr, "blower", "Spa blower", "status", "blower", "button/12", nullptr, "On", "Off");
     publishSwitch(macSlugStr, "mister", "Spa mister", "status", "mister", "button/14", nullptr, "On", "Off");
     publishButton(macSlugStr, "sync_panel_time", "Spa sync panel clock", "syncTime", "1", "mdi:clock-check");
