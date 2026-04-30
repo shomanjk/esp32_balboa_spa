@@ -8,6 +8,29 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-04-30
+
+### Added
+
+- **Panel clock format write support (`TimeFormat`)** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added SCI `device_request target_name='TimeFormat'` handling (`12`/`24`) and dispatcher support that applies the panel 12h/24h mode via Balboa `0x21` while preserving the current panel time payload.
+
+### Changed
+
+- **`/status` panel clock format control UX** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added an inline 12/24 segmented toggle beside **Panel clock format** with the same confirmation dialog pattern used for temp/range writes and live polling sync for active selection.
+- **`/status` temperature range control UX** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Added spa-style directional indicators inside low/high setpoint cards (`▼` low, `▲` high) and replaced dual range action buttons with a single segmented low/high toggle beneath the setpoint cards.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.7.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.6.0] - 2026-04-30
+
+### Added
+
+- **Temp units command support (`TempUnits`, Balboa `0x27`)** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp)): Added shared dispatcher support for set temperature scale writes, wired SCI `device_request target_name='TempUnits'` payloads (`C`/`F`), and added MQTT `Spa/<gateway>/cmd/tempUnits` handling (`C`/`Celsius`/`F`/`Fahrenheit`) with standard command-result telemetry.
+
+### Changed
+
+- **`/status` temp units control UX** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Replaced the larger inline temp-unit control with a compact C/F segmented toggle in the **Current Temp** row, preserved the confirmation dialog before writes, and kept live polling state sync for active unit highlighting.
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.6.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.5.1] - 2026-04-30
 
 ### Fixed

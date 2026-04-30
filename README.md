@@ -120,11 +120,11 @@ To keep protocol risk low, command-write implementation is intentionally staged:
 - **In scope (v1) — implemented on web + MQTT paths:**
   - **Button toggle** commands (Balboa `0x11`) from **`/devices/sci`** and firmware **`/status`** (including temp-range item **80** / `0x50`).
   - **Set temperature** commands (Balboa `0x20`) with **protocol** min/max by °F/°C and active high/low range ([`spaProtocolActiveSetpointBand`](lib/spaMessage/spaCommandDispatcher.cpp)).
+  - **Set temperature units** (`TempUnits`, Balboa `0x27`) via `C`/`F`.
 - **Also in scope (v1):**
   - **Set panel clock** (`SystemTime`, Balboa `0x21`) via `HH:MM` or gateway sync.
 - **Deferred (post-v1):**
   - `TimeFormat`
-  - `TempUnits`
 
 ### MQTT command topics (v1)
 
@@ -133,6 +133,7 @@ To keep protocol risk low, command-write implementation is intentionally staged:
 - `Spa/<gateway>/cmd/syncTime` -> any non-empty payload (uses gateway local time)
 - `Spa/<gateway>/cmd/mode` -> `heat` or `off` (Ready/Rest)
 - `Spa/<gateway>/cmd/preset` -> `Low Range` or `High Range`
+- `Spa/<gateway>/cmd/tempUnits` -> `C`/`Celsius` or `F`/`Fahrenheit`
 - `Spa/<gateway>/cmd/button/<code>` ->
   - non-pump: `on`, `off`, `toggle`
   - pumps: `Off`, `Low`, `High` (single-speed pumps accept `Off`/`Low`)

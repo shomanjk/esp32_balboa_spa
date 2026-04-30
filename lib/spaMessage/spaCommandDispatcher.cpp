@@ -289,6 +289,63 @@ SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSour
   return queueFrame(frame, "set_temp", source);
 }
 
+SpaCommandResult spaSetTemperatureScale(bool celsius, SpaCommandSource source)
+{
+  if (!spaHasFreshStatus())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(destinationId());
+  frame.push(kBroadcastChannel);
+  frame.push(Set_Preference_Request_Type);
+  frame.push(0x01);
+  frame.push(celsius ? 0x01 : 0x00);
+  return queueFrame(frame, "set_temp_scale", source);
+}
+
+SpaCommandResult spaSetSpaPanelClockFormat(bool use24Hour, SpaCommandSource source)
+{
+  if (!spaHasFreshStatus())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
+  }
+
+  // Status payload carries panel clock as "HH:MM" (hour remains 0-23 regardless
+  // of panel display mode); TimeFormat write piggybacks Set Time and changes bit 7.
+  const char *t = spaStatusData.time;
+  if (t == nullptr || strlen(t) < 5 || t[2] != ':')
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "panel_time_unavailable"};
+  }
+  if (t[0] < '0' || t[0] > '9' || t[1] < '0' || t[1] > '9' ||
+      t[3] < '0' || t[3] > '9' || t[4] < '0' || t[4] > '9')
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "panel_time_unavailable"};
+  }
+  const uint8_t hour24 = (uint8_t)((t[0] - '0') * 10 + (t[1] - '0'));
+  const uint8_t minute = (uint8_t)((t[3] - '0') * 10 + (t[4] - '0'));
+  if (hour24 > 23 || minute > 59)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "panel_time_unavailable"};
+  }
+
+  uint8_t hourByte = hour24 & 0x7F;
+  if (use24Hour)
+  {
+    hourByte |= 0x80;
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(destinationId());
+  frame.push(kBroadcastChannel);
+  frame.push(Set_Time_Type);
+  frame.push(hourByte);
+  frame.push(minute);
+  return queueFrame(frame, "set_time_format", source);
+}
+
 SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source)
 {
   if (!spaHasFreshStatus())

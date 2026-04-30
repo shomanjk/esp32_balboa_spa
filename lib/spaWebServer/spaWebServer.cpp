@@ -445,13 +445,13 @@ void handleepdpanel(AsyncWebServerRequest *request)
 #define headConfig String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Config</title>") + icon + style + String("</head>")
 #define headState String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP State</title>") + icon + style + String("</head>")
 
-#define webMenuStatus String("<nav aria-label='Portal navigation'><div class='top-nav'><a class='active' aria-current='page' href='/status'>SPA Status</a><a href='/config'>SPA Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>SPA Website</a></div></nav>")
+#define webMenuStatus String("<nav aria-label='Portal navigation'><div class='top-nav'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></nav>")
 
-#define webMenuConfig String("<nav aria-label='Portal navigation'><div class='top-nav'><a href='/status'>SPA Status</a><a class='active' aria-current='page' href='/config'>SPA Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>SPA Website</a></div></nav>")
+#define webMenuConfig String("<nav aria-label='Portal navigation'><div class='top-nav'><a href='/status'>Spa Status</a><a class='active' aria-current='page' href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></nav>")
 
-#define webMenuState String("<nav aria-label='Portal navigation'><div class='top-nav'><a href='/status'>SPA Status</a><a href='/config'>SPA Config</a><a class='active' aria-current='page' href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>SPA Website</a></div></nav>")
+#define webMenuState String("<nav aria-label='Portal navigation'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a class='active' aria-current='page' href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></nav>")
 
-#define webMenuLogs String("<nav aria-label='Portal navigation'><div class='top-nav'><a href='/status'>SPA Status</a><a href='/config'>SPA Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>SPA Website</a></div></nav>")
+#define webMenuLogs String("<nav aria-label='Portal navigation'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></nav>")
 
 #define headLogs String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Logs</title>") + icon + style + String("<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}</style></head>")
 
@@ -814,16 +814,6 @@ static String statusFormatRuntimeHoursMinutes(unsigned long totalSeconds)
   return out;
 }
 
-static String statusTempScaleDescription()
-{
-  if (!statusSpaTempReady())
-  {
-    return String("---");
-  }
-  return spaStatusData.tempScale ? (String("Celsius (0.5") + String("\xc2\xb0") + "C steps)")
-                                 : (String("Fahrenheit (1") + String("\xc2\xb0") + "F steps)");
-}
-
 /** Append JSON array oldest-to-newest (left-to-right on chart); firmware index 0 is newest. */
 static void appendStatusJsonFloatArrayOldestFirst(String &html, const float *arr, int n)
 {
@@ -932,10 +922,18 @@ void handleStatus(AsyncWebServerRequest *request)
       "dl.kv dt{margin:0;font-weight:600;color:var(--muted);font-size:0.92rem;}"
       "dl.kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
       ".kv-dd-with-inline-action{display:flex;flex-wrap:wrap;align-items:center;gap:8px;column-gap:10px;}"
+      ".kv-dd-current-temp{flex-wrap:nowrap;}"
+      ".kv-dd-current-temp > span{white-space:nowrap;}"
       ".status-temp-chart-link{color:#0f4a87;display:inline-flex;align-items:center;vertical-align:middle;"
       "text-decoration:none;border-radius:6px;padding:3px;line-height:0;}"
       ".status-temp-chart-link:hover{background:#e8f0fa;}"
       ".status-temp-chart-link:focus-visible{outline:2px solid #0f4a87;outline-offset:2px;}"
+      ".status-temp-units-toggle{display:inline-flex;align-items:center;gap:0;overflow:hidden;border:1px solid #d4dbe1;border-radius:8px;background:#fff;}"
+      ".status-temp-units-toggle button{flex:0 0 auto;min-height:0;padding:1px 5px;border:0;border-right:1px solid #d4dbe1;background:#fff;color:var(--muted);font-size:.62rem;line-height:1;cursor:pointer;}"
+      ".status-temp-units-toggle button:last-child{border-right:0;}"
+      ".status-temp-units-toggle button:hover{background:#f4f7f8;color:#1f2933;}"
+      ".status-temp-units-toggle button:focus-visible{outline:2px solid #0f4a87;outline-offset:2px;position:relative;z-index:1;}"
+      ".status-temp-units-toggle button:disabled{background:#0f4a87;color:#fff;cursor:default;opacity:1;}"
       ".heat-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin:0 0 6px 0;}"
       ".heat-panel-head h2{margin:0;}"
       ".heat-hint{font-size:0.82rem;color:var(--muted);margin:0 0 12px 0;line-height:1.45;max-width:52em;}"
@@ -972,9 +970,17 @@ void handleStatus(AsyncWebServerRequest *request)
       ".range-band{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#fafbfc;}"
       ".range-band-active-low{border-color:#0f4a87;background:#e8f0fa;box-shadow:0 0 0 2px rgba(15,74,135,0.12);}"
       ".range-band-active-high{border-color:#b71c1c;background:#fde8e8;box-shadow:0 0 0 2px rgba(183,28,28,0.16);}"
-      ".range-band-title{font-size:0.82rem;font-weight:600;color:var(--muted);margin:0 0 6px 0;}"
+      ".range-band-title{font-size:0.82rem;font-weight:600;color:var(--muted);margin:0 0 6px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;}"
+      ".range-band-indicator{font-size:0.95rem;line-height:1;color:#8b96a3;}"
+      ".range-band-active-low .range-band-indicator,.range-band-active-high .range-band-indicator{color:#1f2933;}"
       ".range-band-temp{font-size:1.15rem;font-weight:700;margin:0;line-height:1.25;}"
-      ".range-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
+      ".range-actions{display:flex;justify-content:center;align-items:center;margin-top:10px;}"
+      ".range-toggle{display:inline-flex;align-items:center;overflow:hidden;border:1px solid #b9c6d4;border-radius:999px;background:#eef3f8;box-shadow:inset 0 1px 0 rgba(255,255,255,.7);}"
+      ".range-toggle button{border:0;border-right:1px solid #c8d4e0;background:transparent;color:#31465b;padding:7px 16px;min-height:0;font-size:.84rem;font-weight:700;line-height:1.2;cursor:pointer;min-width:110px;}"
+      ".range-toggle button:last-child{border-right:0;}"
+      ".range-toggle button:hover{background:#e6edf5;color:#1f2933;}"
+      ".range-toggle button:focus-visible{outline:2px solid #0f4a87;outline-offset:2px;position:relative;z-index:1;}"
+      ".range-toggle button:disabled{background:#0f4a87;color:#fff;cursor:default;opacity:1;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15);}"
       ".range-hint{font-size:0.82rem;color:var(--muted);margin:8px 0 0 0;line-height:1.35;}"
       ".status-control-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
       ".status-control-row input{border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:90px;}"
@@ -1003,29 +1009,36 @@ void handleStatus(AsyncWebServerRequest *request)
     const String setMaxStr = String(setMax, spaStatusData.tempScale ? 1 : 0);
     const bool activeHigh = (spaStatusData.tempRange != 0);
     html += "<section class=\"panel\"><h2>Temperatures</h2><dl class=\"kv\">";
-    html += "<div class=\"kv-row\"><dt>Current Temp</dt><dd class=\"kv-dd-with-inline-action\"><span>";
+    html += "<div class=\"kv-row\"><dt>Current Temp</dt><dd class=\"kv-dd-with-inline-action kv-dd-current-temp\"><span>";
     html += statusFormattedTempWithUnit(spaStatusData.currentTemp);
     html += "</span><a href=\"#statusTempHistSection\" class=\"status-temp-chart-link\" title=\"Jump to temperature chart\" aria-label=\"Jump to temperature chart\">";
     html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">";
-    html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a></dd></div>";
-    appendStatusKvRow(html, "Temp Scale", statusTempScaleDescription());
+    html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a>";
+    html += "<span class=\"status-temp-units-toggle\" role=\"group\" aria-label=\"Temperature units\">";
+    html += "<button id=\"statusTempUnitsToggleC\" type=\"button\" onclick=\"statusSendTempUnits('C')\"";
+    html += spaStatusData.tempScale ? " disabled" : "";
+    html += " title=\"Use Celsius\">C</button>";
+    html += "<button id=\"statusTempUnitsToggleF\" type=\"button\" onclick=\"statusSendTempUnits('F')\"";
+    html += spaStatusData.tempScale ? "" : " disabled";
+    html += " title=\"Use Fahrenheit\">F</button>";
+    html += "</span></dd></div>";
     html += "</dl>";
     html += "<div class=\"range-bands\"><div id=\"statusBandLow\" data-range-band=\"low\" class=\"range-band";
     html += activeHigh ? "" : " range-band-active-low";
-    html += "\"><div class=\"range-band-title\">Low range setpoint</div><div id=\"statusBandLowVal\" class=\"range-band-temp\">";
+    html += "\"><div class=\"range-band-title\"><span>Low range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▼</span></div><div id=\"statusBandLowVal\" class=\"range-band-temp\">";
     html += statusBandStoredSetpointText(spaStatusData.lowSetTemp);
     html += "</div></div><div id=\"statusBandHigh\" data-range-band=\"high\" class=\"range-band";
     html += activeHigh ? " range-band-active-high" : "";
-    html += "\"><div class=\"range-band-title\">High range setpoint</div><div id=\"statusBandHighVal\" class=\"range-band-temp\">";
+    html += "\"><div class=\"range-band-title\"><span>High range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▲</span></div><div id=\"statusBandHighVal\" class=\"range-band-temp\">";
     html += statusBandStoredSetpointText(spaStatusData.highSetTemp);
     html += "</div></div></div>";
-    html += "<div class=\"range-actions\">";
-    html += "<button id=\"statusRangeLowBtn\" class=\"equip-btn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\"";
+    html += "<div class=\"range-actions\"><span class=\"range-toggle\" role=\"group\" aria-label=\"Temperature range\">";
+    html += "<button id=\"statusRangeLowBtn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\"";
     html += activeHigh ? "" : " disabled";
-    html += ">Use low range</button>";
-    html += "<button id=\"statusRangeHighBtn\" class=\"equip-btn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"on\"";
+    html += " title=\"Switch to low range\">Low ▼</button>";
+    html += "<button id=\"statusRangeHighBtn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"on\"";
     html += activeHigh ? " disabled" : "";
-    html += ">Use high range</button></div>";
+    html += " title=\"Switch to high range\">High ▲</button></span></div>";
     html += "<p class=\"range-hint\">Set temp applies to the highlighted range only.</p>";
     html += "<div class=\"status-control-row\"><label for=\"statusSetTempInput\" class=\"equip-label\">Set temp <span id=\"statusSetTempScopeLabel\">";
     html += activeHigh ? "(high range)" : "(low range)";
@@ -1041,6 +1054,7 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "\" />";
     html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSendSetTemp()\">Send</button></div>";
     html += "<div id=\"statusSetTempResult\" class=\"status-control-result\"></div>";
+    html += "<div id=\"statusTempUnitsResult\" class=\"status-control-result\"></div>";
     html += "</section>";
   }
 
@@ -1136,7 +1150,18 @@ void handleStatus(AsyncWebServerRequest *request)
             "<b>Filter cycle (status)</b> is which programmed daily filter window the controller reports as active; schedule start/duration is on <a href='/config'>/config</a>.</p>";
     html += "<dl class=\"kv\">";
     appendStatusKvRow(html, "Panel time", String(spaStatusData.time), "statusPanelTimeVal", nullptr);
-    appendStatusKvRow(html, "Panel clock format", statusPanelClockFormatLabel(spaStatusData.clockMode), "statusClockFormatVal", clockRawTitle.c_str());
+    html += "<div class=\"kv-row\"><dt>Panel clock format</dt><dd class=\"kv-dd-with-inline-action\"><span id=\"statusClockFormatVal\" title=\"";
+    html += clockRawTitle;
+    html += "\">";
+    html += statusPanelClockFormatLabel(spaStatusData.clockMode);
+    html += "</span><span class=\"status-temp-units-toggle\" role=\"group\" aria-label=\"Panel clock format\">";
+    html += "<button id=\"statusClockFormat12Btn\" type=\"button\" onclick=\"statusSendTimeFormat(12)\"";
+    html += (spaStatusData.clockMode & 0x02) ? "" : " disabled";
+    html += " title=\"Use 12-hour clock\">12</button>";
+    html += "<button id=\"statusClockFormat24Btn\" type=\"button\" onclick=\"statusSendTimeFormat(24)\"";
+    html += (spaStatusData.clockMode & 0x02) ? " disabled" : "";
+    html += " title=\"Use 24-hour clock\">24</button>";
+    html += "</span></dd></div>";
     appendStatusKvRow(html, "Filter cycle (status)", String(getMapDescription(spaStatusData.filterMode, filterModeMap)), "statusFilterModeVal", nullptr);
     html += "</dl>";
     html += "<p class=\"range-hint\" style=\"margin-top:10px\">Set panel clock sends Balboa <code>0x21</code> using the current 12h/24h format flag from status.</p>";
@@ -1146,7 +1171,8 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "\" />";
     html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSendPanelTime()\">Send to spa</button>";
     html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSyncPanelTimeFromGateway()\">Sync from gateway</button></div>";
-    html += "<div id=\"statusSystemTimeResult\" class=\"status-control-result\"></div></section>";
+    html += "<div id=\"statusSystemTimeResult\" class=\"status-control-result\"></div>";
+    html += "<div id=\"statusTimeFormatResult\" class=\"status-control-result\"></div></section>";
   }
 
   html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";
@@ -1242,8 +1268,12 @@ void handleStatus(AsyncWebServerRequest *request)
           "if(setInput){if(typeof snap.setTempMin!=='undefined')setInput.min=String(snap.setTempMin);if(typeof snap.setTempMax!=='undefined')setInput.max=String(snap.setTempMax);"
           "if(typeof snap.tempScaleCelsius!=='undefined')setInput.step=snap.tempScaleCelsius?'0.5':'1';"
           "if(document.activeElement!==setInput&&typeof snap.setTemp!=='undefined')setInput.value=String(snap.tempScaleCelsius?Number(snap.setTemp).toFixed(1):Math.round(Number(snap.setTemp)));}"
+          "var uC=!!snap.tempScaleCelsius;var cBtn=document.getElementById('statusTempUnitsToggleC');var fBtn=document.getElementById('statusTempUnitsToggleF');"
+          "if(cBtn)cBtn.disabled=uC;if(fBtn)fBtn.disabled=!uC;"
           "var pt=document.getElementById('statusPanelTimeVal');if(pt&&typeof snap.panelTime==='string')pt.textContent=snap.panelTime;"
           "var cf=document.getElementById('statusClockFormatVal');if(cf&&typeof snap.clockFormat==='string'){cf.textContent=snap.clockFormat;if(typeof snap.clockModeRaw!=='undefined')cf.title='Raw status flag (status byte 9 & 0x02): '+snap.clockModeRaw;}"
+          "var f12=document.getElementById('statusClockFormat12Btn');var f24=document.getElementById('statusClockFormat24Btn');var is24=String(snap.clockFormat||'').toLowerCase().indexOf('24')>=0;"
+          "if(f12)f12.disabled=!is24;if(f24)f24.disabled=is24;"
           "var fm=document.getElementById('statusFilterModeVal');if(fm&&typeof snap.filterModeText==='string')fm.textContent=snap.filterModeText;"
           "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
           "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
@@ -1285,6 +1315,11 @@ void handleStatus(AsyncWebServerRequest *request)
           "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
           "try{var snap=await statusFetchControls();if(Math.abs(Number(snap.setTemp)-Number(target))<0.26)return true;}catch(e){}}"
           "return false;}"
+          "async function statusWaitForTempUnits(units){"
+          "var wantC=(String(units||'').toUpperCase()==='C');"
+          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
+          "try{var snap=await statusFetchControls();if(!!snap.tempScaleCelsius===wantC)return true;}catch(e){}}"
+          "return false;}"
           "function statusSetResult(id,text){var el=document.getElementById(id);if(el)el.textContent=text;}"
           "async function statusSendButton(btn){"
           "try{btn.disabled=true;const c=btn.getAttribute('data-button');const s=btn.getAttribute('data-state')||'on';"
@@ -1306,10 +1341,44 @@ void handleStatus(AsyncWebServerRequest *request)
           "if(changed){statusSetResult('statusSetTempResult','SetTemp accepted and state changed.');setTimeout(function(){location.reload();},500);}else{statusSetResult('statusSetTempResult','SetTemp accepted, but setpoint did not change yet.');}"
           "}catch(e){statusSetResult('statusSetTempResult','SetTemp failed: '+e);}"
           "}"
+          "async function statusSendTempUnits(units){"
+          "var t=String(units||'').toUpperCase();if(t!=='C'&&t!=='F'){statusSetResult('statusTempUnitsResult','Invalid temp units request.');return;}"
+          "if(!confirm('Change temperature units to '+(t==='C'?'Celsius':'Fahrenheit')+'?')){statusSetResult('statusTempUnitsResult','Temperature units change canceled.');return;}"
+          "var cBtn=document.getElementById('statusTempUnitsToggleC');var fBtn=document.getElementById('statusTempUnitsToggleF');"
+          "try{if(cBtn)cBtn.disabled=true;if(fBtn)fBtn.disabled=true;"
+          "const xml='<device_request target_name=\"TempUnits\">'+t+'</device_request>';"
+          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusTempUnitsResult','TempUnits response: '+out);return;}"
+          "statusSetResult('statusTempUnitsResult','TempUnits accepted; waiting for spa status update...');"
+          "const changed=await statusWaitForTempUnits(t);"
+          "if(changed){statusSetResult('statusTempUnitsResult','Temperature units updated.');statusApplySnapshot(await statusFetchControls());}"
+          "else{statusSetResult('statusTempUnitsResult','Command accepted; temperature units did not update yet.');}}"
+          "catch(e){statusSetResult('statusTempUnitsResult','TempUnits failed: '+e);}finally{"
+          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);}catch(_e){}"
+          "if(cBtn)cBtn.disabled=false;if(fBtn)fBtn.disabled=false;}"
+          "}"
           "async function statusWaitForPanelTime(target){"
           "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
           "try{var snap=await statusFetchControls();if(String(snap.panelTime||'')===String(target))return true;}catch(e){}}"
           "return false;}"
+          "async function statusWaitForTimeFormat(use24){"
+          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
+          "try{var snap=await statusFetchControls();var is24=String(snap.clockFormat||'').toLowerCase().indexOf('24')>=0;if(is24===!!use24)return true;}catch(e){}}"
+          "return false;}"
+          "async function statusSendTimeFormat(fmt){"
+          "var f=Number(fmt);if(f!==12&&f!==24){statusSetResult('statusTimeFormatResult','Invalid time format request.');return;}"
+          "if(!confirm('Change panel clock format to '+f+'-hour?')){statusSetResult('statusTimeFormatResult','Time format change canceled.');return;}"
+          "var f12=document.getElementById('statusClockFormat12Btn');var f24=document.getElementById('statusClockFormat24Btn');"
+          "try{if(f12)f12.disabled=true;if(f24)f24.disabled=true;"
+          "const xml='<device_request target_name=\"TimeFormat\">'+String(f)+'</device_request>';"
+          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusTimeFormatResult','TimeFormat response: '+out);return;}"
+          "statusSetResult('statusTimeFormatResult','TimeFormat accepted; waiting for spa...');"
+          "const changed=await statusWaitForTimeFormat(f===24);"
+          "if(changed){statusSetResult('statusTimeFormatResult','Panel clock format updated.');statusApplySnapshot(await statusFetchControls());}"
+          "else{statusSetResult('statusTimeFormatResult','Command accepted; panel clock format did not update yet.');}"
+          "}catch(e){statusSetResult('statusTimeFormatResult','TimeFormat failed: '+e);}finally{"
+          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);}catch(_e){}"
+          "if(f12)f12.disabled=false;if(f24)f24.disabled=false;}"
+          "}"
           "async function statusSendPanelTime(){"
           "var input=document.getElementById('statusPanelTimeInput');if(!input)return;var v=(input.value||'').trim();"
           "if(!/^\\d{1,2}:\\d{2}$/.test(v)){statusSetResult('statusSystemTimeResult','Enter a valid time (HH:MM).');return;}"
@@ -2681,6 +2750,72 @@ String parseBody(String body)
         response = "<device_request target_name='SystemTime' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
       }
       Log.verbose("[Web]: SystemTime request %s -> %s" CR, value.c_str(), result.reason);
+    }
+    else if (target == "TimeFormat")
+    {
+      value.trim();
+      bool parsed = false;
+      bool use24 = false;
+      if (value == "24")
+      {
+        parsed = true;
+        use24 = true;
+      }
+      else if (value == "12")
+      {
+        parsed = true;
+        use24 = false;
+      }
+
+      if (!parsed)
+      {
+        response = "<device_request target_name='TimeFormat' result='rejected' error='invalid_time_format_payload'>" + value + "</device_request>";
+        return response;
+      }
+
+      SpaCommandResult result = spaSetSpaPanelClockFormat(use24, SPA_COMMAND_SOURCE_WEB);
+      if (result.accepted)
+      {
+        response = "<device_request target_name='TimeFormat' result='accepted'>" + value + "</device_request>";
+      }
+      else
+      {
+        response = "<device_request target_name='TimeFormat' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
+      }
+      Log.verbose("[Web]: TimeFormat request %s -> %s" CR, value.c_str(), result.reason);
+    }
+    else if (target == "TempUnits")
+    {
+      value.trim();
+      bool parsed = false;
+      bool celsius = false;
+      if (value.equalsIgnoreCase("C") || value.equalsIgnoreCase("Celsius"))
+      {
+        parsed = true;
+        celsius = true;
+      }
+      else if (value.equalsIgnoreCase("F") || value.equalsIgnoreCase("Fahrenheit"))
+      {
+        parsed = true;
+        celsius = false;
+      }
+
+      if (!parsed)
+      {
+        response = "<device_request target_name='TempUnits' result='rejected' error='invalid_temp_units_payload'>" + value + "</device_request>";
+        return response;
+      }
+
+      SpaCommandResult result = spaSetTemperatureScale(celsius, SPA_COMMAND_SOURCE_WEB);
+      if (result.accepted)
+      {
+        response = "<device_request target_name='TempUnits' result='accepted'>" + value + "</device_request>";
+      }
+      else
+      {
+        response = "<device_request target_name='TempUnits' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
+      }
+      Log.verbose("[Web]: TempUnits request %s -> %s" CR, value.c_str(), result.reason);
     }
     else
     {

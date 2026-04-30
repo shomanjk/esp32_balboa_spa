@@ -94,7 +94,7 @@ void spaCommunicationEnd()
   Log.verbose(F("[Comm]: spaCommunicationEnd()" CR));
   if (client.connected())
   {
-    client.close(true);
+    client.close();
     client.free();
   }
 };
