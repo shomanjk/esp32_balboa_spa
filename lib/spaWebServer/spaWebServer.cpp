@@ -25,6 +25,7 @@
 #include <spaUtilities.h>
 #include <restartReason.h>
 #include <rs485.h>
+#include "../../src/config.h"
 #include "../../src/main.h"
 
 // Local functions
@@ -371,7 +372,9 @@ void handleepdpanel(AsyncWebServerRequest *request)
 
 #define icon String("<link rel='icon' href='/assets/style/hottubbing.webp' type='image/x-icon' />")
 
-#define head String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Web Server State</title>") + icon + style + String("</head>")
+#define headStatus String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Status</title>") + icon + style + String("</head>")
+#define headConfig String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Config</title>") + icon + style + String("</head>")
+#define headState String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP State</title>") + icon + style + String("</head>")
 
 #define webMenuStatus String("<nav aria-label='Portal navigation'><div class='top-nav'><a class='active' aria-current='page' href='/status'>SPA Status</a><a href='/config'>SPA Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>SPA Website</a></div></nav>")
 
@@ -981,7 +984,7 @@ void handleStatus(AsyncWebServerRequest *request)
       ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       "</style>";
 
-  html = "<html>" + head + String(statusStyle) +
+  html = "<html>" + headStatus + String(statusStyle) +
          "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus +
          "<main id='mainContent'>" + ePaper +
          "<div class=\"status-page-head\"><h1 class=\"status-page-title\">Spa Status</h1>"
@@ -1328,7 +1331,7 @@ void handleConfig(AsyncWebServerRequest *request)
 
   String html;
   html.reserve(24000);
-  html = "<html>" + head + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Configuration</h1><ul>";
+  html = "<html>" + headConfig + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Configuration</h1><ul>";
   if (spaConfigurationData.lastUpdate == 0)
   {
     html += "<li><b>Spa Configuration not available</b></li>";
@@ -1378,10 +1381,10 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}</style>";
+  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}#fwUpdateResult{vertical-align:middle;max-width:min(520px,100%);}</style>";
   String html;
   html.reserve(32000);
-  html = "<html>" + head + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
+  html = "<html>" + headState + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
   html += "<section class='panel'><div class='state-toolbar'><h1 style='margin:0'>ESP State</h1><label style='font-size:14px'><input id='toggleAdvanced' type='checkbox'/> Show advanced diagnostics</label></div>";
   html += "<p style='margin:0 0 10px 0;font-size:14px;color:var(--muted)'>Signal-first layout keeps daily health visible. Data/API shortcuts are available below for direct endpoint access.</p></section>";
   html += "<div class='state-grid'><section class='panel'><h1>System Health</h1><ul>";
@@ -1390,6 +1393,13 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
   html += "<li><b>Firmware Version: </b>" + String(VERSION) + "</li>";
   html += "<li><b>Firmware Build: </b>" + String(BUILD) + "</li>";
+  html += "<li><b>Firmware repo: </b><a href=\"" + String(FIRMWARE_REPO_README_URL) + "\" target=\"_blank\" rel=\"noopener\">README</a>"
+          " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></li>";
+  html += "<li style=\"display:flex;flex-wrap:wrap;align-items:center;gap:10px\"><button type=\"button\" id=\"fwCheckUpdates\" class=\"fw-check-btn\" "
+          "data-fw-version=\"" + String(VERSION) + "\" "
+          "data-api-latest=\"" + String(FIRMWARE_REPO_RELEASES_LATEST_API_URL) + "\" "
+          "data-releases=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\">Check for updates</button>"
+          "<span id=\"fwUpdateResult\" style=\"font-size:14px;color:var(--muted)\"></span></li>";
   html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li class='advanced-only'><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li class='advanced-only'><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
@@ -1474,7 +1484,8 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Health Code (raw): </b>" + rsHealth + "</li>";
   html += "</ul></details>";
 #endif
-  html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script></main></div></body></html>";
+  html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script>";
+  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}btn.addEventListener('click',function(){el.textContent='Checking...';fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';var c=cmpSemver(fw,tag);if(c>=0)el.textContent='Up to date (gateway '+fw+', latest GitHub release '+tag+').';else el.textContent='Update available: gateway '+fw+', latest '+tag+'. Use Releases link above to upgrade.';}).catch(function(){el.textContent='';el.appendChild(document.createTextNode('Could not reach GitHub. '));var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
 
   request->send(200, "text/html", html);
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
@@ -1670,12 +1681,15 @@ if(!pauseEl.checked)startPoll();
 void handleVersion(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(256);
+  DynamicJsonDocument doc(512);
   doc["version"] = VERSION;
   doc["build"] = BUILD;
   doc["hostname"] = WiFi.getHostname();
   doc["ip"] = WiFi.localIP().toString();
   doc["restartReason"] = getLastRestartReason();
+  doc["repoReadmeUrl"] = FIRMWARE_REPO_README_URL;
+  doc["releasesUrl"] = FIRMWARE_REPO_RELEASES_URL;
+  doc["releasesLatestApiUrl"] = FIRMWARE_REPO_RELEASES_LATEST_API_URL;
   serializeJson(doc, *response);
   request->send(response);
 }
