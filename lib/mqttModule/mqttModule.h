@@ -45,6 +45,7 @@
 #define publishNodeStatus(topic, ...) mqtt.publish((mqttTopic + "node/" + topic).c_str(), __VA_ARGS__);
 
 extern String mqttTopic;
+extern unsigned long mqttLastReconnectAttempt;
 
 extern WiFiClient wifiClient;
 extern PubSubClient mqtt;

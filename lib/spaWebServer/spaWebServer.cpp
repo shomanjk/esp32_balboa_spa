@@ -25,6 +25,7 @@
 #include <spaUtilities.h>
 #include <restartReason.h>
 #include <rs485.h>
+#include <mqttModule.h>
 #include "../../src/config.h"
 #include "../../src/main.h"
 
@@ -35,6 +36,7 @@ void handleStatus(AsyncWebServerRequest *request);
 void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
+void handleMqtt(AsyncWebServerRequest *request);
 void handleStatusControlsApi(AsyncWebServerRequest *request);
 void handleStatusSummaryApi(AsyncWebServerRequest *request);
 void handleStatusHistoriesApi(AsyncWebServerRequest *request);
@@ -119,6 +121,27 @@ static const char *wifiStatusName(wl_status_t s)
     return "Connection lost";
   case WL_DISCONNECTED:
     return "Disconnected";
+  default:
+    return "Unknown";
+  }
+}
+
+static const char *mqttStateName(int s)
+{
+  switch (s)
+  {
+  case 0:
+    return "Connected";
+  case -1:
+    return "Disconnected";
+  case -2:
+    return "Connect failed";
+  case -3:
+    return "Connection lost";
+  case -4:
+    return "Timeout";
+  case -5:
+    return "Bad credentials";
   default:
     return "Unknown";
   }
@@ -257,7 +280,7 @@ static void appendWifiStateSection(String &html)
   html += "window.addEventListener('resize',resizeCanvas);window.addEventListener('orientationchange',resizeCanvas);resizeCanvas();poll();setInterval(poll,pollMs);})();";
   html += "</script>";
 
-  html += "</section><section class='panel'><h1>Spa Status</h1><ul>";
+  html += "</section>";
 }
 
 AsyncWebServer server(80);
@@ -345,6 +368,7 @@ void spaWebServerLoop()
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
     server.on("/api/wifi", HTTP_GET, handleWifi);
+    server.on("/api/mqtt", HTTP_GET, handleMqtt);
     server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
     server.on("/api/status/summary", HTTP_GET, handleStatusSummaryApi);
     server.on("/api/status/histories", HTTP_GET, handleStatusHistoriesApi);
@@ -1378,7 +1402,7 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}#fwUpdateResult{vertical-align:middle;max-width:min(520px,100%);}</style>";
+  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}#fwUpdateResult{vertical-align:middle;max-width:min(520px,100%);}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:#f3f4f6;color:#374151;}.fw-pill-current{background:#edf7ff;color:#0f4a87;border-color:#b7d6f2;}.fw-pill-latest{background:#f7f7f7;color:#4b5563;}</style>";
   String html;
   html.reserve(32000);
   html = "<html>" + headState + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
@@ -1388,15 +1412,18 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Uptime: </b>" + formatNumberWithCommas(millis() / 1000) + " s</li>";
   html += "<li><b>Current Time: </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
   html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
-  html += "<li><b>Firmware Version: </b>" + String(VERSION) + "</li>";
-  html += "<li><b>Firmware Build: </b>" + String(BUILD) + "</li>";
-  html += "<li><b>Firmware repo: </b><a href=\"" + String(FIRMWARE_REPO_README_URL) + "\" target=\"_blank\" rel=\"noopener\">README</a>"
-          " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></li>";
-  html += "<li style=\"display:flex;flex-wrap:wrap;align-items:center;gap:10px\"><button type=\"button\" id=\"fwCheckUpdates\" class=\"fw-check-btn\" "
+  html += "<li style=\"display:flex;flex-wrap:wrap;align-items:center;gap:10px\">"
+          "<b>Firmware Version: </b><span>" + String(VERSION) + "</span>"
+          "<span id=\"fwCurrentBadge\" class=\"fw-pill fw-pill-current\">Current: " + String(VERSION) + "</span>"
+          "<span id=\"fwLatestBadge\" class=\"fw-pill fw-pill-latest\">Latest: —</span>"
+          "<button type=\"button\" id=\"fwCheckUpdates\" class=\"fw-check-btn\" "
           "data-fw-version=\"" + String(VERSION) + "\" "
           "data-api-latest=\"" + String(FIRMWARE_REPO_RELEASES_LATEST_API_URL) + "\" "
           "data-releases=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\">Check for updates</button>"
-          "<span id=\"fwUpdateResult\" style=\"font-size:14px;color:var(--muted)\"></span></li>";
+          "<span id=\"fwUpdateResult\" style=\"font-size:14px;color:var(--muted);font-weight:600\" aria-live=\"polite\"></span></li>";
+  html += "<li><b>Firmware Build: </b>" + String(BUILD) + "</li>";
+  html += "<li><b>Firmware repo: </b><a href=\"" + String(FIRMWARE_REPO_README_URL) + "\" target=\"_blank\" rel=\"noopener\">README</a>"
+          " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></li>";
   html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li class='advanced-only'><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li class='advanced-only'><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
@@ -1426,13 +1453,27 @@ void handleState(AsyncWebServerRequest *request)
 #endif
 
   appendWifiStateSection(html);
-  html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaStatusData.lastUpdate) + "</li>";
+  html += "<section class='panel'><h1>MQTT</h1><ul>";
+  html += "<li><b>Status: </b>" + String(mqtt.connected() ? "Connected" : "Disconnected");
+  html += " (" + String(mqtt.state()) + ", " + String(mqttStateName(mqtt.state())) + ")</li>";
+  html += "<li><b>Broker: </b>" + String(MQTT_SERVER) + ":" + String(MQTT_PORT) + "</li>";
+  html += "<li><b>Topic Root: </b>" + mqttTopic + "</li>";
+  html += "<li><b>Command Topic: </b>" + mqttTopic + "cmd/#</li>";
+  html += "<li><b>LWT Topic: </b>" + mqttTopic + "node/state</li>";
+  html += "<li><b>HA Discovery: </b>" + String(MQTT_HA_DISCOVERY ? "enabled" : "disabled") +
+          " (prefix: " + String(MQTT_DISCOVERY_PREFIX) + ", temp unit: " + String(MQTT_HA_TEMP_UNIT) + ")</li>";
+  html += "<li class='advanced-only'><b>MQTT State Legend: </b>0=Connected, -1=Disconnected, -2=Connect failed, -3=Connection lost, -4=Timeout, -5=Bad credentials</li>";
+  html += "<li><details><summary><b>MQTT credentials and configuration note</b></summary>"
+          "<p style='margin:8px 0 0 0'>Credentials are hidden in the portal by design. Update <code>MQTT_SERVER</code>, <code>MQTT_PORT</code>, <code>BROKER_LOGIN</code>, and <code>BROKER_PASS</code> in <code>src/config.h</code>, then rebuild/reflash firmware.</p>"
+          "<p style='margin:8px 0 0 0'>Other MQTT behavior is configured in <code>src/config.h</code> via <code>MQTT_HA_DISCOVERY</code>, <code>MQTT_DISCOVERY_PREFIX</code>, and <code>MQTT_HA_TEMP_UNIT</code>.</p>"
+          "</details></li>";
   html += "<li class='advanced-only'><b>Spa status struct magic (ESP RAM): </b>" + String(spaStatusData.magicNumber) +
           " <span style=\"font-size:12px;color:var(--muted)\">(expected 0x12345678 after init; not from spa controller)</span></li>";
 
   html += "</ul></section><section class='panel'><h1>Spa Data Freshness</h1>";
-  html += "<p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Core datasets summarize update age and retry pressure. Detailed internals remain under advanced diagnostics.</p>";
+  html += "<p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Status Snapshot is the live spa status frame stream used for controls/telemetry. Dataset rows below are separate config/info blocks with independent freshness and retry behavior.</p>";
   html += "<table class='state-freshness'><thead><tr><th>Dataset</th><th>Last Update</th><th>Stale</th><th>Retry</th></tr></thead><tbody>";
+  html += "<tr><td>Status Snapshot</td><td>" + statusLastUpdateDisplayHtml(spaStatusData.lastUpdate) + "</td><td>" + String(staleData(spaStatusData) ? "yes" : "no") + "</td><td>n/a</td></tr>";
   html += "<tr><td>Configuration</td><td>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</td><td>" + String(staleData(spaConfigurationData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaConfigurationData) ? "yes" : "no") + "</td></tr>";
   html += "<tr><td>Preferences</td><td>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</td><td>" + String(staleData(spaPreferencesData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaPreferencesData) ? "yes" : "no") + "</td></tr>";
   html += "<tr><td>Filters</td><td>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</td><td>" + String(staleData(spaFilterSettingsData) ? "yes" : "no") + "</td><td>" + String(retryRequest(spaFilterSettingsData) ? "yes" : "no") + "</td></tr>";
@@ -1443,6 +1484,7 @@ void handleState(AsyncWebServerRequest *request)
 
   html += "<section class='panel'><h1 id='api-shortcuts'>API Shortcuts</h1><p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Raw/history endpoints can be noisy and large.</p><ul>";
   html += "<li><b>Live Wi-Fi snapshot: </b><a href='/api/wifi' target='_blank' rel='noopener'>GET /api/wifi</a></li>";
+  html += "<li><b>Live MQTT snapshot: </b><a href='/api/mqtt' target='_blank' rel='noopener'>GET /api/mqtt</a></li>";
   html += "<li><b>Firmware metadata: </b><a href='/api/version' target='_blank' rel='noopener'>GET /api/version</a></li>";
   html += "<li><b>RS485 summary diagnostics: </b><a href='/api/rs485' target='_blank' rel='noopener'>GET /api/rs485</a></li>";
   html += "<li><b>RS485 raw byte trace: </b><a href='/api/rs485/raw?limit=200' target='_blank' rel='noopener'>GET /api/rs485/raw?limit=200</a></li>";
@@ -1489,7 +1531,7 @@ void handleState(AsyncWebServerRequest *request)
           "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
           "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
           "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
-  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}btn.addEventListener('click',function(){el.textContent='Checking...';fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';var c=cmpSemver(fw,tag);if(c>=0)el.textContent='Up to date (gateway '+fw+', latest GitHub release '+tag+').';else el.textContent='Update available: gateway '+fw+', latest '+tag+'. Use Releases link above to upgrade.';}).catch(function(){el.textContent='';el.appendChild(document.createTextNode('Could not reach GitHub. '));var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
+  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var cur=document.getElementById('fwCurrentBadge');var latest=document.getElementById('fwLatestBadge');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}function setMsg(state,text){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent=text;}if(cur)cur.textContent='Current: '+fw;btn.addEventListener('click',function(){setMsg('checking','Checking GitHub releases...');fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';if(latest)latest.textContent='Latest: '+(tag||'n/a');var c=cmpSemver(fw,tag);if(c>=0){setMsg('ok','Up to date (gateway '+fw+', latest '+tag+').');}else{setMsg('warn','Update available: gateway '+fw+', latest '+tag+'.');}}).catch(function(){if(latest)latest.textContent='Latest: unavailable';el.style.color='var(--muted)';el.textContent='Could not reach GitHub. ';var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
 
   String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
   sendHtmlWithEtag(request, html, etag);
@@ -1747,6 +1789,40 @@ void handleWifi(AsyncWebServerRequest *request)
     doc["dns"] = "";
     doc["channel"] = 0;
   }
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleMqtt(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(1024);
+  const int stateCode = mqtt.state();
+  const bool connected = mqtt.connected();
+  doc["enabled"] = true;
+  doc["connected"] = connected;
+  doc["stateCode"] = stateCode;
+  doc["stateName"] = mqttStateName(stateCode);
+  doc["brokerHost"] = MQTT_SERVER;
+  doc["brokerPort"] = MQTT_PORT;
+  doc["topicRoot"] = mqttTopic;
+  doc["commandTopic"] = mqttTopic + "cmd/#";
+  doc["lwtTopic"] = mqttTopic + "node/state";
+  doc["haDiscoveryEnabled"] = MQTT_HA_DISCOVERY ? true : false;
+  doc["haDiscoveryPrefix"] = MQTT_DISCOVERY_PREFIX;
+  doc["haTempUnit"] = MQTT_HA_TEMP_UNIT;
+  doc["reconnectIntervalMs"] = 30000;
+  doc["lastReconnectAttemptMs"] = mqttLastReconnectAttempt;
+  if (mqttLastReconnectAttempt > 0 && millis() >= mqttLastReconnectAttempt)
+  {
+    doc["lastReconnectAttemptMsAgo"] = millis() - mqttLastReconnectAttempt;
+  }
+  else
+  {
+    doc["lastReconnectAttemptMsAgo"] = -1;
+  }
+  doc["credentialsExposed"] = false;
+  doc["credentialNote"] = "Update MQTT_SERVER/MQTT_PORT/BROKER_LOGIN/BROKER_PASS in src/config.h and reflash.";
   serializeJson(doc, *response);
   request->send(response);
 }
