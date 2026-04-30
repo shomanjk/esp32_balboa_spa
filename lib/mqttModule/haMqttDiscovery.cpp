@@ -711,6 +711,14 @@ void publishHomeAssistantDiscoveryExpanded()
   char macStr[20];
   macSlug(macStr, sizeof(macStr));
 
+  // During early boot or after reconnect churn, configuration/info may not be populated yet.
+  // Avoid retracting optional retained entities until we have authoritative equipment metadata.
+  if (spaConfigurationData.lastUpdate == 0 && spaInformationData.lastUpdate == 0)
+  {
+    Log.verbose(F("[HA discovery]: skip expanded publish/retract until config/info is available" CR));
+    return;
+  }
+
   const uint32_t desired = computeDesiredEquipmentMask();
   /* Retract every optional slot we are not publishing, including stale retained discovery from older sessions
    * or firmware (previously we only retracted bits published in-RAM this boot, so HA kept ghost entities). */

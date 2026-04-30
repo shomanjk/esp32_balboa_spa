@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Fixed
+
+- **HA optional-entity discovery churn on reconnect** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Expanded discovery now waits for spa configuration/information frames before retracting optional retained entities, reducing remove/recreate or disable-like behavior when Wi-Fi/MQTT reconnects happen before spa metadata is available.
+
 ## [2.2.2] - 2026-04-30
 
 ### Fixed
