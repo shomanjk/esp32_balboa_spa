@@ -21,6 +21,22 @@
 
 **Pointers:** [CHANGELOG.md](CHANGELOG.md) · [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) · [FORK.md](FORK.md) · [AGENTS.md](AGENTS.md).
 
+## License
+
+This fork is licensed under **Apache License 2.0**; see [`LICENSE`](LICENSE).
+
+Third-party components included in this repository (including the `balboa-spa`
+submodule and vendored source files) have their own notices and licenses.
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and keep upstream
+license headers/notices intact when redistributing.
+
+### Commercial use
+
+Apache-2.0 is a permissive open-source license. That means others can use,
+modify, and sell products that include this code as long as they satisfy the
+license conditions (for example: preserve notices and include license text).
+This license does not require downstream users to pay royalties.
+
 ---
 
 ## What this project is

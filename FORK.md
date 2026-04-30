@@ -12,6 +12,16 @@ This codebase is a port and modernization of Balboa spa control firmware for ESP
 
 The web UI credits [jozefnad/balboa-spa](https://github.com/jozefnad/balboa-spa). Those upstreams are **not** expected to receive pull requests from this fork; they appear **inactive or archival** for this use case. **Ongoing development happens in this repository.**
 
+## Licensing posture for this fork
+
+- Root project license: Apache-2.0 (`LICENSE`).
+- Third-party attributions and included component licenses: `THIRD_PARTY_NOTICES.md`.
+- Upstream license headers in vendored files must be preserved when distributing source.
+
+Apache-2.0 allows commercial redistribution (including sale of products that
+include this code) provided license obligations are met; it is not a
+royalty-bearing license.
+
 ## Optional: compare with an “upstream” remote
 
 If you want to diff this fork against an original repo locally:
