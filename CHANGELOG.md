@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-04-30
+
+### Added
+
+- **Panel clock set (`0x21`)** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): SCI **`device_request`** target **`SystemTime`** with `HH:MM` dispatches **`spaSetSpaPanelClockTime`** (Balboa Set Time per [protocol.md](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md)); **`/status`** adds time picker, **Send to spa**, and **Sync from gateway** (`gatewayTimeHHMM` from **`GET /api/status/controls`**).
+
+### Changed
+
+- **`/status` panel clock section** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **Panel clock and filter cycles** block moved **below Equipment**; human-readable **Panel clock format** (12h vs 24h) with raw flag in `title`; **`GET /api/status/controls`** JSON adds **`panelTime`**, **`clockFormat`**, **`clockModeRaw`**, **`filterModeText`**, **`gatewayTimeHHMM`** for live polling (`DynamicJsonDocument` **2560**).
+- **Version bump:** Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are now **`2.1.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.0.0] - 2026-04-29
 
 ### Highlights
@@ -341,7 +352,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.1...v2.0.0
 [1.8.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v1.7.2...v1.8.0

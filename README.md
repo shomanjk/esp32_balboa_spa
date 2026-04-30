@@ -52,7 +52,7 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 
 ![Web UI example](docs/balboa-spa-web.png)
 
-**Status:** Firmware-served **`/status`** includes **wired** equipment and temperature controls (SCI **`Button`** / **`SetTemp`** to the spa over RS485). The **LittleFS** `balboa-spa` bundle may still differ from upstream; treat its control surfaces as **read-first** unless you verify them for your build.
+**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, and panel-clock controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** to the spa over RS485). The **LittleFS** `balboa-spa` bundle may still differ from upstream; treat its control surfaces as **read-first** unless you verify them for your build.
 
 **Layout:** Firmware-served pages `/status`, `/config`, and `/state` use a responsive layout (viewport scaling, wrapping nav, fluid charts/images) for phone-sized screens.
 

@@ -474,13 +474,51 @@ static String webWallClockDisplayHtml(time_t t)
   return statusLastUpdateDisplayHtml(static_cast<unsigned long>(t));
 }
 
-static void appendStatusKvRow(String &html, const char *label, const String &value)
+static void appendStatusKvRow(String &html, const char *label, const String &value, const char *ddId = nullptr, const char *ddTitle = nullptr)
 {
   html += "<div class=\"kv-row\"><dt>";
   html += label;
-  html += "</dt><dd>";
+  html += "</dt><dd";
+  if (ddId != nullptr && ddId[0] != '\0')
+  {
+    html += " id=\"";
+    html += ddId;
+    html += "\"";
+  }
+  if (ddTitle != nullptr && ddTitle[0] != '\0')
+  {
+    html += " title=\"";
+    html += ddTitle;
+    html += "\"";
+  }
+  html += ">";
   html += value;
   html += "</dd></div>";
+}
+
+/** Status byte9 bit1 (mask 0x02): panel 12h vs 24h clock display. */
+static String statusPanelClockFormatLabel(uint8_t clockModeFromStatus)
+{
+  return ((clockModeFromStatus & 0x02) != 0) ? String("24-hour") : String("12-hour (AM/PM)");
+}
+
+/** Gateway wall clock as HH:MM for \"sync panel time\" (uses `getTime()` / local TZ). */
+static String statusGatewayLocalTimeHHMM()
+{
+  time_t t = getTime();
+  if (t <= 0)
+  {
+    return String("--:--");
+  }
+  struct tm tmStore;
+  struct tm *p = localtime_r(&t, &tmStore);
+  if (p == nullptr)
+  {
+    return String("--:--");
+  }
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%02d:%02d", p->tm_hour, p->tm_min);
+  return String(buf);
 }
 
 static bool statusSpaConfigReady()
@@ -1069,12 +1107,6 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "</pre></details></section>";
   }
 
-  html += "<section class=\"panel\"><h2>Time and filtration</h2><dl class=\"kv\">";
-  appendStatusKvRow(html, "Time", String(spaStatusData.time));
-  appendStatusKvRow(html, "Clock Mode", String(spaStatusData.clockMode));
-  appendStatusKvRow(html, "Filter Mode", getMapDescription(spaStatusData.filterMode, filterModeMap));
-  html += "</dl></section>";
-
   html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
   appendStatusControlCell(html, "Pump 1", "pump1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on");
   appendStatusControlCell(html, "Pump 2", "pump2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on");
@@ -1088,6 +1120,27 @@ void handleStatus(AsyncWebServerRequest *request)
   appendStatusControlCell(html, "Light 2", "light2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2), 18, spaStatusData.light2 ? "off" : "on");
   appendStatusControlCell(html, "Mister", "mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent(), 14, spaStatusData.mister ? "off" : "on");
   html += "</div><div id=\"statusButtonResult\" class=\"status-control-result\"></div></section>";
+
+  {
+    String clockRawTitle = String("Raw status flag (status byte 9 & 0x02): ") + String(spaStatusData.clockMode);
+    html += "<section class=\"panel\"><h2>Panel clock and filter cycles</h2>";
+    html += "<p class=\"chart-caption\">Times are the <b>spa panel clock</b> from RS485 status (not the ESP clock on <a href='/state'>/state</a>). "
+            "<b>Panel clock format</b> is how the physical panel shows time (12h vs 24h). "
+            "<b>Filter cycle (status)</b> is which programmed daily filter window the controller reports as active; schedule start/duration is on <a href='/config'>/config</a>.</p>";
+    html += "<dl class=\"kv\">";
+    appendStatusKvRow(html, "Panel time", String(spaStatusData.time), "statusPanelTimeVal", nullptr);
+    appendStatusKvRow(html, "Panel clock format", statusPanelClockFormatLabel(spaStatusData.clockMode), "statusClockFormatVal", clockRawTitle.c_str());
+    appendStatusKvRow(html, "Filter cycle (status)", String(getMapDescription(spaStatusData.filterMode, filterModeMap)), "statusFilterModeVal", nullptr);
+    html += "</dl>";
+    html += "<p class=\"range-hint\" style=\"margin-top:10px\">Set panel clock sends Balboa <code>0x21</code> using the current 12h/24h format flag from status.</p>";
+    html += "<div class=\"status-control-row\"><label for=\"statusPanelTimeInput\" class=\"equip-label\">Set panel time</label>";
+    html += "<input id=\"statusPanelTimeInput\" type=\"time\" step=\"60\" value=\"";
+    html += String(spaStatusData.time);
+    html += "\" />";
+    html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSendPanelTime()\">Send to spa</button>";
+    html += "<button class=\"equip-btn\" type=\"button\" onclick=\"statusSyncPanelTimeFromGateway()\">Sync from gateway</button></div>";
+    html += "<div id=\"statusSystemTimeResult\" class=\"status-control-result\"></div></section>";
+  }
 
   html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "Panel Locked", getMapDescription(spaStatusData.panelLocked, lockedMap));
@@ -1177,6 +1230,10 @@ void handleStatus(AsyncWebServerRequest *request)
           "if(setInput){if(typeof snap.setTempMin!=='undefined')setInput.min=String(snap.setTempMin);if(typeof snap.setTempMax!=='undefined')setInput.max=String(snap.setTempMax);"
           "if(typeof snap.tempScaleCelsius!=='undefined')setInput.step=snap.tempScaleCelsius?'0.5':'1';"
           "if(document.activeElement!==setInput&&typeof snap.setTemp!=='undefined')setInput.value=String(snap.tempScaleCelsius?Number(snap.setTemp).toFixed(1):Math.round(Number(snap.setTemp)));}"
+          "var pt=document.getElementById('statusPanelTimeVal');if(pt&&typeof snap.panelTime==='string')pt.textContent=snap.panelTime;"
+          "var cf=document.getElementById('statusClockFormatVal');if(cf&&typeof snap.clockFormat==='string'){cf.textContent=snap.clockFormat;if(typeof snap.clockModeRaw!=='undefined')cf.title='Raw status flag (status byte 9 & 0x02): '+snap.clockModeRaw;}"
+          "var fm=document.getElementById('statusFilterModeVal');if(fm&&typeof snap.filterModeText==='string')fm.textContent=snap.filterModeText;"
+          "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
           "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
           "}"
           "let statusPollTimer=0;let statusPollBusy=false;"
@@ -1232,6 +1289,32 @@ void handleStatus(AsyncWebServerRequest *request)
           "const changed=await statusWaitForSetTemp(v);"
           "if(changed){statusSetResult('statusSetTempResult','SetTemp accepted and state changed.');setTimeout(function(){location.reload();},500);}else{statusSetResult('statusSetTempResult','SetTemp accepted, but setpoint did not change yet.');}"
           "}catch(e){statusSetResult('statusSetTempResult','SetTemp failed: '+e);}"
+          "}"
+          "async function statusWaitForPanelTime(target){"
+          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
+          "try{var snap=await statusFetchControls();if(String(snap.panelTime||'')===String(target))return true;}catch(e){}}"
+          "return false;}"
+          "async function statusSendPanelTime(){"
+          "var input=document.getElementById('statusPanelTimeInput');if(!input)return;var v=(input.value||'').trim();"
+          "if(!/^\\d{1,2}:\\d{2}$/.test(v)){statusSetResult('statusSystemTimeResult','Enter a valid time (HH:MM).');return;}"
+          "var p=v.split(':');var hh=String(Number(p[0])||0);var mm=String(p[1]||'00');if(mm.length===1)mm='0'+mm;if(hh.length===1)hh='0'+hh;v=hh+':'+mm;"
+          "try{const xml='<device_request target_name=\"SystemTime\">'+v+'</device_request>';"
+          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSystemTimeResult','SystemTime response: '+out);return;}"
+          "statusSetResult('statusSystemTimeResult','SystemTime accepted; waiting for spa...');"
+          "const changed=await statusWaitForPanelTime(v);"
+          "if(changed){statusSetResult('statusSystemTimeResult','Panel time updated.');statusApplySnapshot(await statusFetchControls());}"
+          "else{statusSetResult('statusSystemTimeResult','Command accepted; panel time did not match yet.');}"
+          "}catch(e){statusSetResult('statusSystemTimeResult','SystemTime failed: '+e);}"
+          "}"
+          "async function statusSyncPanelTimeFromGateway(){"
+          "try{var snap=await statusFetchControls();var gt=snap.gatewayTimeHHMM;if(!gt||gt==='--:--'){statusSetResult('statusSystemTimeResult','Gateway clock not available (sync ESP time / NTP).');return;}"
+          "const xml='<device_request target_name=\"SystemTime\">'+gt+'</device_request>';"
+          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSystemTimeResult','SystemTime response: '+out);return;}"
+          "statusSetResult('statusSystemTimeResult','Sync sent; waiting for spa...');"
+          "const changed=await statusWaitForPanelTime(gt);"
+          "if(changed){statusSetResult('statusSystemTimeResult','Panel time synced from gateway.');var inp=document.getElementById('statusPanelTimeInput');if(inp)inp.value=gt;statusApplySnapshot(await statusFetchControls());}"
+          "else{statusSetResult('statusSystemTimeResult','Command accepted; panel time did not match yet.');}"
+          "}catch(e){statusSetResult('statusSystemTimeResult','Sync failed: '+e);}"
           "}"
           "</script>";
   html += "</div></main></div></body></html>";
@@ -1641,7 +1724,7 @@ void handleWifi(AsyncWebServerRequest *request)
 void handleStatusControlsApi(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(2048);
+  DynamicJsonDocument doc(2560);
   doc["lastUpdate"] = spaStatusData.lastUpdate;
   doc["snapshotAgeSec"] = statusSnapshotAgeSec();
   doc["snapshotAtLocal"] = statusLastUpdateDisplayHtml(spaStatusData.lastUpdate);
@@ -1690,6 +1773,11 @@ void handleStatusControlsApi(AsyncWebServerRequest *request)
   doc["circ"] = spaStatusData.circ ? 1 : 0;
   doc["blower"] = spaStatusData.blower;
   doc["mister"] = spaStatusData.mister ? 1 : 0;
+  doc["panelTime"] = String(spaStatusData.time);
+  doc["clockFormat"] = statusPanelClockFormatLabel(spaStatusData.clockMode);
+  doc["clockModeRaw"] = spaStatusData.clockMode;
+  doc["filterModeText"] = String(getMapDescription(spaStatusData.filterMode, filterModeMap));
+  doc["gatewayTimeHHMM"] = statusGatewayLocalTimeHHMM();
   serializeJson(doc, *response);
   request->send(response);
 }
@@ -2412,6 +2500,34 @@ String parseBody(String body)
         response = "<device_request target_name='SetTemp' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
       }
       Log.verbose("[Web]: SetTemp request %s -> %s" CR, value.c_str(), result.reason);
+    }
+    else if (target == "SystemTime")
+    {
+      value.trim();
+      const int colon = value.indexOf(':');
+      if (colon <= 0 || colon >= (int)value.length() - 1)
+      {
+        response = "<device_request target_name='SystemTime' result='rejected' error='invalid_time_payload'>" + value + "</device_request>";
+        return response;
+      }
+      const int hour = value.substring(0, colon).toInt();
+      const int minute = value.substring(colon + 1).toInt();
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59)
+      {
+        response = "<device_request target_name='SystemTime' result='rejected' error='invalid_time_payload'>" + value + "</device_request>";
+        return response;
+      }
+
+      SpaCommandResult result = spaSetSpaPanelClockTime((uint8_t)hour, (uint8_t)minute, SPA_COMMAND_SOURCE_WEB);
+      if (result.accepted)
+      {
+        response = "<device_request target_name='SystemTime' result='accepted'>" + value + "</device_request>";
+      }
+      else
+      {
+        response = "<device_request target_name='SystemTime' result='rejected' error='" + String(result.reason) + "'>" + value + "</device_request>";
+      }
+      Log.verbose("[Web]: SystemTime request %s -> %s" CR, value.c_str(), result.reason);
     }
     else
     {
