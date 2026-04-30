@@ -85,16 +85,18 @@ void spaProtocolActiveSetpointBand(float &minBand, float &maxBand)
   }
 }
 
-bool spaCanAcceptCommands()
+bool spaHasFreshStatus()
 {
-  return !staleData(spaStatusData) && !staleData(spaConfigurationData);
+  return !staleData(spaStatusData);
 }
 
 SpaCommandResult spaSendToggleCommand(uint8_t itemCode, SpaCommandSource source)
 {
-  if (!spaCanAcceptCommands())
+  // Toggle requests can be sent once status has been seen; they do not require
+  // configuration frames to be present.
+  if (!spaHasFreshStatus())
   {
-    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
   }
 
   CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
@@ -257,9 +259,9 @@ SpaCommandResult spaSetTempRange(bool high, SpaCommandSource source)
 
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source)
 {
-  if (!spaCanAcceptCommands())
+  if (!spaHasFreshStatus())
   {
-    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
   }
 
   float minBand = 0;
@@ -289,9 +291,9 @@ SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSour
 
 SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source)
 {
-  if (!spaCanAcceptCommands())
+  if (!spaHasFreshStatus())
   {
-    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
   }
   if (minute > 59)
   {
@@ -325,9 +327,9 @@ SpaCommandResult spaSendToggleDiagnostic(
     SpaCommandSource source,
     String *outFrameHex)
 {
-  if (!spaCanAcceptCommands())
+  if (!spaHasFreshStatus())
   {
-    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
   }
 
   uint8_t dest = destinationIdForMode(useWifiDestination);
@@ -357,9 +359,9 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
     String *outFrameHex,
     uint32_t *outArmCount)
 {
-  if (!spaCanAcceptCommands())
+  if (!spaHasFreshStatus())
   {
-    return {false, SPA_COMMAND_NOT_READY, "spa status/config not ready"};
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
   }
 
   uint8_t dest = destinationIdForMode(useWifiDestination);
