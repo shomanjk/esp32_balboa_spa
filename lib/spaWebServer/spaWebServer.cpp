@@ -629,71 +629,6 @@ static bool statusMisterConfiguredAbsent()
   return statusSpaConfigReady() && !spaConfigurationData.mister;
 }
 
-static int toggleCountForButtonRequest(uint8_t itemCode, bool requestHasState, bool desiredOn)
-{
-  // Lights are binary; one toggle transitions state.
-  if (itemCode == 17 || itemCode == 18)
-  {
-    if (!requestHasState)
-    {
-      return 1;
-    }
-    const bool isOn = (itemCode == 17 ? spaStatusData.light1 : spaStatusData.light2);
-    return (isOn == desiredOn) ? 0 : 1;
-  }
-
-  // Pumps can be two-speed: Off(0)->Low(1)->High(2)->Off(0).
-  if (itemCode >= 4 && itemCode <= 9)
-  {
-    if (!requestHasState)
-    {
-      return 1;
-    }
-
-    const uint8_t pumpId = (itemCode - 3);
-    const uint8_t pumpStatus[] = {spaStatusData.pump1, spaStatusData.pump2, spaStatusData.pump3, spaStatusData.pump4, spaStatusData.pump5, spaStatusData.pump6};
-    const uint8_t pumpConfig[] = {spaConfigurationData.pump1, spaConfigurationData.pump2, spaConfigurationData.pump3, spaConfigurationData.pump4, spaConfigurationData.pump5, spaConfigurationData.pump6};
-
-    uint8_t state = pumpStatus[pumpId - 1];
-    uint8_t speedConfig = pumpConfig[pumpId - 1];
-    if (speedConfig <= 1)
-    {
-      bool isOn = state > 0;
-      return (isOn == desiredOn) ? 0 : 1;
-    }
-
-    if (desiredOn)
-    {
-      return (state == 0) ? 1 : 0;
-    }
-    // desired Off: from Low->Off = 2 toggles (via High), from High->Off = 1 toggle.
-    if (state == 0)
-    {
-      return 0;
-    }
-    if (state == 1)
-    {
-      return 2;
-    }
-    return 1;
-  }
-
-  // Balboa temp range: item 0x50 (80) toggles high/low (bit in status byte 10).
-  if (itemCode == 80)
-  {
-    if (!requestHasState)
-    {
-      return 1;
-    }
-    const bool isHigh = (spaStatusData.tempRange != 0);
-    const bool wantHigh = desiredOn;
-    return (isHigh == wantHigh) ? 0 : 1;
-  }
-
-  // Other items (blower/aux/mode) remain single-toggle for now.
-  return 1;
-}
-
 static void appendStatusEquipCell(String &html, const char *label, const String &value, bool configuredAbsent)
 {
   if (configuredAbsent)
@@ -2465,9 +2400,13 @@ String parseBody(String body)
         return response;
       }
 
-      int togglesToSend = toggleCountForButtonRequest((uint8_t)itemCode, requestHasState, desiredOn);
+      int togglesToSend = spaToggleCountForButtonRequest((uint8_t)itemCode, requestHasState, desiredOn);
       Log.verbose("[Web]: Button request raw=%s item=%d desired=%s toggles=%d" CR, value.c_str(), itemCode, (requestHasState ? desiredStateRaw.c_str() : "n/a"), togglesToSend);
-      if (togglesToSend <= 0)
+      if (togglesToSend < 0)
+      {
+        response = "<device_request target_name='Button' result='rejected' error='invalid_button_payload'>" + value + "</device_request>";
+      }
+      else if (togglesToSend == 0)
       {
         response = "<device_request target_name='Button' result='accepted'>" + value + "</device_request>";
         Log.verbose("[Web]: Button request no-op; already in desired state" CR);

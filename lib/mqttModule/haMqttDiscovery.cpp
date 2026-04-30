@@ -77,6 +77,11 @@ namespace
     return mqttTopic + String(group) + "/" + field;
   }
 
+  String commandTopic(const char *suffix)
+  {
+    return mqttTopic + "cmd/" + String(suffix);
+  }
+
   void buildObjectId(char *out, size_t outLen, const char *objectSuffix)
   {
     snprintf(out, outLen, "%s_%s", gatewayName, objectSuffix);
@@ -198,6 +203,164 @@ namespace
       root["icon"] = icon;
 
     publishDoc("sensor", objectId, doc);
+  }
+
+  void publishSwitch(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                     const char *group, const char *field, const char *commandSuffix,
+                     const char *icon = nullptr, const char *payloadOn = "On", const char *payloadOff = "Off")
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["command_topic"] = commandTopic(commandSuffix);
+    root["payload_on"] = payloadOn;
+    root["payload_off"] = payloadOff;
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    publishDoc("switch", objectId, doc);
+  }
+
+  void publishSelect(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                     const char *group, const char *field, const char *commandSuffix,
+                     const char *const *options, size_t optionCount, const char *icon = nullptr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["command_topic"] = commandTopic(commandSuffix);
+    JsonArray opts = root.createNestedArray("options");
+    for (size_t i = 0; i < optionCount; i++)
+      opts.add(options[i]);
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    publishDoc("select", objectId, doc);
+  }
+
+  void publishButton(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                     const char *commandSuffix, const char *payloadPress, const char *icon = nullptr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["command_topic"] = commandTopic(commandSuffix);
+    root["payload_press"] = payloadPress;
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    publishDoc("button", objectId, doc);
+  }
+
+  void publishClimate(const char *macSlugStr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), "spa_controls");
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, "spa_controls");
+
+    StaticJsonDocument<1536> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = "Spa controls";
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["temperature_state_topic"] = stateTopic("status", "setTemp");
+    root["temperature_command_topic"] = commandTopic("setTemp");
+    root["current_temperature_topic"] = stateTopic("status", "currentTemp");
+    root["mode_state_topic"] = stateTopic("status", "heatingMode");
+    root["mode_command_topic"] = commandTopic("mode");
+    root["mode_state_template"] = "{{ 'off' if value == 'Rest' else 'heat' }}";
+    JsonArray modes = root.createNestedArray("modes");
+    modes.add("heat");
+    modes.add("off");
+    root["preset_mode_state_topic"] = stateTopic("status", "tempRange");
+    root["preset_mode_command_topic"] = commandTopic("preset");
+    JsonArray presets = root.createNestedArray("preset_modes");
+    presets.add("Low Range");
+    presets.add("High Range");
+    root["temperature_unit"] = MQTT_HA_TEMP_UNIT;
+    if (String(MQTT_HA_TEMP_UNIT).endsWith("C"))
+    {
+      root["min_temp"] = 10;
+      root["max_temp"] = 40;
+      root["temp_step"] = 0.5;
+    }
+    else
+    {
+      root["min_temp"] = 50;
+      root["max_temp"] = 104;
+      root["temp_step"] = 1.0;
+    }
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    publishDoc("climate", objectId, doc);
+  }
+
+  void publishCommandResultSensor(const char *macSlugStr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), "last_command_result");
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, "last_command_result");
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = "Spa last command result";
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = commandTopic("result");
+    root["value_template"] = "{{ value_json.reason }}";
+    root["json_attributes_topic"] = commandTopic("result");
+    root["entity_category"] = "diagnostic";
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    publishDoc("sensor", objectId, doc);
+  }
+
+  void retractWritableOverlapConfigs()
+  {
+    retractDiscoveryConfig("sensor", "set_temp");
+    retractDiscoveryConfig("sensor", "temp_range");
+    retractDiscoveryConfig("sensor", "heating_mode");
+    retractDiscoveryConfig("sensor", "pump1");
+    retractDiscoveryConfig("sensor", "pump2");
+    retractDiscoveryConfig("sensor", "pump3");
+    retractDiscoveryConfig("sensor", "pump4");
+    retractDiscoveryConfig("sensor", "pump5");
+    retractDiscoveryConfig("sensor", "pump6");
+    retractDiscoveryConfig("binary_sensor", "light1");
+    retractDiscoveryConfig("binary_sensor", "light2");
+    retractDiscoveryConfig("binary_sensor", "blower");
+    retractDiscoveryConfig("binary_sensor", "mister");
   }
 
   /** Same rules as spaWebServer: pump/light two-bit 0 = not installed. */
@@ -376,6 +539,123 @@ namespace
     publishSensor(macSlugStr, "temp_scale", "Spa temperature scale", "status", "tempScale", nullptr, nullptr, nullptr, "diagnostic", nullptr);
   }
 
+  uint8_t pumpSpeedConfigForBit(uint32_t bit)
+  {
+    switch (bit)
+    {
+    case HA_PUMP1:
+      return spaConfigurationData.pump1;
+    case HA_PUMP2:
+      return spaConfigurationData.pump2;
+    case HA_PUMP3:
+      return spaConfigurationData.pump3;
+    case HA_PUMP4:
+      return spaConfigurationData.pump4;
+    case HA_PUMP5:
+      return spaConfigurationData.pump5;
+    case HA_PUMP6:
+      return spaConfigurationData.pump6;
+    default:
+      return 0;
+    }
+  }
+
+  void publishWritablePumpBit(uint32_t bit, const char *macSlugStr)
+  {
+    const char *const kPumpTriOptions[] = {"Off", "Low", "High"};
+    const char *suffix = "";
+    const char *name = "";
+    const char *field = "";
+    const char *cmd = "";
+
+    switch (bit)
+    {
+    case HA_PUMP1:
+      suffix = "pump1";
+      name = "Spa pump 1";
+      field = "pump1";
+      cmd = "button/4";
+      break;
+    case HA_PUMP2:
+      suffix = "pump2";
+      name = "Spa pump 2";
+      field = "pump2";
+      cmd = "button/5";
+      break;
+    case HA_PUMP3:
+      suffix = "pump3";
+      name = "Spa pump 3";
+      field = "pump3";
+      cmd = "button/6";
+      break;
+    case HA_PUMP4:
+      suffix = "pump4";
+      name = "Spa pump 4";
+      field = "pump4";
+      cmd = "button/7";
+      break;
+    case HA_PUMP5:
+      suffix = "pump5";
+      name = "Spa pump 5";
+      field = "pump5";
+      cmd = "button/8";
+      break;
+    case HA_PUMP6:
+      suffix = "pump6";
+      name = "Spa pump 6";
+      field = "pump6";
+      cmd = "button/9";
+      break;
+    default:
+      return;
+    }
+
+    const uint8_t speedConfig = pumpSpeedConfigForBit(bit);
+    retractDiscoveryConfig("switch", suffix);
+    retractDiscoveryConfig("select", suffix);
+    if (speedConfig <= 1)
+    {
+      publishSwitch(macSlugStr, suffix, name, "status", field, cmd, "mdi:pump", "Low", "Off");
+    }
+    else
+    {
+      publishSelect(macSlugStr, suffix, name, "status", field, cmd, kPumpTriOptions, sizeof(kPumpTriOptions) / sizeof(kPumpTriOptions[0]), "mdi:pump");
+    }
+  }
+
+  void publishWritableEntities(const char *macSlugStr, uint32_t desired)
+  {
+    retractWritableOverlapConfigs();
+    publishClimate(macSlugStr);
+    publishSwitch(macSlugStr, "light1", "Spa light 1", "status", "light1", "button/17", nullptr, "On", "Off");
+    publishSwitch(macSlugStr, "light2", "Spa light 2", "status", "light2", "button/18", nullptr, "On", "Off");
+    publishSwitch(macSlugStr, "blower", "Spa blower", "status", "blower", "button/12", nullptr, "On", "Off");
+    publishSwitch(macSlugStr, "mister", "Spa mister", "status", "mister", "button/14", nullptr, "On", "Off");
+    publishButton(macSlugStr, "sync_panel_time", "Spa sync panel clock", "syncTime", "1", "mdi:clock-check");
+    publishCommandResultSensor(macSlugStr);
+
+    for (uint32_t b = HA_PUMP1; b <= HA_PUMP6; b <<= 1)
+    {
+      if (desired & b)
+      {
+        publishWritablePumpBit(b, macSlugStr);
+      }
+      else
+      {
+        retractDiscoveryConfig("switch", b == HA_PUMP1 ? "pump1" : b == HA_PUMP2 ? "pump2"
+                                        : b == HA_PUMP3   ? "pump3"
+                                        : b == HA_PUMP4   ? "pump4"
+                                        : b == HA_PUMP5   ? "pump5"
+                                                          : "pump6");
+        retractDiscoveryConfig("select", b == HA_PUMP1 ? "pump1" : b == HA_PUMP2 ? "pump2"
+                                        : b == HA_PUMP3   ? "pump3"
+                                        : b == HA_PUMP4   ? "pump4"
+                                        : b == HA_PUMP5   ? "pump5"
+                                                          : "pump6");
+      }
+    }
+  }
+
 } // namespace
 
 void publishHomeAssistantDiscovery()
@@ -418,6 +698,8 @@ void publishHomeAssistantDiscoveryExpanded()
     if (desired & b)
       publishEquipmentBit(b, macStr);
   }
+
+  publishWritableEntities(macStr, desired);
 
   if (desired != 0)
     Log.notice(F("[HA discovery]: equipment discovery mask 0x%lx (config=%lu info=%lu)" CR),
