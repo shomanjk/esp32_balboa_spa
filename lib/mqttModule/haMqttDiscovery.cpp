@@ -231,6 +231,36 @@ namespace
     publishDoc("switch", objectId, doc);
   }
 
+  void publishOneSpeedPumpSwitch(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                                 const char *group, const char *field, const char *commandSuffix,
+                                 const char *icon = nullptr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["command_topic"] = commandTopic(commandSuffix);
+    root["payload_on"] = "on";
+    root["payload_off"] = "off";
+    root["state_on"] = "ON";
+    root["state_off"] = "OFF";
+    // One-speed pumps may still report "Low" (or occasionally "High"/"On" on some packs); normalize all to ON.
+    root["value_template"] = "{{ 'ON' if value in ['Low', 'High', 'On'] else 'OFF' }}";
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    publishDoc("switch", objectId, doc);
+  }
+
   void publishSelect(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
                      const char *group, const char *field, const char *commandSuffix,
                      const char *const *options, size_t optionCount, const char *icon = nullptr)
@@ -615,7 +645,7 @@ namespace
     retractDiscoveryConfig("select", suffix);
     if (speedConfig <= 1)
     {
-      publishSwitch(macSlugStr, suffix, name, "status", field, cmd, "mdi:pump", "Low", "Off");
+      publishOneSpeedPumpSwitch(macSlugStr, suffix, name, "status", field, cmd, "mdi:pump");
     }
     else
     {
