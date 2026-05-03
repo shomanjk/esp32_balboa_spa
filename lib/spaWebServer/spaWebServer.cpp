@@ -21,6 +21,7 @@
 #include <tinyxml2.h>
 #include <cmath>
 #include <ctime>
+#include <memory>
 #include <spaMessage.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
@@ -87,7 +88,10 @@ static bool sendNotModifiedIfEtagMatches(AsyncWebServerRequest *request, const S
   return true;
 }
 
-static void sendHtmlWithEtag(AsyncWebServerRequest *request, const String &html, const String &etag)
+/** Send HTML with ETag. Uses callback body delivery so ESPAsyncWebServer does not keep a second
+ *  full copy of the page in `AsyncBasicResponse::_content` (which can peak at ~2–3× RAM for
+ *  large `/status` and reset TCP mid-transfer on ESP32). */
+static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const String &etag)
 {
   if (!request)
   {
@@ -97,7 +101,24 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, const String &html,
   {
     return;
   }
-  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", html);
+  const size_t bodyLen = html.length();
+  auto sharedBody = std::make_shared<String>(std::move(html));
+  AsyncWebServerResponse *response = request->beginResponse(
+      "text/html; charset=utf-8",
+      bodyLen,
+      [sharedBody](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+        if (index >= sharedBody->length())
+        {
+          return 0;
+        }
+        size_t n = sharedBody->length() - index;
+        if (n > maxLen)
+        {
+          n = maxLen;
+        }
+        memcpy(buffer, sharedBody->c_str() + index, n);
+        return n;
+      });
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
@@ -644,6 +665,39 @@ static String statusPumpDisplayState(unsigned pumpId)
   return getMapDescription(statusPumpRawState(pumpId), pumpMap);
 }
 
+/** CSS suffix for `equip-cell--*`: off, low, high, on. Null when card is `equip-absent`. */
+static const char *statusPumpEquipStateClass(unsigned pumpId, bool configuredAbsent)
+{
+  if (configuredAbsent)
+  {
+    return nullptr;
+  }
+  const uint8_t cfg = statusPumpConfigSpeed(pumpId);
+  if (cfg == 1)
+  {
+    return statusPumpIsOn(pumpId) ? "on" : "off";
+  }
+  const uint8_t raw = statusPumpRawState(pumpId);
+  if (raw == 0)
+  {
+    return "off";
+  }
+  if (raw == 1)
+  {
+    return "low";
+  }
+  return "high";
+}
+
+static const char *statusBinaryEquipStateClass(bool configuredAbsent, bool on)
+{
+  if (configuredAbsent)
+  {
+    return nullptr;
+  }
+  return on ? "on" : "off";
+}
+
 static void fillPumpDiagSnapshot(JsonObject obj)
 {
   obj["statusLastUpdate"] = spaStatusData.lastUpdate;
@@ -714,7 +768,7 @@ static void appendStatusEquipCell(String &html, const char *label, const String 
   html += "</div></div>";
 }
 
-static void appendStatusControlCell(String &html, const char *label, const char *equipKey, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState)
+static void appendStatusControlCell(String &html, const char *label, const char *equipKey, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState, const char *equipStateClass)
 {
   if (configuredAbsent)
   {
@@ -722,7 +776,13 @@ static void appendStatusControlCell(String &html, const char *label, const char 
   }
   else
   {
-    html += "<div class=\"equip-cell\"";
+    html += "<div class=\"equip-cell";
+    if (equipStateClass != nullptr && equipStateClass[0] != '\0')
+    {
+      html += " equip-cell--";
+      html += equipStateClass;
+    }
+    html += "\"";
   }
   if (equipKey != nullptr && equipKey[0] != '\0')
   {
@@ -901,7 +961,7 @@ void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
   String html;
-  html.reserve(48000);
+  html.reserve(64000);
   const char *statusStyle =
       "<style>"
       "html{scroll-behavior:smooth;}"
@@ -956,8 +1016,11 @@ void handleStatus(AsyncWebServerRequest *request)
       "details.heat-raw{margin-top:10px;}details.heat-raw summary{cursor:pointer;font-size:0.84rem;color:var(--muted);font-weight:600;}"
       "details.heat-raw pre{margin:8px 0 0 0;padding:8px 10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;font-size:0.78rem;line-height:1.5;font-family:ui-monospace,Courier,monospace;}"
       ".equip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:var(--space-2);}"
-      ".equip-cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fafbfc;}"
-      ".equip-cell.equip-absent{opacity:0.58;background:#eef1f4;color:var(--muted);border-color:#dde2e8;}"
+      ".equip-cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px 8px 14px;background:#fafbfc;}"
+      ".equip-cell--off{background:#f4f6f8;border-color:#dde3e9;box-shadow:inset 4px 0 0 0 #b0bec5;}"
+      ".equip-cell--low{background:#fff8e6;border-color:#e6c86a;box-shadow:inset 4px 0 0 0 #e6a000;}"
+      ".equip-cell--high,.equip-cell--on{background:#e8f5f0;border-color:#7ebda3;box-shadow:inset 4px 0 0 0 #2e8b6e;}"
+      ".equip-cell.equip-absent{opacity:0.58;background:#eef1f4;color:var(--muted);border-color:#dde2e8;box-shadow:inset 4px 0 0 0 #c5ced6;}"
       ".equip-cell.equip-absent .equip-label{color:#7a8794;}"
       ".equip-cell.equip-absent .equip-val{font-weight:500;color:#5f6c7b;}"
       ".equip-label{font-size:0.82rem;color:var(--muted);font-weight:600;}"
@@ -994,12 +1057,21 @@ void handleStatus(AsyncWebServerRequest *request)
       ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       "</style>";
 
-  html = "<html>" + headStatus + String(statusStyle) +
-         "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuStatus +
-         "<main id='mainContent'>" + ePaper +
-         "<div class=\"status-page-head\"><h1 class=\"status-page-title\">Spa Status</h1>"
-         "<p class=\"status-snapshot-meta\" id=\"statusSnapshotMeta\" title=\"Last spa status frame applied (gateway local time)\">" +
-         statusSnapshotSubtitle() + "</p></div><div class=\"status-layout\">";
+  // Materialize `headStatus` into its own `String` before chaining more appends. A single
+  // giant `a + b + c + …` expression creates many short-lived temporaries; on embedded
+  // targets that has been associated with rare truncated `/status` HTML (missing `<head>` / CSS).
+  const String statusHeadClosed = headStatus;
+  html = F("<html>");
+  html += statusHeadClosed;
+  html += String(statusStyle);
+  html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
+  html += webMenuStatus;
+  html += F("<main id='mainContent'>");
+  html += ePaper;
+  html += F("<div class=\"status-page-head\"><h1 class=\"status-page-title\">Spa Status</h1>"
+            "<p class=\"status-snapshot-meta\" id=\"statusSnapshotMeta\" title=\"Last spa status frame applied (gateway local time)\">");
+  html += statusSnapshotSubtitle();
+  html += F("</p></div><div class=\"status-layout\">");
 
   {
     float setMin = 50.0f;
@@ -1129,17 +1201,17 @@ void handleStatus(AsyncWebServerRequest *request)
   }
 
   html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
-  appendStatusControlCell(html, "Pump 1", "pump1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 2", "pump2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 3", "pump3", statusPumpDisplayState(3), statusPumpConfiguredAbsent(3), 6, statusPumpIsOn(3) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 4", "pump4", statusPumpDisplayState(4), statusPumpConfiguredAbsent(4), 7, statusPumpIsOn(4) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 5", "pump5", statusPumpDisplayState(5), statusPumpConfiguredAbsent(5), 8, statusPumpIsOn(5) ? "off" : "on");
-  appendStatusControlCell(html, "Pump 6", "pump6", statusPumpDisplayState(6), statusPumpConfiguredAbsent(6), 9, statusPumpIsOn(6) ? "off" : "on");
-  appendStatusControlCell(html, "Circulation Pump", "circ", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent(), 0, nullptr);
-  appendStatusControlCell(html, "Blower", "blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent(), 12, spaStatusData.blower == 0 ? "on" : "off");
-  appendStatusControlCell(html, "Light 1", "light1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1), 17, spaStatusData.light1 ? "off" : "on");
-  appendStatusControlCell(html, "Light 2", "light2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2), 18, spaStatusData.light2 ? "off" : "on");
-  appendStatusControlCell(html, "Mister", "mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent(), 14, spaStatusData.mister ? "off" : "on");
+  appendStatusControlCell(html, "Pump 1", "pump1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on", statusPumpEquipStateClass(1, statusPumpConfiguredAbsent(1)));
+  appendStatusControlCell(html, "Pump 2", "pump2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on", statusPumpEquipStateClass(2, statusPumpConfiguredAbsent(2)));
+  appendStatusControlCell(html, "Pump 3", "pump3", statusPumpDisplayState(3), statusPumpConfiguredAbsent(3), 6, statusPumpIsOn(3) ? "off" : "on", statusPumpEquipStateClass(3, statusPumpConfiguredAbsent(3)));
+  appendStatusControlCell(html, "Pump 4", "pump4", statusPumpDisplayState(4), statusPumpConfiguredAbsent(4), 7, statusPumpIsOn(4) ? "off" : "on", statusPumpEquipStateClass(4, statusPumpConfiguredAbsent(4)));
+  appendStatusControlCell(html, "Pump 5", "pump5", statusPumpDisplayState(5), statusPumpConfiguredAbsent(5), 8, statusPumpIsOn(5) ? "off" : "on", statusPumpEquipStateClass(5, statusPumpConfiguredAbsent(5)));
+  appendStatusControlCell(html, "Pump 6", "pump6", statusPumpDisplayState(6), statusPumpConfiguredAbsent(6), 9, statusPumpIsOn(6) ? "off" : "on", statusPumpEquipStateClass(6, statusPumpConfiguredAbsent(6)));
+  appendStatusControlCell(html, "Circulation Pump", "circ", getMapDescription(spaStatusData.circ, onOffMap), statusCircConfiguredAbsent(), 0, nullptr, statusBinaryEquipStateClass(statusCircConfiguredAbsent(), spaStatusData.circ != 0));
+  appendStatusControlCell(html, "Blower", "blower", getMapDescription(spaStatusData.blower, onOffMap), statusBlowerConfiguredAbsent(), 12, spaStatusData.blower == 0 ? "on" : "off", statusBinaryEquipStateClass(statusBlowerConfiguredAbsent(), spaStatusData.blower != 0));
+  appendStatusControlCell(html, "Light 1", "light1", getMapDescription(spaStatusData.light1, onOffMap), statusLightConfiguredAbsent(1), 17, spaStatusData.light1 ? "off" : "on", statusBinaryEquipStateClass(statusLightConfiguredAbsent(1), spaStatusData.light1 != 0));
+  appendStatusControlCell(html, "Light 2", "light2", getMapDescription(spaStatusData.light2, onOffMap), statusLightConfiguredAbsent(2), 18, spaStatusData.light2 ? "off" : "on", statusBinaryEquipStateClass(statusLightConfiguredAbsent(2), spaStatusData.light2 != 0));
+  appendStatusControlCell(html, "Mister", "mister", getMapDescription(spaStatusData.mister, onOffMap), statusMisterConfiguredAbsent(), 14, spaStatusData.mister ? "off" : "on", statusBinaryEquipStateClass(statusMisterConfiguredAbsent(), spaStatusData.mister != 0));
   html += "</div><div id=\"statusButtonResult\" class=\"status-control-result\"></div></section>";
 
   {
@@ -1208,6 +1280,12 @@ void handleStatus(AsyncWebServerRequest *request)
           "async function statusFetchControls(){return await statusFetchJson('/api/status/summary',4200);}"
           "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
           "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
+          "function statusSetEquipStateClass(key,state){var c=statusEquipCell(key);if(!c||c.classList.contains('equip-absent'))return;"
+          "var states=['equip-cell--off','equip-cell--low','equip-cell--high','equip-cell--on'];for(var i=0;i<states.length;i++)c.classList.remove(states[i]);"
+          "if(state==='off'||state==='low'||state==='high'||state==='on')c.classList.add('equip-cell--'+state);}"
+          "function statusPumpVisualState(snap,num){var cfg=Number(snap['pump'+num+'Config']||0);if(cfg===1)return snap['pump'+num+'On']?'on':'off';"
+          "var raw=Number(snap['pump'+num]||0);if(raw===0)return 'off';if(raw===1)return 'low';return 'high';}"
+          "function statusBinaryEquipFromSnap(snap,key){if(typeof snap[key]==='undefined')return 'off';return Number(snap[key])>0?'on':'off';}"
           "function statusSetButtonState(code,desired){var btn=document.querySelector('button[data-button=\"'+code+'\"]');if(!btn)return;"
           "btn.setAttribute('data-state',desired);btn.textContent='Turn '+(desired==='on'?'On':'Off');}"
           "function statusPumpDisplay(raw){if(raw===0)return 'Off';if(raw===1)return 'Low';if(raw===2)return 'High';return String(raw);}"
@@ -1235,17 +1313,17 @@ void handleStatus(AsyncWebServerRequest *request)
           "}"
           "function statusApplySnapshot(snap){"
           "if(!snap)return;"
-          "statusSetEquipValue('pump1',statusPumpUiValue(snap,1));"
-          "statusSetEquipValue('pump2',statusPumpUiValue(snap,2));"
-          "statusSetEquipValue('pump3',statusPumpUiValue(snap,3));"
-          "statusSetEquipValue('pump4',statusPumpUiValue(snap,4));"
-          "statusSetEquipValue('pump5',statusPumpUiValue(snap,5));"
-          "statusSetEquipValue('pump6',statusPumpUiValue(snap,6));"
-          "if(typeof snap.circ!=='undefined')statusSetEquipValue('circ',statusOnOff(snap.circ));"
-          "statusSetEquipValue('blower',statusOnOff(snap.blower));"
-          "statusSetEquipValue('light1',statusOnOff(snap.light1));"
-          "statusSetEquipValue('light2',statusOnOff(snap.light2));"
-          "statusSetEquipValue('mister',statusOnOff(snap.mister));"
+          "statusSetEquipValue('pump1',statusPumpUiValue(snap,1));statusSetEquipStateClass('pump1',statusPumpVisualState(snap,1));"
+          "statusSetEquipValue('pump2',statusPumpUiValue(snap,2));statusSetEquipStateClass('pump2',statusPumpVisualState(snap,2));"
+          "statusSetEquipValue('pump3',statusPumpUiValue(snap,3));statusSetEquipStateClass('pump3',statusPumpVisualState(snap,3));"
+          "statusSetEquipValue('pump4',statusPumpUiValue(snap,4));statusSetEquipStateClass('pump4',statusPumpVisualState(snap,4));"
+          "statusSetEquipValue('pump5',statusPumpUiValue(snap,5));statusSetEquipStateClass('pump5',statusPumpVisualState(snap,5));"
+          "statusSetEquipValue('pump6',statusPumpUiValue(snap,6));statusSetEquipStateClass('pump6',statusPumpVisualState(snap,6));"
+          "if(typeof snap.circ!=='undefined'){statusSetEquipValue('circ',statusOnOff(snap.circ));statusSetEquipStateClass('circ',statusBinaryEquipFromSnap(snap,'circ'));}"
+          "statusSetEquipValue('blower',statusOnOff(snap.blower));statusSetEquipStateClass('blower',statusBinaryEquipFromSnap(snap,'blower'));"
+          "statusSetEquipValue('light1',statusOnOff(snap.light1));statusSetEquipStateClass('light1',statusBinaryEquipFromSnap(snap,'light1'));"
+          "statusSetEquipValue('light2',statusOnOff(snap.light2));statusSetEquipStateClass('light2',statusBinaryEquipFromSnap(snap,'light2'));"
+          "statusSetEquipValue('mister',statusOnOff(snap.mister));statusSetEquipStateClass('mister',statusBinaryEquipFromSnap(snap,'mister'));"
           "statusSetButtonState(4,snap.pump1On?'off':'on');"
           "statusSetButtonState(5,snap.pump2On?'off':'on');"
           "statusSetButtonState(6,snap.pump3On?'off':'on');"
@@ -1278,13 +1356,14 @@ void handleStatus(AsyncWebServerRequest *request)
           "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
           "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
           "}"
-          "let statusPollTimer=0;let statusPollBusy=false;let statusPollFailures=0;const statusPollBaseMs=2000;const statusPollMaxMs=25000;"
+          "let statusPollTimer=0;let statusPollBusy=false;let statusPollFailures=0;let statusLastSnapshotAgeSec=0;const statusPollBaseMs=2000;const statusPollMaxMs=25000;const statusFlakyFailThreshold=3;const statusStaleAgeSecThreshold=10;"
           "function statusConnState(msg){var el=document.getElementById('statusButtonResult');if(el&&msg)el.textContent=msg;}"
+          "function statusShouldShowFlaky(){if(statusPollFailures<statusFlakyFailThreshold)return false;if(statusLastSnapshotAgeSec===0)return true;return statusLastSnapshotAgeSec>=statusStaleAgeSecThreshold;}"
           "function statusSchedulePoll(ms){statusStopPolling();statusPollTimer=setTimeout(statusPollOnce,Math.max(250,ms||statusPollBaseMs));}"
           "async function statusPollOnce(){"
           "if(statusPollBusy||document.hidden)return;"
           "statusPollBusy=true;"
-          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);statusPollFailures=0;statusConnState('');statusSchedulePoll(statusPollBaseMs);}catch(e){statusPollFailures++;statusConnState('Connection is flaky, showing last known values...');statusSchedulePoll(statusBackoffMs(statusPollBaseMs,statusPollMaxMs,statusPollFailures));}"
+          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);statusLastSnapshotAgeSec=Number(snap&&snap.snapshotAgeSec||0);statusPollFailures=0;statusConnState('');statusSchedulePoll(statusPollBaseMs);}catch(e){statusPollFailures++;if(statusShouldShowFlaky())statusConnState('Connection is flaky, showing last known values...');statusSchedulePoll(statusBackoffMs(statusPollBaseMs,statusPollMaxMs,statusPollFailures));}"
           "statusPollBusy=false;"
           "}"
           "function statusStartPolling(){if(statusPollTimer||statusPollBusy)return;statusPollFailures=0;statusPollOnce();}"
@@ -1404,8 +1483,16 @@ void handleStatus(AsyncWebServerRequest *request)
           "</script>";
   html += "</div></main></div></body></html>";
   String etag = String("W/\"status-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
+  const size_t statusOutLen = html.length();
+  if (!html.startsWith("<html>"))
+  {
+    Log.error("[Web]: /status assemble missing <html> prefix len=%u from %p" CR,
+              static_cast<unsigned>(statusOutLen), request->client()->remoteIP());
+  }
   sendHtmlWithEtag(request, html, etag);
-  Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
+  // Never log full `html` here: /status payload is ~40KB+; printf-style verbose would blow stack/heap.
+  // `html` is moved into the response callback; log length captured before `sendHtmlWithEtag`.
+  Log.verbose(F("[Web]: /status sent len=%u" CR), static_cast<unsigned>(statusOutLen));
 }
 
 void handleConfig(AsyncWebServerRequest *request)

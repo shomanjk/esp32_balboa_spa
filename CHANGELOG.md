@@ -8,6 +8,23 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-05-03
+
+### Fixed
+
+- **Portal HTML encoding** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `sendHtmlWithEtag` responses use `Content-Type: text/html; charset=utf-8` so UTF-8 degree symbols and dashes render correctly on mobile clients.
+- **`/status` truncated or unstyled page** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Assemble `/status` with explicit `String` appends after materializing `headStatus` (avoids a long temporary chain correlated with rare responses missing `<head>` / CSS). If the body does not start with `<html>`, a **serial error** is logged before send.
+- **`/status` verbose length log** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Logged payload length is captured **before** `sendHtmlWithEtag` moves the `String` (the value after send was always **0**).
+
+### Changed
+
+- **`/status` equipment grid** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Equipment cards use tinted backgrounds and a left accent bar for **off** (neutral), **low** (amber, multi-speed pumps), and **on**/**high** (green); live polling keeps classes in sync with `/api/status/summary`.
+- **`/status` large HTML send path** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `sendHtmlWithEtag` uses ESPAsyncWebServer’s **callback / fixed-length** response so the stack does not duplicate the entire HTML string inside `AsyncBasicResponse` (which could exhaust RAM and **RST** the connection). `/status` `String` reserve raised to **64000** to match the grown page. Verbose logging after send uses **length only** (never the full HTML body) to avoid `printf`-style stack pressure.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.7.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.7.0] - 2026-04-30
 
 ### Added
