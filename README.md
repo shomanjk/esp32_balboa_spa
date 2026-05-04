@@ -19,7 +19,7 @@
 - **`BRIDGE`** / TCP port **4257** for LAN clients such as [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa) — summarized under [Optional: Homebridge and TCP bridge](#optional-homebridge-and-tcp-bridge-bridge).
 - **Remote + ePaper** build profile (`REMOTE_CLIENT`, `spaEpaper`) — see [ePaper remote display](#epaper-remote-display-optional).
 
-**Pointers:** [CHANGELOG.md](CHANGELOG.md) · [Roadmap](#roadmap) · [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) · [FORK.md](FORK.md) · [AGENTS.md](AGENTS.md).
+**Pointers:** [CHANGELOG.md](CHANGELOG.md) · [Roadmap](#roadmap) · [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) · [FORK.md](FORK.md) · [AGENTS.md](AGENTS.md) · [Sponsor on GitHub](https://github.com/sponsors/shomanjk).
 
 ## License
 

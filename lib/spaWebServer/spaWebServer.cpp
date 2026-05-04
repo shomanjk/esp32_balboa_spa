@@ -876,19 +876,6 @@ static String statusFormatRuntimeHoursMinutes(unsigned long totalSeconds)
   return out;
 }
 
-/** Append JSON array oldest-to-newest (left-to-right on chart); firmware index 0 is newest. */
-static void appendStatusJsonFloatArrayOldestFirst(String &html, const float *arr, int n)
-{
-  for (int i = n - 1; i >= 0; i--)
-  {
-    if (i != n - 1)
-    {
-      html += ",";
-    }
-    html += String(arr[i], 4);
-  }
-}
-
 static void appendStatusHistoriesSection(String &html)
 {
   html += "<div id=\"statusTempHistSection\" class=\"history-block status-temp-hist-anchor\">";
@@ -913,50 +900,6 @@ static void appendStatusHistoriesSection(String &html)
   html += "<details class=\"history-raw\"><summary>Raw filter history (seconds per day)</summary><pre>";
   html += historyToString(spaStatusData.filterOn->history());
   html += "</pre></details></div>";
-
-  html += "<script>";
-  html += "const STATUS_TEMP_IS_C=";
-  html += (statusSpaTempReady() && spaStatusData.tempScale) ? "1" : "0";
-  html += ",STATUS_TEMP_HIST=[";
-  appendStatusJsonFloatArrayOldestFirst(html, spaStatusData.temperatureHistory, GRAPH_MAX_READINGS);
-  html += "],STATUS_HEAT_SEC=[";
-  appendStatusJsonFloatArrayOldestFirst(html, spaStatusData.heatOn->history(), GRAPH_MAX_READINGS);
-  html += "],STATUS_FILTER_SEC=[";
-  appendStatusJsonFloatArrayOldestFirst(html, spaStatusData.filterOn->history(), GRAPH_MAX_READINGS);
-  html += "];";
-  html += "function statusScaleHeat(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/60);return b;}";
-  html += "function statusScaleFilter(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/3600);return b;}";
-  html += "function statusDrawLineChart(id,data,isTemp){";
-  html += "var c=document.getElementById(id);if(!c||!data||data.length<1)return;";
-  html += "var ctx=c.getContext('2d');if(!ctx)return;";
-  html += "function fmtY(v){if(isTemp)return STATUS_TEMP_IS_C?Number(v).toFixed(1):String(Math.round(Number(v)));return Number(v).toFixed(2);}";
-  html += "function draw(W,H){";
-  html += "ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#ccc';ctx.strokeRect(0.5,0.5,W-1,H-1);";
-  html += "var lo=Infinity,hi=-Infinity,i,v;";
-  html += "for(i=0;i<data.length;i++){v=Number(data[i]);if(!isFinite(v))continue;if(v<lo)lo=v;if(v>hi)hi=v;}";
-  html += "if(!isFinite(lo)||!isFinite(hi)){ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.fillText('No data',10,H/2);return;}";
-  html += "if(hi-lo<1e-6){lo-=0.5;hi+=0.5;}";
-  html += "var pad=30,pw=W-2*pad,ph=H-22;";
-  html += "function yOf(val){return 14+ph-(val-lo)/(hi-lo)*ph;}";
-  html += "ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.fillText(fmtY(lo),4,H-6);ctx.fillText(fmtY(hi),4,12);";
-  html += "ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();";
-  html += "for(i=0;i<data.length;i++){var px=pad+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}";
-  html += "ctx.stroke();}";
-  html += "function render(){var p=c.parentElement;var W=p?Math.max(260,p.clientWidth-2):280;var H=parseInt(c.getAttribute('height')||'140',10)||140;";
-  html += "W=Math.min(1000,W);H=Math.min(260,H);";
-  html += "var dpr=Math.min(2,Math.max(1,window.devicePixelRatio||1));";
-  html += "c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';";
-  html += "ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);draw(W,H);}";
-  html += "var raf=0;function scheduleRender(){if(raf)return;raf=window.requestAnimationFrame(function(){raf=0;render();});}";
-  html += "window.addEventListener('resize',scheduleRender,{passive:true});window.addEventListener('orientationchange',scheduleRender,{passive:true});";
-  html += "c.addEventListener('webglcontextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});";
-  html += "c.addEventListener('contextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});";
-  html += "c.addEventListener('contextrestored',scheduleRender,{passive:true});";
-  html += "scheduleRender();}";
-  html += "statusDrawLineChart('statusTempHistChart',STATUS_TEMP_HIST,true);";
-  html += "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(STATUS_HEAT_SEC),false);";
-  html += "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(STATUS_FILTER_SEC),false);";
-  html += "</script>";
 }
 
 void handleStatus(AsyncWebServerRequest *request)
@@ -1085,7 +1028,7 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "<section class=\"panel\"><h2>Temperatures</h2><dl class=\"kv\">";
     html += "<div class=\"kv-row\"><dt>Current Temp</dt><dd class=\"kv-dd-with-inline-action kv-dd-current-temp\"><span>";
     html += statusFormattedTempWithUnit(spaStatusData.currentTemp);
-    html += "</span><a href=\"#statusTempHistSection\" class=\"status-temp-chart-link\" title=\"Jump to temperature chart\" aria-label=\"Jump to temperature chart\">";
+    html += "</span><a href=\"#statusTempHistSection\" class=\"status-temp-chart-link\" data-history-anchor=\"statusTempHistSection\" title=\"Jump to temperature chart\" aria-label=\"Jump to temperature chart\">";
     html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">";
     html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a>";
     html += "<span class=\"status-temp-units-toggle\" role=\"group\" aria-label=\"Temperature units\">";
@@ -1161,7 +1104,7 @@ void handleStatus(AsyncWebServerRequest *request)
     }
     const String needChipClass = String("heat-chip ") + (needH ? "heat-chip--need-yes" : "heat-chip--need-no");
     html += "<section class=\"panel\"><div class=\"heat-panel-head\"><h2>Spa and heating</h2>";
-    html += "<a href=\"#statusHeatHistSection\" class=\"status-temp-chart-link\" title=\"Jump to heater on-time chart\" aria-label=\"Jump to heater on-time chart\">";
+    html += "<a href=\"#statusHeatHistSection\" class=\"status-temp-chart-link\" data-history-anchor=\"statusHeatHistSection\" title=\"Jump to heater on-time chart\" aria-label=\"Jump to heater on-time chart\">";
     html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\">";
     html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a></div>";
     html += "<p class=\"heat-hint\"><b>Heating mode</b> is what the spa is set up for (ready/rest). <b>Heating state</b> is what it is doing right now (idle vs actively heating).</p>";
@@ -1280,6 +1223,54 @@ void handleStatus(AsyncWebServerRequest *request)
           "async function statusFetchJson(url,timeoutMs){const ctl=new AbortController();const t=setTimeout(function(){ctl.abort();},timeoutMs||5000);"
           "try{const r=await fetch(url,{cache:'no-store',signal:ctl.signal});if(!r.ok)throw new Error('http_'+r.status);return await r.json();}finally{clearTimeout(t);}}"
           "async function statusFetchControls(){return await statusFetchJson('/api/status/summary',4200);}"
+          "function statusScaleHeat(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/60);return b;}"
+          "function statusScaleFilter(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/3600);return b;}"
+          "function statusDrawLineChart(id,data,isTemp,isCelsius){"
+          "var c=document.getElementById(id);if(!c||!data||data.length<1)return;"
+          "var ctx=c.getContext('2d');if(!ctx)return;"
+          "function fmtY(v){if(isTemp)return isCelsius?Number(v).toFixed(1):String(Math.round(Number(v)));return Number(v).toFixed(2);}"
+          "function draw(W,H){"
+          "ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#ccc';ctx.strokeRect(0.5,0.5,W-1,H-1);"
+          "var lo=Infinity,hi=-Infinity,i,v;"
+          "for(i=0;i<data.length;i++){v=Number(data[i]);if(!isFinite(v))continue;if(v<lo)lo=v;if(v>hi)hi=v;}"
+          "if(!isFinite(lo)||!isFinite(hi)){ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.fillText('No data',10,H/2);return;}"
+          "if(hi-lo<1e-6){lo-=0.5;hi+=0.5;}"
+          "var pad=30,pw=W-2*pad,ph=H-22;"
+          "function yOf(val){return 14+ph-(val-lo)/(hi-lo)*ph;}"
+          "ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.fillText(fmtY(lo),4,H-6);ctx.fillText(fmtY(hi),4,12);"
+          "ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();"
+          "for(i=0;i<data.length;i++){var px=pad+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}"
+          "ctx.stroke();}"
+          "function render(){var p=c.parentElement;var W=p?Math.max(260,p.clientWidth-2):280;var H=parseInt(c.getAttribute('height')||'140',10)||140;"
+          "W=Math.min(1000,W);H=Math.min(260,H);"
+          "var dpr=Math.min(2,Math.max(1,window.devicePixelRatio||1));"
+          "c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';"
+          "ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);draw(W,H);}"
+          "var raf=0;function scheduleRender(){if(raf)return;raf=window.requestAnimationFrame(function(){raf=0;render();});}"
+          "window.addEventListener('resize',scheduleRender,{passive:true});window.addEventListener('orientationchange',scheduleRender,{passive:true});"
+          "c.addEventListener('webglcontextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});"
+          "c.addEventListener('contextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});"
+          "c.addEventListener('contextrestored',scheduleRender,{passive:true});"
+          "scheduleRender();}"
+          "function statusRenderHistoryCharts(j){"
+          "if(!j)return;var tc=!!j.tempIsCelsius;"
+          "statusDrawLineChart('statusTempHistChart',j.tempHistory||[],true,tc);"
+          "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(j.heatSeconds||[]),false,false);"
+          "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(j.filterSeconds||[]),false,false);}"
+          "function statusScrollToHistoryAnchor(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}"
+          "let statusHistoriesLoading=false;"
+          "async function statusLoadHistories(opt){"
+          "opt=opt||{};var scrollTo=opt.scrollTo||'';"
+          "var c=document.getElementById('statusHistoriesContainer');var btn=document.getElementById('statusLoadHistoriesBtn');"
+          "if(!c)return false;"
+          "if(c.getAttribute('data-loaded')==='1'){if(scrollTo)statusScrollToHistoryAnchor(scrollTo);return true;}"
+          "if(statusHistoriesLoading)return false;"
+          "statusHistoriesLoading=true;if(btn){btn.disabled=true;btn.textContent='Loading...';}"
+          "try{var j=await statusFetchJson('/api/status/histories',9000);"
+          "c.innerHTML=(j&&j.html)||'';statusRenderHistoryCharts(j);c.setAttribute('data-loaded','1');"
+          "if(btn)btn.textContent='History loaded';if(scrollTo)statusScrollToHistoryAnchor(scrollTo);"
+          "statusHistoriesLoading=false;return true;"
+          "}catch(e){if(btn){btn.disabled=false;btn.textContent='Retry history load';}statusHistoriesLoading=false;return false;}}"
           "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
           "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
           "function statusSetEquipStateClass(key,state){var c=statusEquipCell(key);if(!c||c.classList.contains('equip-absent'))return;"
@@ -1372,8 +1363,13 @@ void handleStatus(AsyncWebServerRequest *request)
           "function statusStopPolling(){if(!statusPollTimer)return;clearTimeout(statusPollTimer);statusPollTimer=0;}"
           "document.addEventListener('visibilitychange',function(){if(document.hidden){statusStopPolling();}else{statusStartPolling();}});"
           "window.addEventListener('beforeunload',statusStopPolling);"
-          "document.getElementById('statusLoadHistoriesBtn').addEventListener('click',async function(){var c=document.getElementById('statusHistoriesContainer');if(!c||c.getAttribute('data-loaded')==='1')return;"
-          "this.disabled=true;this.textContent='Loading...';try{var j=await statusFetchJson('/api/status/histories',9000);c.innerHTML=(j&&j.html)||'';c.setAttribute('data-loaded','1');this.textContent='History loaded';}catch(e){this.disabled=false;this.textContent='Retry history load';}});"
+          "document.getElementById('statusLoadHistoriesBtn').addEventListener('click',function(){statusLoadHistories({});});"
+          "document.addEventListener('click',function(e){"
+          "var t=e.target&&e.target.closest?e.target.closest('a.status-temp-chart-link[data-history-anchor]'):null;"
+          "if(!t)return;var anchor=t.getAttribute('data-history-anchor');if(!anchor)return;"
+          "var hc=document.getElementById('statusHistoriesContainer');"
+          "if(!hc||hc.getAttribute('data-loaded')==='1')return;"
+          "e.preventDefault();statusLoadHistories({scrollTo:anchor});});"
           "statusStartPolling();"
           "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
           "if(code===17)return (snap.light1>0)===on;"
@@ -2071,11 +2067,29 @@ void handleStatusSummaryApi(AsyncWebServerRequest *request)
 void handleStatusHistoriesApi(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(8192);
+  DynamicJsonDocument doc(16384);
   String historiesHtml;
   historiesHtml.reserve(7000);
   appendStatusHistoriesSection(historiesHtml);
   doc["html"] = historiesHtml;
+  doc["tempIsCelsius"] = (statusSpaTempReady() && spaStatusData.tempScale) ? 1 : 0;
+
+  JsonArray tempHistory = doc.createNestedArray("tempHistory");
+  for (int i = GRAPH_MAX_READINGS - 1; i >= 0; i--)
+  {
+    tempHistory.add(spaStatusData.temperatureHistory[i]);
+  }
+  JsonArray heatSeconds = doc.createNestedArray("heatSeconds");
+  for (int i = GRAPH_MAX_READINGS - 1; i >= 0; i--)
+  {
+    heatSeconds.add(spaStatusData.heatOn->history()[i]);
+  }
+  JsonArray filterSeconds = doc.createNestedArray("filterSeconds");
+  for (int i = GRAPH_MAX_READINGS - 1; i >= 0; i--)
+  {
+    filterSeconds.add(spaStatusData.filterOn->history()[i]);
+  }
+
   serializeJson(doc, *response);
   request->send(response);
 }
