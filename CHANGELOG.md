@@ -8,6 +8,27 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [2.7.4] - 2026-05-05
+
+### Added
+
+- **Portal `/state` GitHub Sponsors button** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/main.h`](src/main.h)): Small official embed next to **Check for updates**; iframe `src` defaults to `https://github.com/sponsors/<FIRMWARE_REPO_OWNER>/button`, overridable via `FIRMWARE_SPONSOR_BUTTON_SRC` (see [`src/config-example.h`](src/config-example.h)).
+
+### Changed
+
+- **Portal `/status` Spa and heating** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **Heater State** (idle vs actively heating) uses a second hero card beside **Spa State** on wide viewports; on narrow screens the heater card stacks first. **`needsHeat`** remains only under **Raw status codes** (not shown on the hero). **Flame** icon for the heater tile; **Heating (active)** / **alternate stage** use a slow glow pulse (disabled when **`prefers-reduced-motion`**). Flame stroke is **red** (`#d32f2f`) in all heater states.
+- **Portal `/state` Firmware Update card** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Two-column **This gateway** / **GitHub latest** layout with aligned pills (`v…` display), **Check for updates** and sponsor iframe on one non-wrapping actions row (horizontal scroll on very narrow screens), and shorter status text without repeating versions.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.7.4`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.7.3] - 2026-05-04
 
 ### Fixed

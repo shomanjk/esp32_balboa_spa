@@ -942,13 +942,25 @@ void handleStatus(AsyncWebServerRequest *request)
       ".heat-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin:0 0 6px 0;}"
       ".heat-panel-head h2{margin:0;}"
       ".heat-hint{font-size:0.82rem;color:var(--muted);margin:0 0 12px 0;line-height:1.45;max-width:52em;}"
-      ".heat-hero{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);margin:0 0 12px 0;background:#fafbfc;}"
+      ".heat-hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 12px 0;align-items:stretch;}"
+      "@media (max-width:560px){.heat-hero-grid{grid-template-columns:1fr;}#statusHeatHero{order:-1;}}"
+      ".heat-hero{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);margin:0;background:#fafbfc;min-width:0;}"
       ".heat-hero-icon{flex-shrink:0;line-height:0;color:#0f4a87;}"
       ".heat-hero--ok{border-color:#b8cfe8;background:#f2f7fc;}.heat-hero--ok .heat-hero-icon{color:#0f4a87;}"
       ".heat-hero--init{border-color:#e6c200;background:#fffbeb;}.heat-hero--init .heat-hero-icon{color:#b8860b;}"
       ".heat-hero--alert{border-color:#e57373;background:#fff5f5;}.heat-hero--alert .heat-hero-icon{color:#c62828;}"
+      ".heat-hero--heat-idle{border-color:#dde2e8;background:#eef1f4;}.heat-hero--heat-idle .heat-hero-icon{color:#5f6c7b;}"
+      ".heat-hero--heat-on{border-color:#ffab91;background:#ffe8e0;}.heat-hero--heat-on .heat-hero-icon{color:#bf360c;}"
+      ".heat-hero--heat-alt{border-color:#ffe082;background:#fff8e1;}.heat-hero--heat-alt .heat-hero-icon{color:#8d6e00;}"
+      ".heat-hero--heat-reserved{border-color:#cfd8dc;background:#eceff1;}.heat-hero--heat-reserved .heat-hero-icon{color:#546e7a;}"
+      "#statusHeatHero .heat-hero-icon{color:#d32f2f;}"
+      "@keyframes heatHeroPulse{0%,100%{box-shadow:0 0 0 0 rgba(211,47,47,0);}"
+      "50%{box-shadow:0 0 22px 8px rgba(211,47,47,0.42);}}"
+      ".heat-hero--heat-on,.heat-hero--heat-alt{animation:heatHeroPulse 3.2s ease-in-out infinite;}"
+      "@media (prefers-reduced-motion:reduce){.heat-hero--heat-on,.heat-hero--heat-alt{animation:none;}}"
       ".heat-hero-label{font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.03em;}"
       ".heat-hero-val{font-size:1.12rem;font-weight:700;margin-top:2px;line-height:1.25;}"
+      ".heat-hero-val--emph{font-size:1.22rem;}"
       ".heat-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px 0;align-items:center;}"
       ".heat-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:0.84rem;font-weight:600;border:1px solid var(--border);background:#fff;}"
       ".heat-chip svg{flex-shrink:0;}"
@@ -999,6 +1011,7 @@ void handleStatus(AsyncWebServerRequest *request)
       ".history-block pre{margin:0;padding:10px;background:#fafbfc;border:1px solid var(--border);border-radius:8px;"
       "font-size:0.8rem;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Courier,monospace;}"
       ".chart-caption{font-size:0.82rem;color:var(--muted);margin:0 0 6px 0;line-height:1.35;}"
+      ".history-block .chart-wrap{max-width:100%;overflow:hidden;}"
       ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       "</style>";
 
@@ -1083,7 +1096,6 @@ void handleStatus(AsyncWebServerRequest *request)
     const uint8_t ss = spaStatusData.spaState;
     const uint8_t im = spaStatusData.initMode;
     const uint8_t hs = spaStatusData.heatingState;
-    const bool needH = spaStatusData.needsHeat;
     String heroClass = "heat-hero heat-hero--ok";
     if (im == 2)
     {
@@ -1093,40 +1105,39 @@ void handleStatus(AsyncWebServerRequest *request)
     {
       heroClass = "heat-hero heat-hero--init";
     }
-    String heatChipClass = "heat-chip heat-chip--heat-idle";
+    String heatHeroClass = "heat-hero heat-hero--heat-idle";
     if (hs == 1)
     {
-      heatChipClass = "heat-chip heat-chip--heat-on";
+      heatHeroClass = "heat-hero heat-hero--heat-on";
     }
     else if (hs == 2)
     {
-      heatChipClass = "heat-chip heat-chip--heat-alt";
+      heatHeroClass = "heat-hero heat-hero--heat-alt";
     }
-    const String needChipClass = String("heat-chip ") + (needH ? "heat-chip--need-yes" : "heat-chip--need-no");
+    else if (hs == 3)
+    {
+      heatHeroClass = "heat-hero heat-hero--heat-reserved";
+    }
     html += "<section class=\"panel\"><div class=\"heat-panel-head\"><h2>Spa and heating</h2>";
     html += "<a href=\"#statusHeatHistSection\" class=\"status-temp-chart-link\" data-history-anchor=\"statusHeatHistSection\" title=\"Jump to heater on-time chart\" aria-label=\"Jump to heater on-time chart\">";
     html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\">";
     html += "<path d=\"M4 19V5\"/><path d=\"M4 19h16\"/><path d=\"M8 17V9\"/><path d=\"M12 17v-5\"/><path d=\"M16 17V6\"/><path d=\"M20 17v-9\"/></svg></a></div>";
-    html += "<p class=\"heat-hint\"><b>Heating mode</b> is what the spa is set up for (ready/rest). <b>Heating state</b> is what it is doing right now (idle vs actively heating).</p>";
-    html += "<div id=\"statusSpaHero\" class=\"";
+    html += "<p class=\"heat-hint\"><b>Heating mode</b> is what the spa is set up for (ready/rest). <b>Heater state</b> is what the heater is doing right now (idle vs actively heating).</p>";
+    html += "<div class=\"heat-hero-grid\"><div id=\"statusSpaHero\" class=\"";
     html += heroClass;
     html += "\"><span class=\"heat-hero-icon\" aria-hidden=\"true\">";
     html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\">";
     html += "<path d=\"M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z\"/></svg></span>";
-    html += "<div><div class=\"heat-hero-label\">Spa state</div><div id=\"statusSpaStateHero\" class=\"heat-hero-val\">";
+    html += "<div><div class=\"heat-hero-label\">Spa State</div><div id=\"statusSpaStateHero\" class=\"heat-hero-val\">";
     html += spaStateTxt;
-    html += "</div></div></div>";
-    html += "<div class=\"heat-chips\"><div id=\"statusHeatStateChipWrap\" class=\"";
-    html += heatChipClass;
-    html += "\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><rect x=\"4\" y=\"14\" width=\"3\" height=\"6\" rx=\"0.5\"/><rect x=\"10.5\" y=\"10\" width=\"3\" height=\"10\" rx=\"0.5\"/><rect x=\"17\" y=\"6\" width=\"3\" height=\"14\" rx=\"0.5\"/></svg>";
-    html += "<span id=\"statusHeatStateChip\">";
+    html += "</div></div></div><div id=\"statusHeatHero\" class=\"";
+    html += heatHeroClass;
+    html += "\"><span class=\"heat-hero-icon\" aria-hidden=\"true\">";
+    html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">";
+    html += "<path d=\"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z\"/></svg></span>";
+    html += "<div><div class=\"heat-hero-label\">Heater State</div><div id=\"statusHeatStateHero\" class=\"heat-hero-val heat-hero-val--emph\">";
     html += heatStateTxt;
-    html += "</span></div><div id=\"statusNeedsHeatChipWrap\" class=\"";
-    html += needChipClass;
-    html += "\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 2c.5 3 4 4.5 4 9a4 4 0 1 1-8 0c0-4.5 3.5-6 4-9z\"/></svg>";
-    html += "<span class=\"heat-chip-lbl\">Needs heat</span><span id=\"statusNeedsHeatChip\">";
-    html += (needH ? String("Yes") : String("No"));
-    html += "</span></div></div><dl class=\"kv\">";
+    html += "</div></div></div></div><dl class=\"kv\">";
     html += "<div class=\"kv-row\"><dt>Init mode</dt><dd id=\"statusInitModeVal\">";
     html += initTxt;
     html += "</dd></div><div class=\"kv-row\"><dt>Heating mode</dt><dd id=\"statusHeatingModeVal\">";
@@ -1141,7 +1152,7 @@ void handleStatus(AsyncWebServerRequest *request)
     html += " heatingState=";
     html += String(spaStatusData.heatingState);
     html += " needsHeat=";
-    html += String(needH ? 1 : 0);
+    html += String(spaStatusData.needsHeat ? 1 : 0);
     html += "</pre></details></section>";
   }
 
@@ -1241,8 +1252,11 @@ void handleStatus(AsyncWebServerRequest *request)
           "ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();"
           "for(i=0;i<data.length;i++){var px=pad+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}"
           "ctx.stroke();}"
-          "function render(){var p=c.parentElement;var W=p?Math.max(260,p.clientWidth-2):280;var H=parseInt(c.getAttribute('height')||'140',10)||140;"
-          "W=Math.min(1000,W);H=Math.min(260,H);"
+          "function render(){var p=c.parentElement;var pg=document.querySelector('.page');"
+          "var cap=(pg&&pg.clientWidth)?pg.clientWidth:((document.documentElement&&document.documentElement.clientWidth)||window.innerWidth||980);"
+          "var raw=p?p.clientWidth-2:280;if(raw<0)raw=0;"
+          "var W=Math.min(1000,cap,Math.max(260,raw));var H=parseInt(c.getAttribute('height')||'140',10)||140;"
+          "H=Math.min(260,H);"
           "var dpr=Math.min(2,Math.max(1,window.devicePixelRatio||1));"
           "c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';"
           "ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);draw(W,H);}"
@@ -1295,11 +1309,9 @@ void handleStatus(AsyncWebServerRequest *request)
           "var heroEl=document.getElementById('statusSpaHero');"
           "if(heroEl){heroEl.className='heat-hero';var im=Number(snap.initMode||0);var ss=Number(snap.spaState||0);"
           "if(im===2)heroEl.classList.add('heat-hero--alert');else if(ss===1||im===1)heroEl.classList.add('heat-hero--init');else heroEl.classList.add('heat-hero--ok');}"
-          "var hsn=Number(snap.heatingState||0);var hst=document.getElementById('statusHeatStateChip');if(hst)hst.textContent=snap.heatingStateText||'';"
-          "var hsw=document.getElementById('statusHeatStateChipWrap');if(hsw){hsw.className='heat-chip ';"
-          "if(hsn===1)hsw.className+='heat-chip--heat-on';else if(hsn===2)hsw.className+='heat-chip--heat-alt';else hsw.className+='heat-chip--heat-idle';}"
-          "var need=Number(snap.needsHeat)>0;var nh=document.getElementById('statusNeedsHeatChip');if(nh)nh.textContent=need?'Yes':'No';"
-          "var nhw=document.getElementById('statusNeedsHeatChipWrap');if(nhw)nhw.className='heat-chip '+(need?'heat-chip--need-yes':'heat-chip--need-no');"
+          "var hsn=Number(snap.heatingState||0);var hth=document.getElementById('statusHeatStateHero');if(hth)hth.textContent=snap.heatingStateText||'';"
+          "var hhero=document.getElementById('statusHeatHero');if(hhero){hhero.className='heat-hero';"
+          "if(hsn===1)hhero.classList.add('heat-hero--heat-on');else if(hsn===2)hhero.classList.add('heat-hero--heat-alt');else if(hsn===3)hhero.classList.add('heat-hero--heat-reserved');else hhero.classList.add('heat-hero--heat-idle');}"
           "var imv=document.getElementById('statusInitModeVal');if(imv)imv.textContent=snap.initModeText||'';"
           "var hmv=document.getElementById('statusHeatingModeVal');if(hmv)hmv.textContent=snap.heatingModeText||'';"
           "var raw=document.getElementById('statusHeatRawPre');if(raw)raw.textContent='spaState='+snap.spaState+' initMode='+snap.initMode+' heatingMode='+snap.heatingMode+' heatingState='+snap.heatingState+' needsHeat='+snap.needsHeat;"
@@ -1556,7 +1568,7 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}#fwUpdateResult{vertical-align:middle;max-width:min(520px,100%);}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:#f3f4f6;color:#374151;}.fw-pill-current{background:#edf7ff;color:#0f4a87;border-color:#b7d6f2;}.fw-pill-latest{background:#f7f7f7;color:#4b5563;}.sub-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}</style>";
+  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:420px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:#f3f4f6;color:#374151;}.fw-pill-current{background:#edf7ff;color:#0f4a87;border-color:#b7d6f2;}.fw-pill-latest{background:#f7f7f7;color:#4b5563;}.sub-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}</style>";
   String html;
   html.reserve(32000);
   html = "<html>" + headState + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
@@ -1566,18 +1578,30 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Uptime: </b>" + formatNumberWithCommas(millis() / 1000) + " s</li>";
   html += "<li><b>Current Time: </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
   html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
-  html += "<li class='sub-card'><p class='sub-card-title'>Firmware Update</p>"
-          "<div class='sub-card-row'><b>Firmware Version: </b><span>" + String(VERSION) + "</span>"
-          "<span id=\"fwCurrentBadge\" class=\"fw-pill fw-pill-current\">Current: " + String(VERSION) + "</span>"
-          "<span id=\"fwLatestBadge\" class=\"fw-pill fw-pill-latest\">Latest: —</span>"
-          "<button type=\"button\" id=\"fwCheckUpdates\" class=\"fw-check-btn\" "
-          "data-fw-version=\"" + String(VERSION) + "\" "
-          "data-api-latest=\"" + String(FIRMWARE_REPO_RELEASES_LATEST_API_URL) + "\" "
-          "data-releases=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\">Check for updates</button>"
-          "<span id=\"fwUpdateResult\" style=\"font-size:14px;color:var(--muted);font-weight:600\" aria-live=\"polite\"></span></div>"
-          "<div class='sub-card-row' style='margin-top:8px'><b>Firmware Build: </b><span>" + String(BUILD) + "</span></div>"
-          "<div class='sub-card-row' style='margin-top:8px'><b>Firmware repo: </b><a href=\"" + String(FIRMWARE_REPO_README_URL) + "\" target=\"_blank\" rel=\"noopener\">README</a>"
-          " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></div></li>";
+  {
+    String fwPillDisplay = String(VERSION);
+    if (fwPillDisplay.length() > 0 && fwPillDisplay.charAt(0) != 'v' && fwPillDisplay.charAt(0) != 'V')
+    {
+      fwPillDisplay = String("v") + fwPillDisplay;
+    }
+    html += "<li class='sub-card'><p class='sub-card-title'>Firmware Update</p>"
+            "<div class='fw-compare'>"
+            "<div class='fw-compare-cols'>"
+            "<div class='fw-compare-item'><span class='fw-compare-label'>This gateway</span>"
+            "<span id=\"fwCurrentBadge\" class=\"fw-pill fw-pill-current\">" + fwPillDisplay + "</span></div>"
+            "<div class='fw-compare-item'><span class='fw-compare-label'>GitHub latest</span>"
+            "<span id=\"fwLatestBadge\" class=\"fw-pill fw-pill-latest\">&#8212;</span></div></div>"
+            "<div class='fw-actions'>"
+            "<button type=\"button\" id=\"fwCheckUpdates\" class=\"fw-check-btn\" "
+            "data-fw-version=\"" + String(VERSION) + "\" "
+            "data-api-latest=\"" + String(FIRMWARE_REPO_RELEASES_LATEST_API_URL) + "\" "
+            "data-releases=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\">Check for updates</button>"
+            "<span class='gh-sponsor-embed'><iframe src=\"" + String(FIRMWARE_SPONSOR_BUTTON_SRC) + "\" title=\"Sponsor on GitHub\" width=\"114\" height=\"32\" loading=\"lazy\" referrerpolicy=\"no-referrer-when-downgrade\"></iframe></span></div>"
+            "<span id=\"fwUpdateResult\" class=\"fw-update-msg\" aria-live=\"polite\"></span></div>"
+            "<div class='sub-card-row' style='margin-top:8px'><b>Firmware Build: </b><span>" + String(BUILD) + "</span></div>"
+            "<div class='sub-card-row' style='margin-top:8px'><b>Firmware repo: </b><a href=\"" + String(FIRMWARE_REPO_README_URL) + "\" target=\"_blank\" rel=\"noopener\">README</a>"
+            " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></div></li>";
+  }
   html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
   html += "<li class='advanced-only'><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
   html += "<li class='advanced-only'><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
@@ -1685,7 +1709,7 @@ void handleState(AsyncWebServerRequest *request)
           "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
           "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
           "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
-  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var cur=document.getElementById('fwCurrentBadge');var latest=document.getElementById('fwLatestBadge');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}function setMsg(state,text){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent=text;}if(cur)cur.textContent='Current: '+fw;btn.addEventListener('click',function(){setMsg('checking','Checking GitHub releases...');fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';if(latest)latest.textContent='Latest: '+(tag||'n/a');var c=cmpSemver(fw,tag);if(c>=0){setMsg('ok','Up to date (gateway '+fw+', latest '+tag+').');}else{setMsg('warn','Update available: gateway '+fw+', latest '+tag+'.');}}).catch(function(){if(latest)latest.textContent='Latest: unavailable';el.style.color='var(--muted)';el.textContent='Could not reach GitHub. ';var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
+  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var cur=document.getElementById('fwCurrentBadge');var latest=document.getElementById('fwLatestBadge');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function dispTag(s){s=String(s||'').trim();if(!s)return'\u2014';return/^v/i.test(s)?s:('v'+s);}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}function setMsg(state,text){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent=text;}if(cur)cur.textContent=dispTag(fw);btn.addEventListener('click',function(){setMsg('checking','Checking GitHub releases...');fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';if(latest)latest.textContent=dispTag(tag);var c=cmpSemver(fw,tag);if(c>=0){setMsg('ok','Up to date.');}else{setMsg('warn','Update available — open Releases to download.');}}).catch(function(){if(latest)latest.textContent='\u2014';el.style.color='var(--muted)';el.textContent='Could not reach GitHub. ';var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
 
   String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
   sendHtmlWithEtag(request, html, etag);
