@@ -6,6 +6,9 @@
 // #define FIRMWARE_REPO_OWNER "myuser"
 // #undef FIRMWARE_REPO_NAME
 // #define FIRMWARE_REPO_NAME "esp32_balboa_spa"
+// Optional: sponsor button on /state points at GitHub login (defaults to FIRMWARE_REPO_OWNER).
+// #undef FIRMWARE_SPONSOR_BUTTON_SRC
+// #define FIRMWARE_SPONSOR_BUTTON_SRC "https://github.com/sponsors/myuser/button"
 
 #define WIFI_SSID "xxxxxx"
 #define WIFI_PASSWORD "xxxxxx"

@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.7.3"
+#define VERSION "2.7.4"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 
@@ -29,6 +29,10 @@
 #endif
 #ifndef FIRMWARE_REPO_RELEASES_LATEST_API_URL
 #define FIRMWARE_REPO_RELEASES_LATEST_API_URL "https://api.github.com/repos/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/releases/latest"
+#endif
+// GitHub Sponsors button iframe src for /state (same owner as repo by default).
+#ifndef FIRMWARE_SPONSOR_BUTTON_SRC
+#define FIRMWARE_SPONSOR_BUTTON_SRC "https://github.com/sponsors/" FIRMWARE_REPO_OWNER "/button"
 #endif
 
 #define INITIAL_WDT_TIMEOUT 300 // Reset ESP32 if wifi is not connected within 5 minutes
