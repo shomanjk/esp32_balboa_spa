@@ -19,7 +19,7 @@
 - **`BRIDGE`** / TCP port **4257** for LAN clients such as [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa) — summarized under [Optional: Homebridge and TCP bridge](#optional-homebridge-and-tcp-bridge-bridge).
 - **Remote + ePaper** build profile (`REMOTE_CLIENT`, `spaEpaper`) — see [ePaper remote display](#epaper-remote-display-optional).
 
-**Pointers:** [CHANGELOG.md](CHANGELOG.md) · [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) · [FORK.md](FORK.md) · [AGENTS.md](AGENTS.md).
+**Pointers:** [CHANGELOG.md](CHANGELOG.md) · [Roadmap](#roadmap) · [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) · [FORK.md](FORK.md) · [AGENTS.md](AGENTS.md).
 
 ## License
 
@@ -53,6 +53,15 @@ The codebase supports multiple **build roles**: tub-side **RS485** gateway, **UD
 - Hourly tracking of hot tub temperature for 24 hours.
 - Daily tracking of heater on-time (seconds), 24 days of history.
 - Daily tracking of filter on-time (seconds), 24 days of history.
+
+---
+
+## Roadmap
+
+Planned or deferred enhancements (not commitments; order and timing vary).
+
+- **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the firmware **`/status`** page).
+- **Equipment display names** — On the spa config page (or a dedicated settings area), let users assign friendly names per equipment slot (e.g. Pump 1 → "Lounger Jets", Pump 2 → "Deep Chair Jets"). Store names in firmware-backed nonvolatile storage so labels survive reboots and stay consistent across the web UI (`balboa-spa` + [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) APIs as needed). Optional later: expose the same labels to MQTT / Home Assistant discovery if useful.
 
 ---
 
