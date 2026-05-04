@@ -8,9 +8,15 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.7.3] - 2026-05-04
+
 ### Fixed
 
 - **Portal `/status` history charts** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Chart icons next to **Current temp** and **Spa and heating** now trigger the same lazy-load as **Load history charts**, then scroll to the matching section. Charts render again after load (chart data is returned as JSON and drawn from the page script; `<script>` injected via `innerHTML` is not executed by browsers).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.7.3`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.7.2] - 2026-05-04
 
