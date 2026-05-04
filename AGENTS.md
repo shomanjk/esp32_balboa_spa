@@ -69,9 +69,9 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 - **v1 deferred:** `TimeFormat` and broader settings writes beyond **`0x11`** / **`0x20`** / **`0x21`** / **`0x27`**.
 - **Protocol authority for wire behavior:** [ccutrer/balboa_worldwide_app `doc/protocol.md`](https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md); validate frame bytes and payload semantics there before enabling each new command family.
 
-## Roadmap (deferred)
+## Product roadmap
 
-- **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the web `/status` page).
+Planned and deferred **product** direction lives in the README so it stays visible to contributors and users: [Roadmap](README.md#roadmap). **AGENTS.md** stays focused on how the code is structured, how to build it, and agent-oriented gaps (command scope, known bugs).
 
 ## Testing
 

@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.7.2] - 2026-05-04
+
+### Changed
+
+- **Portal mobile navigation** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): On viewports **640px and below**, the five portal links use a **`details`/menu** row (current page title + Menu) with a sticky summary bar; after scroll, a compact bar hides the “Menu” label. **Desktop** keeps the existing five-link `.top-nav`. Inline controls (equip, range, temp units, log controls) are excluded from the global full-width `button` rule on small screens.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.7.2`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.7.1] - 2026-05-03
 
 ### Fixed
