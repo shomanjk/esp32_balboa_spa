@@ -8,11 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
-### Added
+## [2.8.0] - 2026-05-11
 
 ### Changed
 
-### Fixed
+- **Portal root URL** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **`/`** now serves **Spa Status** (same as **`/status`**); **`/state`** remains the ESP State page.
+- **Portal `/status` temperature range** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Low/high setpoint band cards are the controls for switching range (Balboa button **80**); the separate Low/High pill row was removed. Inactive bands show hover/focus affordances; hint text mentions clicking a range.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.7.4] - 2026-05-05
 
