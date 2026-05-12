@@ -383,7 +383,7 @@ void spaWebServerLoop()
 {
   if (!serverSetup)
   {
-    server.on("/", HTTP_GET, handleState);
+    server.on("/", HTTP_GET, handleStatus);
     server.on("/state", HTTP_GET, handleState);
     server.on("/config", HTTP_GET, handleConfig);
     server.on("/status", HTTP_GET, handleStatus);
@@ -988,19 +988,18 @@ void handleStatus(AsyncWebServerRequest *request)
       ".range-bands{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0;}"
       "@media (max-width:520px){.range-bands{grid-template-columns:1fr;}}"
       ".range-band{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#fafbfc;}"
+      "button.range-band{display:block;width:100%;margin:0;text-align:start;font:inherit;color:inherit;"
+      "appearance:none;-webkit-appearance:none;border-radius:8px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .12s;}"
+      "button.range-band:not(:disabled):hover{border-color:#8b96a3;box-shadow:0 2px 8px rgba(0,0,0,.08);transform:translateY(-1px);}"
+      "button.range-band:not(:disabled):active{transform:translateY(0);box-shadow:0 1px 3px rgba(0,0,0,.06);}"
+      "button.range-band:focus-visible{outline:2px solid #0f4a87;outline-offset:2px;z-index:1;position:relative;}"
+      "button.range-band:disabled{cursor:default;opacity:1;}"
       ".range-band-active-low{border-color:#0f4a87;background:#e8f0fa;box-shadow:0 0 0 2px rgba(15,74,135,0.12);}"
       ".range-band-active-high{border-color:#b71c1c;background:#fde8e8;box-shadow:0 0 0 2px rgba(183,28,28,0.16);}"
-      ".range-band-title{font-size:0.82rem;font-weight:600;color:var(--muted);margin:0 0 6px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;}"
+      ".range-band-title{font-size:0.82rem;font-weight:600;color:var(--muted);margin:0 0 6px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;}"
       ".range-band-indicator{font-size:0.95rem;line-height:1;color:#8b96a3;}"
       ".range-band-active-low .range-band-indicator,.range-band-active-high .range-band-indicator{color:#1f2933;}"
-      ".range-band-temp{font-size:1.15rem;font-weight:700;margin:0;line-height:1.25;}"
-      ".range-actions{display:flex;justify-content:center;align-items:center;margin-top:10px;}"
-      ".range-toggle{display:inline-flex;align-items:center;overflow:hidden;border:1px solid #b9c6d4;border-radius:999px;background:#eef3f8;box-shadow:inset 0 1px 0 rgba(255,255,255,.7);}"
-      ".range-toggle button{border:0;border-right:1px solid #c8d4e0;background:transparent;color:#31465b;padding:7px 16px;min-height:0;font-size:.84rem;font-weight:700;line-height:1.2;cursor:pointer;min-width:110px;}"
-      ".range-toggle button:last-child{border-right:0;}"
-      ".range-toggle button:hover{background:#e6edf5;color:#1f2933;}"
-      ".range-toggle button:focus-visible{outline:2px solid #0f4a87;outline-offset:2px;position:relative;z-index:1;}"
-      ".range-toggle button:disabled{background:#0f4a87;color:#fff;cursor:default;opacity:1;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15);}"
+      ".range-band-temp{font-size:1.15rem;font-weight:700;margin:0;line-height:1.25;display:block;width:100%;}"
       ".range-hint{font-size:0.82rem;color:var(--muted);margin:8px 0 0 0;line-height:1.35;}"
       ".status-control-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
       ".status-control-row input{border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:90px;}"
@@ -1053,23 +1052,25 @@ void handleStatus(AsyncWebServerRequest *request)
     html += " title=\"Use Fahrenheit\">F</button>";
     html += "</span></dd></div>";
     html += "</dl>";
-    html += "<div class=\"range-bands\"><div id=\"statusBandLow\" data-range-band=\"low\" class=\"range-band";
+    html += "<div class=\"range-bands\" role=\"group\" aria-label=\"Temperature range setpoints\">";
+    html += "<button type=\"button\" id=\"statusBandLow\" data-range-band=\"low\" class=\"range-band";
     html += activeHigh ? "" : " range-band-active-low";
-    html += "\"><div class=\"range-band-title\"><span>Low range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▼</span></div><div id=\"statusBandLowVal\" class=\"range-band-temp\">";
-    html += statusBandStoredSetpointText(spaStatusData.lowSetTemp);
-    html += "</div></div><div id=\"statusBandHigh\" data-range-band=\"high\" class=\"range-band";
-    html += activeHigh ? " range-band-active-high" : "";
-    html += "\"><div class=\"range-band-title\"><span>High range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▲</span></div><div id=\"statusBandHighVal\" class=\"range-band-temp\">";
-    html += statusBandStoredSetpointText(spaStatusData.highSetTemp);
-    html += "</div></div></div>";
-    html += "<div class=\"range-actions\"><span class=\"range-toggle\" role=\"group\" aria-label=\"Temperature range\">";
-    html += "<button id=\"statusRangeLowBtn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\"";
+    html += "\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\" aria-label=\"Use low temperature range\" aria-pressed='";
+    html += activeHigh ? "false" : "true";
+    html += "' title=\"Switch to low range\"";
     html += activeHigh ? "" : " disabled";
-    html += " title=\"Switch to low range\">Low ▼</button>";
-    html += "<button id=\"statusRangeHighBtn\" type=\"button\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"on\"";
+    html += "><span class=\"range-band-title\"><span>Low range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▼</span></span><span id=\"statusBandLowVal\" class=\"range-band-temp\">";
+    html += statusBandStoredSetpointText(spaStatusData.lowSetTemp);
+    html += "</span></button><button type=\"button\" id=\"statusBandHigh\" data-range-band=\"high\" class=\"range-band";
+    html += activeHigh ? " range-band-active-high" : "";
+    html += "\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"on\" aria-label=\"Use high temperature range\" aria-pressed='";
+    html += activeHigh ? "true" : "false";
+    html += "' title=\"Switch to high range\"";
     html += activeHigh ? " disabled" : "";
-    html += " title=\"Switch to high range\">High ▲</button></span></div>";
-    html += "<p class=\"range-hint\">Set temp applies to the highlighted range only.</p>";
+    html += "><span class=\"range-band-title\"><span>High range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▲</span></span><span id=\"statusBandHighVal\" class=\"range-band-temp\">";
+    html += statusBandStoredSetpointText(spaStatusData.highSetTemp);
+    html += "</span></button></div>";
+    html += "<p class=\"range-hint\">Click a range above to switch. Set temp applies to the highlighted range only.</p>";
     html += "<div class=\"status-control-row\"><label for=\"statusSetTempInput\" class=\"equip-label\">Set temp <span id=\"statusSetTempScopeLabel\">";
     html += activeHigh ? "(high range)" : "(low range)";
     html += "</span></label>";
@@ -1345,8 +1346,8 @@ void handleStatus(AsyncWebServerRequest *request)
           "var hv=document.getElementById('statusBandHighVal');var lv=document.getElementById('statusBandLowVal');"
           "if(hv)hv.textContent=statusFormatBandTemp(snap,snap.highSetTemp);if(lv)lv.textContent=statusFormatBandTemp(snap,snap.lowSetTemp);"
           "var lbl=document.getElementById('statusSetTempScopeLabel');if(lbl)lbl.textContent=tr===1?'(high range)':'(low range)';"
-          "var rh=document.getElementById('statusRangeHighBtn');var rl=document.getElementById('statusRangeLowBtn');"
-          "if(rh)rh.disabled=(tr===1);if(rl)rl.disabled=(tr===0);"
+          "if(lo){lo.disabled=(tr===0);lo.setAttribute('aria-pressed',tr===0?'true':'false');}"
+          "if(hi){hi.disabled=(tr===1);hi.setAttribute('aria-pressed',tr===1?'true':'false');}"
           "var setInput=document.getElementById('statusSetTempInput');"
           "if(setInput){if(typeof snap.setTempMin!=='undefined')setInput.min=String(snap.setTempMin);if(typeof snap.setTempMax!=='undefined')setInput.max=String(snap.setTempMax);"
           "if(typeof snap.tempScaleCelsius!=='undefined')setInput.step=snap.tempScaleCelsius?'0.5':'1';"
