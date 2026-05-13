@@ -25,6 +25,7 @@
 #include <spaMessage.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
+#include <faultCapture.h>
 #include <rs485.h>
 #include <mqttModule.h>
 #include "../../src/config.h"
@@ -1918,7 +1919,11 @@ if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 void handleVersion(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
+#if defined(DIAG_FAULT_CAPTURE)
+  DynamicJsonDocument doc(3072);
+#else
   DynamicJsonDocument doc(512);
+#endif
   doc["version"] = VERSION;
   doc["build"] = BUILD;
   doc["hostname"] = WiFi.getHostname();
@@ -1927,6 +1932,9 @@ void handleVersion(AsyncWebServerRequest *request)
   doc["repoReadmeUrl"] = FIRMWARE_REPO_README_URL;
   doc["releasesUrl"] = FIRMWARE_REPO_RELEASES_URL;
   doc["releasesLatestApiUrl"] = FIRMWARE_REPO_RELEASES_LATEST_API_URL;
+#if defined(DIAG_FAULT_CAPTURE)
+  faultCaptureAppendToJson(doc.to<JsonObject>());
+#endif
   serializeJson(doc, *response);
   request->send(response);
 }

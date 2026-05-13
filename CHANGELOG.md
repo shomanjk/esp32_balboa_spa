@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-05-13
+
+### Added
+
+- **Optional fault capture (`DIAG_FAULT_CAPTURE`)** ([`lib/faultCapture/`](lib/faultCapture/), [`src/main.ino`](src/main.ino), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): RTC slow-memory ring of short `[fault] …` lines (survives panic reboot), boot line on panic/WDT reset, bridge TCP lifecycle / send-fail / write-queue-full hooks, and **`faultLog`** on **`GET /api/version`**. Enabled only for **`M5AtomLite-tub`** / **`M5AtomLite-tub-ota`** in [`platformio.ini`](platformio.ini). With the flag, high-rate **`[BridgeDiag]`** lines use **VERBOSE** so default **WARNING** log level stays usable; key bridge events log at **WARNING**.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.2`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.8.1] - 2026-05-13
 
 ### Fixed

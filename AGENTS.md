@@ -77,6 +77,7 @@ Planned and deferred **product** direction lives in the README so it stays visib
 
 - **Bench:** [`emulator/spaEmulator.js`](emulator/spaEmulator.js) + [`emulator/README.md`](emulator/README.md) for crude serial injection.
 - **Logs:** `LOG_LEVEL_VERBOSE` in `platformio.ini` `[com]` `build_flags`.
+- **Post-panic / bridge field breadcrumbs:** **`DIAG_FAULT_CAPTURE`** (compile-time; **on** for [`env:M5AtomLite-tub`](platformio.ini) / **`M5AtomLite-tub-ota`**, **off** elsewhere): RTC slow-memory ring of short `[fault] …` lines, appended on panic/WDT boots and selected bridge/queue failures; exposed as **`faultLog`** on **`GET /api/version`**. Implementation: [`lib/faultCapture/`](lib/faultCapture/).
 - **Command-write debug ledger:** keep attempted wire-level fixes and outcomes in [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md) to avoid duplicate troubleshooting passes.
 - **Bridge artifact tracking:** keep hand-authored bridge inputs in git (`*.matrix.json`, `*.example.json`, curated fixtures/playbooks). Generated run outputs (`*-live-run.json`, `*-dry-run.json`, `*-diff-*.json`, `bridge-raw-last-run.json`) are treated as disposable diagnostics and should stay ignored unless intentionally curated for a specific doc/debug checkpoint.
 
