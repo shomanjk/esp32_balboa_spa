@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **Remote crash breadcrumbs (`DIAG_FAULT_CAPTURE`)** ([`lib/faultCapture/`](lib/faultCapture/), [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp), [`platformio.ini`](platformio.ini)): `esp_system_abort()` detail text is copied to RTC via **linker `--wrap=esp_system_abort`** (surfaced on next boot as `[fault] esp_system_abort …` in **`faultLog`**). **`GET /api/version`** also returns **`lastBridgeIngress`** (last TCP/4257 frame hex seen). Panic boot lines now use a **short reset name** (e.g. `PANIC`) instead of only a numeric code.
+
 ## [2.8.2] - 2026-05-13
 
 ### Added
