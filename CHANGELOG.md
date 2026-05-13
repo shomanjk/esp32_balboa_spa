@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-05-13
+
+### Fixed
+
+- **Bridge / BWA reconnect stability** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): When the spa RS485 **`spaWriteQueue`** is full, failed enqueues now **`delete`** the pending `SpaWriteQueueMessage` instead of leaking heap on every dropped frame. A fast bridge client (e.g. Balboa Worldwide app) could previously exhaust memory and trigger an **exception/panic** shortly after connect ([issue #4](https://github.com/shomanjk/esp32_balboa_spa/issues/4)).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.8.0] - 2026-05-11
 
 ### Changed
