@@ -8,6 +8,8 @@
 #include <mqttModule.h>
 #include <rs485.h>
 #include <cacheRead.h>
+#include <faultCapture.h>
+#include <diagBridgeLog.h>
 
 #include "bridge.h"
 #include "spaMessage.h"
@@ -54,7 +56,15 @@ void bridgeLoop()
 #endif
 
     bridge.onClient([](void *arg, AsyncClient *client) { // On new client
+#if defined(DIAG_FAULT_CAPTURE)
+      {
+        const String rip = client->remoteIP().toString();
+        Log.warning(F("[Bridge]: New Client Connected %s" CR), rip.c_str());
+        faultCaptureAppendf("[fault] bridge new_client ip=%s", rip.c_str());
+      }
+#else
       Log.verbose(F("[Bridge]: New Client Connected %p" CR), client->remoteIP());
+#endif
       bool added = false;
       for (int i = 0; i < MAX_BRIDGE_CLIENTS; i++)
       {
@@ -64,14 +74,42 @@ void bridgeLoop()
           publishDebug(("Bridge Client Connected (" + String(i) + ") " + clients[i]->remoteIP().toString()).c_str());
           added = true;
           clients[i]->onData(clientDataAvailable);
-          clients[i]->onDisconnect([](void *r, AsyncClient *c)
-                                   { Log.verbose(F("[Bridge]: Disconnected from Spa %p" CR), c->remoteIP()); });
-          clients[i]->onConnect([](void *r, AsyncClient *c)
-                                { Log.verbose(F("[Bridge]: Connected to Spa %p" CR), c->remoteIP()); });
-          clients[i]->onTimeout([](void *r, AsyncClient *c, uint32_t time)
-                                { Log.verbose(F("[Bridge]: Timeout from Spa" CR)); });
-          clients[i]->onError([](void *r, AsyncClient *c, int8_t error)
-                              { Log.verbose(F("[Bridge]: Error from Spa %d" CR), error); });
+          clients[i]->onDisconnect([](void *r, AsyncClient *c) {
+#if defined(DIAG_FAULT_CAPTURE)
+            const String rip = c->remoteIP().toString();
+            Log.warning(F("[Bridge]: Disconnected from Spa %s" CR), rip.c_str());
+            faultCaptureAppendf("[fault] bridge disconnect ip=%s", rip.c_str());
+#else
+            Log.verbose(F("[Bridge]: Disconnected from Spa %p" CR), c->remoteIP());
+#endif
+          });
+          clients[i]->onConnect([](void *r, AsyncClient *c) {
+#if defined(DIAG_FAULT_CAPTURE)
+            const String rip = c->remoteIP().toString();
+            Log.warning(F("[Bridge]: Connected to Spa %s" CR), rip.c_str());
+            faultCaptureAppendf("[fault] bridge tcp_connect ip=%s", rip.c_str());
+#else
+            Log.verbose(F("[Bridge]: Connected to Spa %p" CR), c->remoteIP());
+#endif
+          });
+          clients[i]->onTimeout([](void *r, AsyncClient *c, uint32_t time) {
+#if defined(DIAG_FAULT_CAPTURE)
+            const String rip = c->remoteIP().toString();
+            Log.warning(F("[Bridge]: Timeout from Spa %s ms=%lu" CR), rip.c_str(), static_cast<unsigned long>(time));
+            faultCaptureAppendf("[fault] bridge timeout ip=%s", rip.c_str());
+#else
+            Log.verbose(F("[Bridge]: Timeout from Spa" CR));
+#endif
+          });
+          clients[i]->onError([](void *r, AsyncClient *c, int8_t error) {
+#if defined(DIAG_FAULT_CAPTURE)
+            const String rip = c->remoteIP().toString();
+            Log.warning(F("[Bridge]: Error from Spa %s err=%d" CR), rip.c_str(), static_cast<int>(error));
+            faultCaptureAppendf("[fault] bridge tcp_error ip=%s err=%d", rip.c_str(), static_cast<int>(error));
+#else
+            Log.verbose(F("[Bridge]: Error from Spa %d" CR), error);
+#endif
+          });
           break;
         }
       }
@@ -79,6 +117,13 @@ void bridgeLoop()
       if (!added)
       {
         publishError(("Bridge Client not Connected - no slots " + client->remoteIP().toString()).c_str());
+#if defined(DIAG_FAULT_CAPTURE)
+        {
+          const String rip = client->remoteIP().toString();
+          Log.warning(F("[Bridge]: no slots for client %s" CR), rip.c_str());
+          faultCaptureAppendf("[fault] bridge no_slots ip=%s", rip.c_str());
+        }
+#endif
         client->close();
       }
     },
@@ -124,16 +169,16 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     const uint32_t ingressId = ++bridgeIngressSequence;
     const unsigned long ingressMs = millis();
     Log.verbose(F("[Bridge]: bridge/in %s" CR), msgToString(message, length).c_str());
-    Log.notice(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%p frame=%s" CR),
-               ingressId,
-               ingressMs,
-               static_cast<unsigned int>(length),
-               client->remoteIP(),
-               msgToString(message, length).c_str());
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%p frame=%s" CR),
+                     ingressId,
+                     ingressMs,
+                     static_cast<unsigned int>(length),
+                     client->remoteIP(),
+                     msgToString(message, length).c_str());
     mqtt.publish((mqttTopic + "bridge/in").c_str(), msgToString(message, length).c_str());
     if (message[2] == id && message[4] == 0x04)
     {
-      Log.notice(F("[BridgeDiag]: ingress=%lu handled=wifi_module_configuration" CR), ingressId);
+      BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu handled=wifi_module_configuration" CR), ingressId);
       Q_out.clear();
       WiFi_Module_Configuration_Response(Q_out);
       bridgeSend(Q_out);
@@ -143,7 +188,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     {
       //  P_in.clear();
       publishBridge((String(length) + " Msg Received").c_str());
-      Log.notice(F("[BridgeDiag]: ingress=%lu forwarding=cacheRead" CR), ingressId);
+      BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu forwarding=cacheRead" CR), ingressId);
       cacheRead(message, length);
     }
   }
@@ -169,6 +214,9 @@ void bridgeSend(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
       if (!clients[i]->send())
       {
         Log.error(F("[Bridge]: Error sending to client %p - %s" CR), clients[i]->remoteIP(), msgToString(data).c_str());
+#if defined(DIAG_FAULT_CAPTURE)
+        faultCaptureAppendf("[fault] bridge send_fail ip=%s", clients[i]->remoteIP().toString().c_str());
+#endif
       };
 
       // Log.verbose(F("[Bridge]: after bridge/out %p - %s" CR), clients[i]->remoteIP(), msgToString(data).c_str());
@@ -202,6 +250,9 @@ void bridgeSend(uint8_t *message, int length)
       if (!clients[i]->send())
       {
         Log.error(F("[Bridge]: Error sending to client %p - %s" CR), clients[i]->remoteIP(), msgToString(message, length).c_str());
+#if defined(DIAG_FAULT_CAPTURE)
+        faultCaptureAppendf("[fault] bridge send_fail ip=%s", clients[i]->remoteIP().toString().c_str());
+#endif
       };
       // Log.verbose(F("[Bridge]: after bridge/out %p - %s" CR), clients[i]->remoteIP(), msgToString(message, length).c_str());
     }

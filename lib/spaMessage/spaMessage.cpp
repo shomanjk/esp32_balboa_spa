@@ -15,6 +15,8 @@
 #endif
 #include "rs485.h"
 #include "bridge.h"
+#include <faultCapture.h>
+#include <diagBridgeLog.h>
 
 #define TwoBit(value, bit) (((value) >> (bit)) & 0x03)
 
@@ -646,12 +648,15 @@ void sendMessageToSpa(uint8_t *data, int length)
   if (xQueueSend(spaWriteQueue, &messageToSend, 0) != pdTRUE)
   {
     Log.error(F("[Mess]: SPA Write Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+#if defined(DIAG_FAULT_CAPTURE)
+    faultCaptureAppendf("[fault] spaWriteQueue full len=%d", messageToSend->length);
+#endif
     delete messageToSend;
   }
   else
   {
     Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-    Log.notice(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
                millis(),
                static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
                msgToString(messageToSend->message, messageToSend->length).c_str());
@@ -669,12 +674,15 @@ void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   if (xQueueSend(spaWriteQueue, &messageToSend, 0) != pdTRUE)
   {
     Log.error(F("[Mess]: SPA Write Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+#if defined(DIAG_FAULT_CAPTURE)
+    faultCaptureAppendf("[fault] spaWriteQueue full len=%d", messageToSend->length);
+#endif
     delete messageToSend;
   }
   else
   {
     Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-    Log.notice(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
                millis(),
                static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
                msgToString(messageToSend->message, messageToSend->length).c_str());

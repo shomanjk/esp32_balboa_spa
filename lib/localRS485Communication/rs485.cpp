@@ -14,6 +14,7 @@
 #include "../../src/config.h"
 #include "../../src/main.h"
 #include "../../src/rs485_led_hooks.h"
+#include <diagBridgeLog.h>
 
 // QueueHandle_t rs485WriteQueue;
 
@@ -307,7 +308,7 @@ void rs485ClearToSend()
   //  mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "rs485ClearToSend");
   rs485WriteQueueMessage *message;
   CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> dataBuffer;
-  Log.notice(F("[BridgeDiag]: cts ms=%lu depth_before=%u" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts ms=%lu depth_before=%u" CR),
              millis(),
              static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)));
   rs485LastCtsAtMs = millis();
@@ -320,7 +321,7 @@ void rs485ClearToSend()
     }
     rs485NextCtsArmed = false;
     rs485NextCtsFireSeenCount++;
-    Log.notice(F("[BridgeDiag]: cts_send next_cts_frame=%s cts_count=%lu" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts_send next_cts_frame=%s cts_count=%lu" CR),
                msgToString(dataBuffer).c_str(),
                rs485CtsSeenCount);
     rs485Write(dataBuffer);
@@ -333,7 +334,7 @@ void rs485ClearToSend()
       dataBuffer.push(message->message[i]);
     }
     //   mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "Queue Receive");
-    Log.notice(F("[BridgeDiag]: cts_send queued_frame=%s depth_after_pop=%u" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts_send queued_frame=%s depth_after_pop=%u" CR),
                msgToString(dataBuffer).c_str(),
                static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)));
     rs485Write(dataBuffer);
@@ -389,7 +390,7 @@ bool rs485ArmFrameOnNextCts(const uint8_t *frame, int length, uint32_t *outArmCo
   {
     *outArmCount = rs485NextCtsArmSeenCount;
   }
-  Log.notice(F("[BridgeDiag]: next_cts armed frame=%s arm_count=%lu" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: next_cts armed frame=%s arm_count=%lu" CR),
              msgToString(const_cast<uint8_t *>(frame), length).c_str(),
              rs485NextCtsArmSeenCount);
   return true;
@@ -489,7 +490,7 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   if (data[4] != Nothing_to_Send_Type)
   {
     Log.verbose(F("[rs485]: Sent: %s" CR), msgToString(data).c_str());
-    Log.notice(F("[BridgeDiag]: rs485_sent ms=%lu frame=%s" CR), millis(), msgToString(data).c_str());
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: rs485_sent ms=%lu frame=%s" CR), millis(), msgToString(data).c_str());
   }
   data.clear();
 }

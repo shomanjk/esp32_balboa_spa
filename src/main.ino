@@ -6,6 +6,7 @@
 
 // Local Libraries
 #include <restartReason.h>
+#include <faultCapture.h>
 #include <wifiModule.h>
 #include <findSpa.h>
 #include <spaCommunication.h>
@@ -41,6 +42,8 @@ void setup()
   // Launch serial for debugging purposes
   Serial.begin(SERIAL_BAUD);
   webLogBufferSetup(Serial);
+  faultCaptureInit();
+  faultCaptureOnBootFromResetReason();
   Log.setPrefix(logPrintPrefix);
   Log.begin(LOG_LEVEL, &webLogBufferGetLogPrint());
   esp_task_wdt_init(INITIAL_WDT_TIMEOUT, true); // enable panic so ESP32 restarts
@@ -90,6 +93,10 @@ void setup()
 
 #ifdef M5_ATOM_LED
   addBuildDefinition("M5_ATOM_LED");
+#endif
+
+#ifdef DIAG_FAULT_CAPTURE
+  addBuildDefinition("DIAG_FAULT_CAPTURE");
 #endif
 
   Log.notice(F("Build Definitions: %s" CR), buildDefinitionString.c_str());
