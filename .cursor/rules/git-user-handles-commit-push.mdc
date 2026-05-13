@@ -1,0 +1,10 @@
+---
+description: User handles git commit and push; agent may remind but must not run them unless asked
+alwaysApply: true
+---
+
+# Git: commit and push
+
+- **Do not** run `git commit`, `git push`, or equivalent (e.g. `gh pr create` that implies push) unless the user **explicitly** asks you to perform that step.
+- **Do** run read-only git commands when useful: `git status`, `git diff`, `git log`, etc.
+- When changes should be saved or shared, **remind** the user in your reply (e.g. “commit and push when you’re ready”) instead of committing or pushing yourself.

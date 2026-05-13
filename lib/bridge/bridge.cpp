@@ -168,14 +168,18 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     u_int8_t *message = (u_int8_t *)buffer;
     const uint32_t ingressId = ++bridgeIngressSequence;
     const unsigned long ingressMs = millis();
-    Log.verbose(F("[Bridge]: bridge/in %s" CR), msgToString(message, length).c_str());
+    const String ingressStr = msgToString(message, length);
+#if defined(DIAG_FAULT_CAPTURE)
+    faultCaptureSetLastBridgeIngress(ingressStr.c_str());
+#endif
+    Log.verbose(F("[Bridge]: bridge/in %s" CR), ingressStr.c_str());
     BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%p frame=%s" CR),
                      ingressId,
                      ingressMs,
                      static_cast<unsigned int>(length),
                      client->remoteIP(),
-                     msgToString(message, length).c_str());
-    mqtt.publish((mqttTopic + "bridge/in").c_str(), msgToString(message, length).c_str());
+                     ingressStr.c_str());
+    mqtt.publish((mqttTopic + "bridge/in").c_str(), ingressStr.c_str());
     if (message[2] == id && message[4] == 0x04)
     {
       BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu handled=wifi_module_configuration" CR), ingressId);

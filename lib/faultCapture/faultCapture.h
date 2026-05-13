@@ -16,6 +16,13 @@ void faultCaptureAppendf(const char *fmt, ...) __attribute__((format(printf, 1, 
 #include <ArduinoJson.h>
 /** Append oldest→newest lines into `root["faultLog"]` (creates array). */
 void faultCaptureAppendToJson(JsonObject root);
+/**
+ * Called from linker-wrapped `esp_system_abort` before the system panics.
+ * Uses only RTC writes (no heap); safe for many abort/assert paths.
+ */
+void faultCaptureRecordEspSystemAbort(const char *details);
+/** Overwrites RTC copy of last TCP/4257 ingress frame (ASCII hex), for post-mortem without serial. */
+void faultCaptureSetLastBridgeIngress(const char *asciiFrame);
 #endif
 
 #endif
