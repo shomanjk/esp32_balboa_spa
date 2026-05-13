@@ -15,6 +15,9 @@ src/main.ino.cpp
 # Full flash dumps from scripts/backup_flash.sh
 /backups/
 
+# Local spa/gateway log exports (web portal JSON, telnet captures, etc.)
+/logs/
+
 # Local Mosquitto in docker/mosquitto — optional secrets if you add password/TLS later
 docker/mosquitto/config/passwd
 docker/mosquitto/certs/
