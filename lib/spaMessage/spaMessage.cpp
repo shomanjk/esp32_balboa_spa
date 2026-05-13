@@ -262,6 +262,7 @@ void configurationRequest()
     if (xQueueSend(spaWriteQueue, &messageToSend, 0) != pdTRUE)
     {
       Log.error(F("[Mess]: SPA Write Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+      delete messageToSend;
     }
     else
     {
@@ -645,6 +646,7 @@ void sendMessageToSpa(uint8_t *data, int length)
   if (xQueueSend(spaWriteQueue, &messageToSend, 0) != pdTRUE)
   {
     Log.error(F("[Mess]: SPA Write Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+    delete messageToSend;
   }
   else
   {
@@ -667,6 +669,7 @@ void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   if (xQueueSend(spaWriteQueue, &messageToSend, 0) != pdTRUE)
   {
     Log.error(F("[Mess]: SPA Write Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+    delete messageToSend;
   }
   else
   {
