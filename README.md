@@ -213,6 +213,16 @@ Guardrails:
 
 Builds use **PlatformIO** ([`platformio.ini`](platformio.ini)).
 
+### Compile-time feature flags (how to change)
+
+Feature **macros** are enabled with **`-DNAME`** strings under each environment’s **`build_flags`** in [`platformio.ini`](platformio.ini).
+
+1. Open the **`[env:…]`** block you use (for example **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`**, **`ESP32ota`**, **`ESP32-epd47`**).
+2. Add or remove lines like `'-DTELNET_LOG'` inside that block’s **`build_flags =`** list. Most envs also include **`${com.build_flags}`**, which pulls in the shared **`[com]`** defaults (including **`LOG_LEVEL_*`** for ArduinoLog).
+3. Rebuild with **`pio run -e <env>`** (and **`-t upload`** / **`-t uploadfs`** when you need them).
+
+For **what each flag does**, see **[Compiler definitions](#compiler-definitions)** below. **Wi‑Fi, MQTT, RS485 pins, and OTA passwords** live in **`src/config.h`** (copy from [`src/config-example.h`](src/config-example.h)); those are **runtime configuration**, not the same as these **`-D`** compile switches.
+
 ### Web UI submodule
 
 The SPA web UI lives in the **`balboa-spa`** git submodule:
