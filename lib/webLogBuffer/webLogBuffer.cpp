@@ -23,17 +23,14 @@ static WebLogRingLine s_ring[WEB_LOG_RING_LINES];
 static uint16_t s_ringWrite = 0;
 static uint16_t s_lineCount = 0;
 static uint32_t s_nextSeq = 1;
+/** Recursive: protects ring indices, tee line assembly, and Serial tee (Log may run from AsyncTCP vs loop). */
 static SemaphoreHandle_t s_mutex;
 
 static Print *s_serial = nullptr;
 
-static void commitLine(const char *buf)
+/** Caller must hold `s_mutex` (recursive). */
+static void appendRingLineLocked(const char *buf)
 {
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE)
-  {
-    return;
-  }
-
   s_ring[s_ringWrite].seq = s_nextSeq++;
   strncpy(s_ring[s_ringWrite].text, buf, WEB_LOG_LINE_MAX - 1);
   s_ring[s_ringWrite].text[WEB_LOG_LINE_MAX - 1] = '\0';
@@ -42,8 +39,6 @@ static void commitLine(const char *buf)
   {
     s_lineCount++;
   }
-
-  xSemaphoreGive(s_mutex);
 }
 
 class WebLogTee : public Print
@@ -54,20 +49,31 @@ class WebLogTee : public Print
 public:
   size_t write(uint8_t c) override
   {
-    if (s_serial)
+    if (s_mutex == nullptr)
+    {
+      return 1;
+    }
+    if (xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+      return 0;
+    }
+
+    if (s_serial != nullptr)
     {
       s_serial->write(c);
     }
 
     if (c == '\r')
     {
+      xSemaphoreGiveRecursive(s_mutex);
       return 1;
     }
     if (c == '\n')
     {
       lineBuf[lineLen < WEB_LOG_LINE_MAX ? lineLen : WEB_LOG_LINE_MAX - 1] = '\0';
-      commitLine(lineBuf);
+      appendRingLineLocked(lineBuf);
       lineLen = 0;
+      xSemaphoreGiveRecursive(s_mutex);
       return 1;
     }
     if (lineLen < WEB_LOG_LINE_MAX - 4)
@@ -81,15 +87,52 @@ public:
       lineBuf[lineLen++] = '>';
       lineBuf[lineLen++] = '\0';
     }
+    xSemaphoreGiveRecursive(s_mutex);
     return 1;
   }
 
   size_t write(const uint8_t *buffer, size_t size) override
   {
+    if (s_mutex == nullptr || size == 0)
+    {
+      return size;
+    }
+    if (xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+      return 0;
+    }
+
     for (size_t i = 0; i < size; i++)
     {
-      write(buffer[i]);
+      const uint8_t c = buffer[i];
+      if (s_serial != nullptr)
+      {
+        s_serial->write(c);
+      }
+      if (c == '\r')
+      {
+        continue;
+      }
+      if (c == '\n')
+      {
+        lineBuf[lineLen < WEB_LOG_LINE_MAX ? lineLen : WEB_LOG_LINE_MAX - 1] = '\0';
+        appendRingLineLocked(lineBuf);
+        lineLen = 0;
+        continue;
+      }
+      if (lineLen < WEB_LOG_LINE_MAX - 4)
+      {
+        lineBuf[lineLen++] = (char)c;
+      }
+      else if (lineLen == WEB_LOG_LINE_MAX - 4)
+      {
+        lineBuf[lineLen++] = '>';
+        lineBuf[lineLen++] = '>';
+        lineBuf[lineLen++] = '>';
+        lineBuf[lineLen++] = '\0';
+      }
     }
+    xSemaphoreGiveRecursive(s_mutex);
     return size;
   }
 };
@@ -100,7 +143,7 @@ void webLogBufferSetup(Print &serialSink)
 {
   if (s_mutex == nullptr)
   {
-    s_mutex = xSemaphoreCreateMutex();
+    s_mutex = xSemaphoreCreateRecursiveMutex();
   }
   s_serial = &serialSink;
 }
@@ -112,12 +155,12 @@ Print &webLogBufferGetLogPrint()
 
 uint32_t webLogBufferNewestSeq()
 {
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE)
+  if (s_mutex == nullptr || xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE)
   {
     return 0;
   }
   uint32_t n = (s_nextSeq > 0) ? (s_nextSeq - 1) : 0;
-  xSemaphoreGive(s_mutex);
+  xSemaphoreGiveRecursive(s_mutex);
   return n;
 }
 
@@ -184,7 +227,7 @@ void webLogBufferBuildJsonSince(uint32_t since, unsigned limit, int currentLevel
     limit = 200;
   }
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+  if (s_mutex == nullptr || xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
   {
     out = "{\"error\":\"lock_timeout\"}";
     return;
@@ -220,7 +263,7 @@ void webLogBufferBuildJsonSince(uint32_t since, unsigned limit, int currentLevel
   }
 
   out += "]}";
-  xSemaphoreGive(s_mutex);
+  xSemaphoreGiveRecursive(s_mutex);
 }
 
 void webLogBufferAppendJsonDelta(uint32_t since, uint32_t newestExclusive, String &out)
@@ -230,7 +273,7 @@ void webLogBufferAppendJsonDelta(uint32_t since, uint32_t newestExclusive, Strin
     return;
   }
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE)
+  if (s_mutex == nullptr || xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE)
   {
     return;
   }
@@ -263,12 +306,12 @@ void webLogBufferAppendJsonDelta(uint32_t since, uint32_t newestExclusive, Strin
     out += "]}";
   }
 
-  xSemaphoreGive(s_mutex);
+  xSemaphoreGiveRecursive(s_mutex);
 }
 
 void webLogBufferBuildJsonFull(String &out)
 {
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+  if (s_mutex == nullptr || xSemaphoreTakeRecursive(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
   {
     out = "{\"error\":\"lock_timeout\"}";
     return;
@@ -295,7 +338,7 @@ void webLogBufferBuildJsonFull(String &out)
   }
 
   out += "]}";
-  xSemaphoreGive(s_mutex);
+  xSemaphoreGiveRecursive(s_mutex);
 }
 
 void webLogBufferBuildJsonLogConfig(int currentLevel, String &out)

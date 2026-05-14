@@ -2,6 +2,12 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-05-14 - Bridge / BWA `LoadProhibited` in `Print::write` (issue #4 follow-up)
+
+- **Symptom:** Guru **`LoadProhibited`**, **`EXCVADDR: 0x00000008`**, decoded stack through **`AsyncTCP` → `bridge::clientDataAvailable` → `cacheRead` → `processFragment`** (fragment **`[BridgeDiag]`** log line) into **ArduinoLog → `Print::write`**.
+- **Hypothesis (confirmed in code review):** **`WebLogTee`** assembled **`lineBuf` / `lineLen`** and called **`Serial::write`** without the same mutex used for ring commits, while **`Log`** can run from **AsyncTCP** and **`loop`** concurrently → torn tee state / undefined behavior.
+- **Fix:** [`lib/webLogBuffer/webLogBuffer.cpp`](../lib/webLogBuffer/webLogBuffer.cpp) — **recursive mutex** held for the full **`write`** path (including bulk **`write(const uint8_t*, size_t)`**); plus **`cacheRead`** local **`String`** for **`msgToString`** before **`c_str()`** in **`processFragment`**.
+
 ## 2026-04-30 - MQTT command path parity with web dispatcher
 
 - **Implementation:** MQTT callback in [`mqttModule.cpp`](../lib/mqttModule/mqttModule.cpp) now dispatches `Spa/<gateway>/cmd/#` topics to shared helpers in [`spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) (`setTemp`, `setTime`, `syncTime`, `mode`, `preset`, `button/<code>`), and publishes JSON outcomes on `Spa/<gateway>/cmd/result`.
