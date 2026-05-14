@@ -8,10 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-05-14
+
 ### Fixed
 
-- **Bridge `%02x` panic on Balboa Worldwide connect** ([`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp)): `ArduinoLog` **1.1.1** does not support printf-style width modifiers — `printFormat` only recognizes single-char specifiers. The `0` in `%02x` was treated as an unknown spec, consumed no `va_arg`, and the trailing `2x` printed as literal text. Subsequent `%u` / `%s` then consumed the wrong va_args: the `[BridgeDiag]: fragment type=0x%02x len=%u frame=%s` line at `processFragment` had `%s` consume the `length` integer (e.g. `0x0a` for a config-request frame) and pass it to `Print::print(const char *)`, which called `strlen(0x0a)` and panicked with **`LoadProhibited` / `EXCVADDR=0x08`** (see [issue #4](https://github.com/shomanjk/esp32_balboa_spa/issues/4) — decoded stack from `M5AtomS3Lite-tub-ota` matches this byte-for-byte). Replaced `%02x` with `%x` in three sites in `cacheRead.cpp` (lines 68 / 96 / 103). The earlier v2.8.3 lifetime fix on `frameHex` was unrelated — `frameHex.c_str()` was never being consumed by the log call. Diag output loses single-digit zero padding (`type=0x4` rather than `type=0x04`).
+- **Bridge `%02x` panic on Balboa Worldwide connect** ([`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp), [PR #5](https://github.com/shomanjk/esp32_balboa_spa/pull/5)): `ArduinoLog` **1.1.1** does not support printf-style width modifiers — `printFormat` only recognizes single-char specifiers. The `0` in `%02x` was treated as an unknown spec, consumed no `va_arg`, and the trailing `2x` printed as literal text. Subsequent `%u` / `%s` then consumed the wrong va_args: the `[BridgeDiag]: fragment type=0x%02x len=%u frame=%s` line in `processFragment` had `%s` consume the `length` integer (e.g. `0x0a` for a config-request frame) and pass it to `Print::print(const char *)`, which called `strlen(0x0a)` and panicked with **`LoadProhibited` / `EXCVADDR=0x08`** (see [issue #4](https://github.com/shomanjk/esp32_balboa_spa/issues/4)). Replaced **`%02x`** with **`%x`** in the three **`BRIDGE_LOG_NOISY`** call sites in `processFragment`. The earlier v2.8.3 `frameHex` lifetime fix was unrelated. Diag output loses single-digit zero padding (`type=0x4` rather than `type=0x04`).
+- **TCP bridge ingress hardening (no accumulator)** ([`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp), [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp)): Stateless `cacheRead` with **min/max frame length** checks, **resync** on bogus length bytes, **break** when a chunk ends on a lone `0x7E` (avoids spinning), and **`length <= BALBOA_MESSAGE_SIZE`** plus **`length >= 5`** before reading **`message[4]`** in the Wi‑Fi module fast path — small guards without a **cross-chunk buffer**.
 - **Portal `/logs` scroll while tailing** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Live poll/WebSocket updates no longer force the view to the bottom when you have scrolled up to read older lines (only repaints in place when you are already near the bottom; otherwise lines buffer and the **new lines** control applies as before). Full redraws after filters/presets keep scroll position unless you were already pinned to the tail. The redundant **Auto-scroll** checkbox was removed (**Pause** still stops the stream).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.9.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.8.6] - 2026-05-14
 

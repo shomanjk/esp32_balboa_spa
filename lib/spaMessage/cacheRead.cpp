@@ -14,6 +14,9 @@
 
 void processFragment(uint8_t *data, size_t length);
 
+/** Indices `data[4]` / `data[5]` require this minimum; max must fit `SpaWriteQueueMessage.message`. */
+static constexpr size_t kBridgeFrameMin = 6u;
+
 // 7e 08 0a bf 22 00 00 01 58 7e 7e 08 0a bf 22 04 00 00 f4 7e 7e 08 0a bf 22 01 00 00 34 7e 7e 08 0a bf 22 02 00 00 89 7e
 // config request (2e), followed by 04 (25), Filter Cycles Message (23), and Information Response ( 24 )
 
@@ -23,34 +26,32 @@ void cacheRead(uint8_t *data, size_t length)
   size_t pos = 0;
   while (pos < length)
   {
-    // Look for the start delimiter (0x7E)
     if (data[pos] == 0x7E)
     {
-      // Check if there are enough bytes to determine the length
-      if (pos + 1 < length)
+      if (pos + 1 >= length)
       {
-        // Get the length of the fragment from the second byte
-        uint8_t fragmentLength = data[pos + 1];
-
-        // Ensure there are enough bytes for the complete fragment
-        if (pos + fragmentLength + 1 < length)
-        {
-          // Extract the fragment
-          processFragment(&data[pos], fragmentLength + 2);
-
-          // Move to the next fragment
-          pos += fragmentLength + 2;
-        }
-        else
-        {
-          // Not enough bytes for the complete fragment, break
-          break;
-        }
+        break;
       }
+      const uint8_t fragmentLength = data[pos + 1];
+      const size_t frameLen = static_cast<size_t>(fragmentLength) + 2u;
+      if (frameLen < kBridgeFrameMin || frameLen > static_cast<size_t>(BALBOA_MESSAGE_SIZE))
+      {
+        Log.verbose(F("[Bridge]: cacheRead resync at %u (len byte=%u → frameLen=%u)" CR),
+                    static_cast<unsigned int>(pos),
+                    static_cast<unsigned int>(fragmentLength),
+                    static_cast<unsigned int>(frameLen));
+        pos++;
+        continue;
+      }
+      if (pos + frameLen > length)
+      {
+        break;
+      }
+      processFragment(&data[pos], frameLen);
+      pos += frameLen;
     }
     else
     {
-      // Skip invalid data
       pos++;
     }
   }
@@ -64,6 +65,11 @@ void cacheRead(uint8_t *data, size_t length)
 
 void processFragment(uint8_t *data, size_t length)
 {
+  if (length < kBridgeFrameMin || length > static_cast<size_t>(BALBOA_MESSAGE_SIZE))
+  {
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: drop fragment len=%u" CR), static_cast<unsigned int>(length));
+    return;
+  }
   const String frameHex = msgToString(data, length);
   BRIDGE_LOG_NOISY(F("[BridgeDiag]: fragment type=0x%x len=%u frame=%s" CR),
                    data[4],

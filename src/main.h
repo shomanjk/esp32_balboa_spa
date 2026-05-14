@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.8.6"
+#define VERSION "2.9.0"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 

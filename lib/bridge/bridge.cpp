@@ -208,7 +208,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
 {
   // Log.verbose(F("[Comm]: Data Available %x, %d" CR), String((char *)buf).substring(0, len).c_str(), len);
 
-  if (length > 0 && length < BALBOA_MESSAGE_SIZE)
+  if (length > 0 && length <= BALBOA_MESSAGE_SIZE)
   {
     u_int8_t *message = (u_int8_t *)buffer;
     const uint32_t ingressId = ++bridgeIngressSequence;
@@ -225,7 +225,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
                      bridgeRipForClient(client).c_str(),
                      ingressStr.c_str());
     mqtt.publish((mqttTopic + "bridge/in").c_str(), ingressStr.c_str());
-    if (message[2] == id && message[4] == 0x04)
+    if (length >= 5 && message[2] == id && message[4] == 0x04)
     {
       BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu handled=wifi_module_configuration" CR), ingressId);
       Q_out.clear();
