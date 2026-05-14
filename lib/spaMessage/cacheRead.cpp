@@ -64,10 +64,11 @@ void cacheRead(uint8_t *data, size_t length)
 
 void processFragment(uint8_t *data, size_t length)
 {
+  const String frameHex = msgToString(data, length);
   BRIDGE_LOG_NOISY(F("[BridgeDiag]: fragment type=0x%02x len=%u frame=%s" CR),
-             data[4],
-             static_cast<unsigned int>(length),
-             msgToString(data, length).c_str());
+                   data[4],
+                   static_cast<unsigned int>(length),
+                   frameHex.c_str());
   // Check if the fragment is a valid message
   if (data[4] == Settings_Request_Type)
   {

@@ -8,9 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
-### Changed
+## [2.8.3] - 2026-05-14
 
-- **Remote crash breadcrumbs (`DIAG_FAULT_CAPTURE`)** ([`lib/faultCapture/`](lib/faultCapture/), [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp), [`platformio.ini`](platformio.ini)): `esp_system_abort()` detail text is copied to RTC via **linker `--wrap=esp_system_abort`** (surfaced on next boot as `[fault] esp_system_abort …` in **`faultLog`**). **`GET /api/version`** also returns **`lastBridgeIngress`** (last TCP/4257 frame hex seen). Panic boot lines now use a **short reset name** (e.g. `PANIC`) instead of only a numeric code.
+### Fixed
+
+- **Web log tee thread safety** ([`lib/webLogBuffer/webLogBuffer.cpp`](lib/webLogBuffer/webLogBuffer.cpp)): `Log` output is teed to Serial and the portal ring from **multiple FreeRTOS tasks** (e.g. **AsyncTCP** bridge receive vs `loop`). The ring mutex previously covered only commits, not per-character **`lineBuf` / `lineLen`** assembly or **`Serial::write`**, which could corrupt the tee and crash in **`Print::write`** (see [issue #4](https://github.com/shomanjk/esp32_balboa_spa/issues/4) discussion / serial stacks implicating **`cacheRead::processFragment`**). The mutex is now **recursive** and held for the full **`WebLogTee::write`** path (including **`write(const uint8_t*, size_t)`** bulk path).
+- **Bridge fragment log lifetime** ([`lib/spaMessage/cacheRead.cpp`](lib/spaMessage/cacheRead.cpp)): `processFragment` keeps the **`msgToString`** result in a **local `String`** before passing **`c_str()`** into logging.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.3`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.8.2] - 2026-05-13
 
