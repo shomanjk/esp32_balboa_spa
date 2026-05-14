@@ -1821,7 +1821,6 @@ body.logs-portal .logs-stack{flex:0 0 auto}
   html += "<label><input type='checkbox' id='hideIdleCts' checked/> Hide idle CTS</label>";
   html += "<label><input type='checkbox' id='showHidden'/> Show hidden</label>";
   html += "<label><input type='checkbox' id='useWs' checked/> WebSocket tail</label>";
-  html += "<label><input type='checkbox' id='autoScroll' checked/> Auto-scroll</label>";
   html += "<button type='button' id='newBadge'>0 new lines</button>";
   html += "<button type='button' id='clr'>Clear view</button><button type='button' id='copyTxt'>Copy</button><button type='button' id='dlTxt'>Download .log</button><button type='button' id='dlJson'>Download .json</button>";
   html += "</div>";
@@ -1831,7 +1830,7 @@ body.logs-portal .logs-stack{flex:0 0 auto}
 var logView=document.getElementById('logView'),since=0,pollMs=1000,pollMaxMs=20000,timer,ws,useWs=true,newBuffered=0;
 var pollFailures=0,wsRetryTimer=null,wsOpenEver=false,pollInFlight=null;
 var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
-var pauseEl=document.getElementById('pause'),autoScrollEl=document.getElementById('autoScroll'),newBadge=document.getElementById('newBadge');
+var pauseEl=document.getElementById('pause'),newBadge=document.getElementById('newBadge');
 var hideIdleCtsEl=document.getElementById('hideIdleCts'),showHiddenEl=document.getElementById('showHidden');
 var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),hiddenCountEl=document.getElementById('hiddenCount'),connState=document.getElementById('connState');
 var rendered=[],maxRendered=8000;
@@ -1857,10 +1856,10 @@ return true;
 }
 function renderLine(rec){var tag=getTag(rec.t),cls=getLevelClass(rec.t);var body=esc(rec.t);if(tag){body=body.replace('['+tag+']','<span class=\"log-tag\">['+esc(tag)+']</span>');}
 return '<div class=\"log-line '+cls+'\"><span class=\"log-seq\">#'+rec.s+'</span><span>'+body+'</span></div>';}
-function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;}if(!isVisibleRecord(rendered[i]))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);logView.innerHTML=out;renderCount.textContent=n+' lines';if(autoScrollEl.checked){logView.scrollTop=logView.scrollHeight;}}
+function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;}if(!isVisibleRecord(rendered[i]))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);var stick=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;logView.innerHTML=out;renderCount.textContent=n+' lines';if(stick){logView.scrollTop=logView.scrollHeight;}}
 function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){rendered.push({s:arr[j].s,t:arr[j].t});if(rendered.length>maxRendered)rendered.shift();}refreshFromRendered();}
 function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;
-if(autoScrollEl.checked||atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
+if(atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
 else{newBuffered+=arr.length;newBadge.textContent=String(newBuffered)+' new lines';newBadge.style.display='inline-flex';for(var k=0;k<arr.length;k++){rendered.push({s:arr[k].s,t:arr[k].t});if(rendered.length>maxRendered)rendered.shift();}renderCount.textContent=rendered.length+' lines';}}
 function capSel(mx){for(var i=0;i<sel.options.length;i++){var o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}
 function nextPollDelay(){var e=Math.min(pollMaxMs,pollMs*Math.pow(2,Math.min(6,pollFailures)));var j=Math.floor(Math.random()*Math.max(250,Math.floor(e*0.35)));return Math.min(pollMaxMs,e+j);}
