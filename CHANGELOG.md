@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Portal `/logs` scroll while tailing** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Live poll/WebSocket updates no longer force the view to the bottom when you have scrolled up to read older lines (only repaints in place when you are already near the bottom; otherwise lines buffer and the **new lines** control applies as before). Full redraws after filters/presets keep scroll position unless you were already pinned to the tail. The redundant **Auto-scroll** checkbox was removed (**Pause** still stops the stream).
+
 ## [2.8.6] - 2026-05-14
 
 ### Changed
