@@ -38,10 +38,10 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 | **`LOCAL_CONNECT`** | UDP discovery (port 30303) for Balboa-style discovery. |
 | **`BRIDGE`** | TCP server on **4257**; pairs with Homebridge [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa). |
 | **`REMOTE_CLIENT`** | TCP **client** to port 4257 (remote/kitchen device), not tub RS485. |
-| **`TELNET_LOG`** | Telnet logging. |
+| **`TELNET_LOG`** | Optional. **TelnetStream** on TCP **23** when defined; **`Log`** remains Serial + web ring ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)). Default [`platformio.ini`](platformio.ini) tub/OTA envs **omit** this flag. |
 | **`spaEpaper`** | ePaper UI (ESP32-S3 T5 env). |
 
-**Tub-side typical:** `LOCAL_CLIENT` + `LOCAL_CONNECT` + `BRIDGE` (+ optional `TELNET_LOG`). **`M5AtomLite-tub`** already sets these.
+**Tub-side typical:** `LOCAL_CLIENT` + `LOCAL_CONNECT` + `BRIDGE` (optional **`TELNET_LOG`** for the Telnet listener). **`M5AtomLite-tub`** sets the first three; **`TELNET_LOG`** is off unless you add it to your env.
 
 ## Architecture (where to change what)
 

@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.8.6] - 2026-05-14
+
+### Changed
+
+- **`TELNET_LOG` default** ([`platformio.ini`](platformio.ini)): Tub-side and OTA envs (**`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`**, **`ESP32ota`**, **`ESP32prodOta`**) no longer pass **`-DTELNET_LOG`** by default, so **TelnetStream** is not started (no TCP **23**). The **`#ifdef TELNET_LOG`** implementation in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp) / [`src/main.ino`](src/main.ino) is unchanged; re-enable by uncommenting or adding **`-DTELNET_LOG`** to your env. Docs: [`README.md`](README.md), [`AGENTS.md`](AGENTS.md), [`OTA_LOGGING_WORKFLOW.md`](OTA_LOGGING_WORKFLOW.md), portal **`/logs`** intro ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)).
+- **Wi‑Fi Telnet boot lines** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)): When **`TELNET_LOG`** *is* enabled, log text now states that **TelnetStream** is listening on **23** and that the **Serial + web log tee** is unchanged (avoids “switching to telnet” implying **`Log`** moved).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.6`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.8.5] - 2026-05-14
 
 ### Fixed
@@ -575,7 +586,7 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 ### Added
 
 - **Fork documentation:** [README.md](README.md) **About this fork** section; [FORK.md](FORK.md) describing lineage, that upstream archival repos are not the PR target, and recommended **git push / optional PRs / tags** workflow for this fork.
-- **M5 Atom Lite (tub-side):** PlatformIO environment `M5AtomLite-tub` using `board = m5stack-atom`, tub-side build flags (`LOCAL_CLIENT`, `LOCAL_CONNECT`, `BRIDGE`, `TELNET_LOG`), and `upload_speed = 1500000` ([`platformio.ini`](platformio.ini)).
+- **M5 Atom Lite (tub-side):** PlatformIO environment `M5AtomLite-tub` using `board = m5stack-atom`, tub-side build flags (`LOCAL_CLIENT`, `LOCAL_CONNECT`, `BRIDGE`), and `upload_speed = 1500000` ([`platformio.ini`](platformio.ini)).
 - **`src/config-example.h`:** Documented optional UART/GPIO settings for **M5 Atom Lite + M5 Unit RS485** (Grove wiring, `TX485_Rx` / `TX485_Tx`, `AUTO_TX` guidance) with links to M5 documentation.
 - **`README.md`:** Section **“M5 Atom Lite + M5 RS485 (tub-side)”** describing the new env, wiring to [Unit RS485](https://docs.m5stack.com/en/unit/rs485), `config.h` setup, and power notes.
 
@@ -583,7 +594,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.8.6...HEAD
+[2.8.6]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.8.5...v2.8.6
 [2.4.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.3...v2.3.0
 [2.2.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.2...v2.2.3
