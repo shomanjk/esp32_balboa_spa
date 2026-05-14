@@ -477,7 +477,7 @@ void handleepdpanel(AsyncWebServerRequest *request)
 
 #define webMenuLogs String("<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Logs</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>")
 
-#define headLogs String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Logs</title>") + icon + style + portalNavScrollScript + String("<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}</style></head>")
+#define headLogs String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1,viewport-fit=cover'><title>Spa Logs</title>") + icon + style + portalNavScrollScript + String("<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}</style></head>")
 
 #ifdef spaEpaper
 #define ePaper String("<img class='panel-image' src='panel.jpg' alt='Spa Panel'>")
@@ -1788,9 +1788,15 @@ void handleLogsPage(AsyncWebServerRequest *request)
 {
   String html;
   html.reserve(28000);
-  html = "<html>" + headLogs + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuLogs + "<main id='mainContent'><section class='panel'><h1>Device logs</h1>";
+  html = "<html class=\"logs-portal\">" + headLogs + "<body class=\"logs-portal\"><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page logs-page'>" + webMenuLogs + "<main id='mainContent'><section class='panel logs-panel'><div class='logs-stack'><h1>Device logs</h1>";
   html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. When <code>TELNET_LOG</code> is enabled, <code>nc &lt;host&gt; 23</code> is still the lowest-overhead tail.</p>";
   html += R"HTML(<style>
+html.logs-portal,body.logs-portal{min-height:100svh;min-height:100dvh}
+body.logs-portal{display:flex;flex-direction:column;margin:0;box-sizing:border-box;padding-bottom:env(safe-area-inset-bottom,0)}
+body.logs-portal>.page.logs-page{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;width:100%;max-width:980px;margin:0 auto;padding:max(var(--space-3),env(safe-area-inset-left,0)) max(var(--space-3),env(safe-area-inset-right,0)) max(var(--space-3),env(safe-area-inset-bottom,0))}
+body.logs-portal #mainContent{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+body.logs-portal .logs-panel{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-bottom:0}
+body.logs-portal .logs-stack{flex:0 0 auto}
 .log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}
 .log-controls label{font-size:14px;color:var(--muted)}
@@ -1798,12 +1804,13 @@ void handleLogsPage(AsyncWebServerRequest *request)
 .preset-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0}
 .preset-row button{flex:0 0 auto;padding:8px 11px;font-size:13px;min-height:36px}
 .status-row{display:flex;align-items:center;gap:10px;margin:0 0 10px 0;color:var(--muted);font-size:13px}
-.log-view{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:8px;border-radius:8px;border:1px solid var(--border)}
+.log-view{flex:1 1 12rem;min-height:0;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:8px;border-radius:8px;border:1px solid var(--border)}
 .log-line{display:flex;gap:8px;padding:2px 4px;border-radius:4px;white-space:pre-wrap;word-break:break-word}
 .log-seq{color:#93a8c5;min-width:56px}
 .log-tag{display:inline-block;padding:0 6px;border-radius:999px;background:#233148;color:#d7e3f4;font-size:11px}
 .lvl-e{background:rgba(190,24,36,.2)} .lvl-w{background:rgba(202,138,4,.2)} .lvl-i{background:rgba(2,132,199,.16)} .lvl-v{background:rgba(71,85,105,.2)}
 #newBadge{display:none}
+@media (max-width:640px){body.logs-portal>.page.logs-page{padding-left:max(var(--space-2),env(safe-area-inset-left,0));padding-right:max(var(--space-2),env(safe-area-inset-right,0))}}
 </style>)HTML";
   html += "<div class='preset-row'><button type='button' id='pAll'>All</button><button type='button' id='pErr'>Errors only</button><button type='button' id='pRs'>RS485</button><button type='button' id='pBridge'>BridgeDiag</button><button type='button' id='pWifi'>WiFi</button></div>";
   html += "<div class='log-controls'><label>Level <select id='lvl'><option value='0'>SILENT</option><option value='1'>FATAL</option><option value='2'>ERROR</option><option value='3'>WARNING</option><option value='4'>INFO/NOTICE</option><option value='5'>TRACE</option><option value='6'>VERBOSE</option></select></label>";
@@ -1813,22 +1820,23 @@ void handleLogsPage(AsyncWebServerRequest *request)
   html += "<label><input type='checkbox' id='pause'/> Pause</label>";
   html += "<label><input type='checkbox' id='hideIdleCts' checked/> Hide idle CTS</label>";
   html += "<label><input type='checkbox' id='showHidden'/> Show hidden</label>";
-  html += "<label><input type='checkbox' id='useWs'/> WebSocket tail</label>";
+  html += "<label><input type='checkbox' id='useWs' checked/> WebSocket tail</label>";
   html += "<label><input type='checkbox' id='autoScroll' checked/> Auto-scroll</label>";
   html += "<button type='button' id='newBadge'>0 new lines</button>";
   html += "<button type='button' id='clr'>Clear view</button><button type='button' id='copyTxt'>Copy</button><button type='button' id='dlTxt'>Download .log</button><button type='button' id='dlJson'>Download .json</button>";
   html += "</div>";
-  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='hiddenCount'>hidden idle CTS: 0</span><span id='connState'></span></div>";
+  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='hiddenCount'>hidden idle CTS: 0</span><span id='connState'></span></div></div>";
   html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div><script>";
   html += R"JS((function(){
 var logView=document.getElementById('logView'),since=0,pollMs=1000,pollMaxMs=20000,timer,ws,useWs=true,newBuffered=0;
-var pollFailures=0,wsRetryTimer=null,wsOpenEver=false;
+var pollFailures=0,wsRetryTimer=null,wsOpenEver=false,pollInFlight=null;
 var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
 var pauseEl=document.getElementById('pause'),autoScrollEl=document.getElementById('autoScroll'),newBadge=document.getElementById('newBadge');
 var hideIdleCtsEl=document.getElementById('hideIdleCts'),showHiddenEl=document.getElementById('showHidden');
 var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),hiddenCountEl=document.getElementById('hiddenCount'),connState=document.getElementById('connState');
 var rendered=[],maxRendered=8000;
 var hiddenIdleCts=0;
+function abortLogPoll(){if(pollInFlight){pollInFlight.abort();pollInFlight=null;}}
 function getTag(t){var m=t.match(/\[([^\]]+)\]/);return m?m[1]:'';}
 function getLevelClass(t){if(/\bE:|\bERROR\b/.test(t))return'lvl-e';if(/\bW:|\bWARNING\b/.test(t))return'lvl-w';if(/\bI:|\bNOTICE\b|\bINFO\b/.test(t))return'lvl-i';if(/\bTRACE\b|\bVERBOSE\b/.test(t))return'lvl-v';return'';}
 function esc(s){return s.replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
@@ -1858,23 +1866,23 @@ function capSel(mx){for(var i=0;i<sel.options.length;i++){var o=sel.options[i];o
 function nextPollDelay(){var e=Math.min(pollMaxMs,pollMs*Math.pow(2,Math.min(6,pollFailures)));var j=Math.floor(Math.random()*Math.max(250,Math.floor(e*0.35)));return Math.min(pollMaxMs,e+j);}
 function schedulePoll(ms){stopPoll();timer=setTimeout(poll,Math.max(250,ms||pollMs));}
 function fetchJsonTimeout(url,timeoutMs){var ctl=new AbortController();var t=setTimeout(function(){ctl.abort();},timeoutMs||5000);return fetch(url,{cache:'no-store',signal:ctl.signal}).then(function(r){if(!r.ok)throw new Error('http_'+r.status);return r.json();}).finally(function(){clearTimeout(t);});}
-function poll(){if(document.hidden)return;schedulePoll(pollMs);fetchJsonTimeout('/api/logs?since='+since+'&limit=120',4200).then(function(j){
-pollFailures=0;connState.textContent='ok';
+function poll(){if(document.hidden||pauseEl.checked)return;var ctl=new AbortController();pollInFlight=ctl;var t=setTimeout(function(){ctl.abort();},4200);schedulePoll(pollMs);
+fetch('/api/logs?since='+since+'&limit=120',{cache:'no-store',signal:ctl.signal}).then(function(r){if(!r.ok)throw new Error('http_'+r.status);return r.json();}).then(function(j){if(pauseEl.checked||pollInFlight!==ctl)return;pollFailures=0;connState.textContent='ok';
 if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);
 var lines=j.lines||[];
 receiveLines(lines);
 if(lines.length>0&&typeof lines[lines.length-1].s==='number'){since=lines[lines.length-1].s;}
 else if(typeof j.newestSeq==='number'){since=j.newestSeq;}
-}).catch(function(){pollFailures++;connState.textContent='poll retrying...';schedulePoll(nextPollDelay());});}
+}).catch(function(){if(pauseEl.checked||pollInFlight!==ctl)return;pollFailures++;connState.textContent='poll retrying...';schedulePoll(nextPollDelay());}).finally(function(){clearTimeout(t);if(pollInFlight===ctl)pollInFlight=null;});}
 function startPoll(){stopPoll();streamMode.textContent='poll';pollFailures=0;poll();}
 function stopPoll(){if(timer){clearTimeout(timer);timer=null;}}
 function clearWsRetry(){if(wsRetryTimer){clearTimeout(wsRetryTimer);wsRetryTimer=null;}}
 function scheduleWsReconnect(){clearWsRetry();if(document.hidden||pauseEl.checked||!useWs)return;var wait=Math.min(20000,1000*Math.pow(2,Math.min(6,pollFailures)));wsRetryTimer=setTimeout(connectWs,wait);}
 function connectWs(){if(document.hidden||pauseEl.checked||!useWs)return;streamMode.textContent='ws';clearWsRetry();var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');connState.textContent='connecting';
 ws.onopen=function(){pollFailures=0;wsOpenEver=true;connState.textContent='ws-open';};
-ws.onmessage=function(ev){try{var o=JSON.parse(ev.data);if(o.lines)receiveLines(o.lines);if(o.d)receiveLines(o.d);}catch(e){}};
+ws.onmessage=function(ev){if(pauseEl.checked)return;try{var o=JSON.parse(ev.data);if(o.lines)receiveLines(o.lines);if(o.d)receiveLines(o.d);}catch(e){}};
 ws.onerror=function(){connState.textContent='ws-error';};
-ws.onclose=function(){ws=null;pollFailures++;if(!useWs)return;connState.textContent='ws-closed';if(wsOpenEver){startPoll();}scheduleWsReconnect();};}
+ws.onclose=function(){ws=null;pollFailures++;if(!useWs)return;connState.textContent='ws-closed';if(wsOpenEver&&!pauseEl.checked){startPoll();}scheduleWsReconnect();};}
 function setPreset(inc,exc){fInc.value=inc||'';fExc.value=exc||'';refreshFromRendered();}
 function dl(name,content,type){var b=new Blob([content],{type:type});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);}
 document.getElementById('pAll').addEventListener('click',function(){setPreset('','');});
@@ -1886,8 +1894,8 @@ fInc.addEventListener('input',refreshFromRendered);fExc.addEventListener('input'
 hideIdleCtsEl.addEventListener('change',refreshFromRendered);
 showHiddenEl.addEventListener('change',refreshFromRendered);
 newBadge.addEventListener('click',function(){newBuffered=0;newBadge.style.display='none';refreshFromRendered();logView.scrollTop=logView.scrollHeight;});
-document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();clearWsRetry();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
-document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();clearWsRetry();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
+document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
+document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
 document.getElementById('clr').addEventListener('click',function(){rendered=[];refreshFromRendered();});
 document.getElementById('copyTxt').addEventListener('click',function(){
 var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}
@@ -1907,7 +1915,7 @@ document.getElementById('dlTxt').addEventListener('click',function(){var txt='';
 document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
 document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetchJsonTimeout('/api/logs/config',5000);}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
 fetchJsonTimeout('/api/logs/config',5000).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});
-document.addEventListener('visibilitychange',function(){if(document.hidden){stopPoll();clearWsRetry();if(ws){ws.close();ws=null;}}else if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
+document.addEventListener('visibilitychange',function(){if(document.hidden){stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}}else if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
 if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 })();)JS";
   html += "</script></body></html>";

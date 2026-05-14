@@ -27,6 +27,8 @@ uint8_t message[BALBOA_MESSAGE_SIZE];
 
 AsyncServer bridge(BALBOA_PORT);          // Port number for the server
 AsyncClient *clients[MAX_BRIDGE_CLIENTS]; // Array to hold the clients
+/** Last known IPv4 for each slot (`clients[i]`); AsyncTCP often reports `0.0.0.0` in teardown callbacks. */
+static char bridgeClientRip[MAX_BRIDGE_CLIENTS][40];
 WiFiUDP Discovery;
 
 char packetBuffer[255]; // buffer to hold incoming packet
@@ -34,6 +36,43 @@ char replyBuffer[30];
 
 bool bridgeStarted = false;
 static uint32_t bridgeIngressSequence = 0;
+
+static void bridgeStoreClientRip(int slot, AsyncClient *client)
+{
+  if (slot < 0 || slot >= MAX_BRIDGE_CLIENTS || client == nullptr)
+  {
+    return;
+  }
+  const String rip = client->remoteIP().toString();
+  strncpy(bridgeClientRip[slot], rip.c_str(), sizeof(bridgeClientRip[slot]) - 1);
+  bridgeClientRip[slot][sizeof(bridgeClientRip[slot]) - 1] = '\0';
+}
+
+static String bridgeRipForSlot(int slot, AsyncClient *c)
+{
+  if (slot >= 0 && slot < MAX_BRIDGE_CLIENTS && bridgeClientRip[slot][0] != '\0')
+  {
+    return String(bridgeClientRip[slot]);
+  }
+  return c != nullptr ? c->remoteIP().toString() : String("0.0.0.0");
+}
+
+/** Resolve stored IP when only `AsyncClient *` is available (e.g. ingress path). */
+static String bridgeRipForClient(AsyncClient *c)
+{
+  if (c == nullptr)
+  {
+    return String("0.0.0.0");
+  }
+  for (int i = 0; i < MAX_BRIDGE_CLIENTS; i++)
+  {
+    if (clients[i] == c)
+    {
+      return bridgeRipForSlot(i, c);
+    }
+  }
+  return c->remoteIP().toString();
+}
 
 void bridgeSetup()
 {
@@ -63,7 +102,7 @@ void bridgeLoop()
         faultCaptureAppendf("[fault] bridge new_client ip=%s", rip.c_str());
       }
 #else
-      Log.verbose(F("[Bridge]: New Client Connected %p" CR), client->remoteIP());
+      Log.verbose(F("[Bridge]: New Client Connected %s" CR), client->remoteIP().toString().c_str());
 #endif
       bool added = false;
       for (int i = 0; i < MAX_BRIDGE_CLIENTS; i++)
@@ -71,43 +110,49 @@ void bridgeLoop()
         if (clients[i] == nullptr || !clients[i]->connected())
         {
           clients[i] = client;
-          publishDebug(("Bridge Client Connected (" + String(i) + ") " + clients[i]->remoteIP().toString()).c_str());
+          bridgeStoreClientRip(i, client);
+          const int slot = i;
+          publishDebug(("Bridge Client Connected (" + String(i) + ") " + String(bridgeClientRip[slot])).c_str());
           added = true;
           clients[i]->onData(clientDataAvailable);
-          clients[i]->onDisconnect([](void *r, AsyncClient *c) {
+          clients[i]->onDisconnect([slot](void *r, AsyncClient *c) {
 #if defined(DIAG_FAULT_CAPTURE)
-            const String rip = c->remoteIP().toString();
+            const String rip = bridgeRipForSlot(slot, c);
             Log.warning(F("[Bridge]: Disconnected from Spa %s" CR), rip.c_str());
             faultCaptureAppendf("[fault] bridge disconnect ip=%s", rip.c_str());
 #else
-            Log.verbose(F("[Bridge]: Disconnected from Spa %p" CR), c->remoteIP());
+            const String rip = bridgeRipForSlot(slot, c);
+            Log.verbose(F("[Bridge]: Disconnected from Spa %s" CR), rip.c_str());
 #endif
           });
-          clients[i]->onConnect([](void *r, AsyncClient *c) {
+          clients[i]->onConnect([slot](void *r, AsyncClient *c) {
 #if defined(DIAG_FAULT_CAPTURE)
-            const String rip = c->remoteIP().toString();
+            const String rip = bridgeRipForSlot(slot, c);
             Log.warning(F("[Bridge]: Connected to Spa %s" CR), rip.c_str());
             faultCaptureAppendf("[fault] bridge tcp_connect ip=%s", rip.c_str());
 #else
-            Log.verbose(F("[Bridge]: Connected to Spa %p" CR), c->remoteIP());
+            const String rip = bridgeRipForSlot(slot, c);
+            Log.verbose(F("[Bridge]: Connected to Spa %s" CR), rip.c_str());
 #endif
           });
-          clients[i]->onTimeout([](void *r, AsyncClient *c, uint32_t time) {
+          clients[i]->onTimeout([slot](void *r, AsyncClient *c, uint32_t time) {
 #if defined(DIAG_FAULT_CAPTURE)
-            const String rip = c->remoteIP().toString();
+            const String rip = bridgeRipForSlot(slot, c);
             Log.warning(F("[Bridge]: Timeout from Spa %s ms=%lu" CR), rip.c_str(), static_cast<unsigned long>(time));
             faultCaptureAppendf("[fault] bridge timeout ip=%s", rip.c_str());
 #else
-            Log.verbose(F("[Bridge]: Timeout from Spa" CR));
+            const String rip = bridgeRipForSlot(slot, c);
+            Log.verbose(F("[Bridge]: Timeout from Spa %s ms=%lu" CR), rip.c_str(), static_cast<unsigned long>(time));
 #endif
           });
-          clients[i]->onError([](void *r, AsyncClient *c, int8_t error) {
+          clients[i]->onError([slot](void *r, AsyncClient *c, int8_t error) {
 #if defined(DIAG_FAULT_CAPTURE)
-            const String rip = c->remoteIP().toString();
+            const String rip = bridgeRipForSlot(slot, c);
             Log.warning(F("[Bridge]: Error from Spa %s err=%d" CR), rip.c_str(), static_cast<int>(error));
             faultCaptureAppendf("[fault] bridge tcp_error ip=%s err=%d", rip.c_str(), static_cast<int>(error));
 #else
-            Log.verbose(F("[Bridge]: Error from Spa %d" CR), error);
+            const String rip = bridgeRipForSlot(slot, c);
+            Log.verbose(F("[Bridge]: Error from Spa %s err=%d" CR), rip.c_str(), static_cast<int>(error));
 #endif
           });
           break;
@@ -173,11 +218,11 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     faultCaptureSetLastBridgeIngress(ingressStr.c_str());
 #endif
     Log.verbose(F("[Bridge]: bridge/in %s" CR), ingressStr.c_str());
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%p frame=%s" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%s frame=%s" CR),
                      ingressId,
                      ingressMs,
                      static_cast<unsigned int>(length),
-                     client->remoteIP(),
+                     bridgeRipForClient(client).c_str(),
                      ingressStr.c_str());
     mqtt.publish((mqttTopic + "bridge/in").c_str(), ingressStr.c_str());
     if (message[2] == id && message[4] == 0x04)
@@ -211,15 +256,16 @@ void bridgeSend(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
     {
       sent = true;
 
-      Log.verbose(F("[Bridge]: before bridge/out %p - %s" CR), clients[i]->remoteIP(), msgToString(data).c_str());
+      const String ripOut = bridgeRipForSlot(i, clients[i]);
+      Log.verbose(F("[Bridge]: before bridge/out %s - %s" CR), ripOut.c_str(), msgToString(data).c_str());
       uint8_t output[BALBOA_MESSAGE_SIZE];
       data.copyToArray(output);
       clients[i]->add(reinterpret_cast<const char *>(output), data.size());
       if (!clients[i]->send())
       {
-        Log.error(F("[Bridge]: Error sending to client %p - %s" CR), clients[i]->remoteIP(), msgToString(data).c_str());
+        Log.error(F("[Bridge]: Error sending to client %s - %s" CR), ripOut.c_str(), msgToString(data).c_str());
 #if defined(DIAG_FAULT_CAPTURE)
-        faultCaptureAppendf("[fault] bridge send_fail ip=%s", clients[i]->remoteIP().toString().c_str());
+        faultCaptureAppendf("[fault] bridge send_fail ip=%s", ripOut.c_str());
 #endif
       };
 
@@ -249,13 +295,14 @@ void bridgeSend(uint8_t *message, int length)
     if (clients[i] && clients[i]->connected())
     {
       sent = true;
-      Log.verbose(F("[Bridge]: before bridge/out %p - %s" CR), clients[i]->remoteIP(), msgToString(message, length).c_str());
+      const String ripOut = bridgeRipForSlot(i, clients[i]);
+      Log.verbose(F("[Bridge]: before bridge/out %s - %s" CR), ripOut.c_str(), msgToString(message, length).c_str());
       clients[i]->add(reinterpret_cast<const char *>(message), length);
       if (!clients[i]->send())
       {
-        Log.error(F("[Bridge]: Error sending to client %p - %s" CR), clients[i]->remoteIP(), msgToString(message, length).c_str());
+        Log.error(F("[Bridge]: Error sending to client %s - %s" CR), ripOut.c_str(), msgToString(message, length).c_str());
 #if defined(DIAG_FAULT_CAPTURE)
-        faultCaptureAppendf("[fault] bridge send_fail ip=%s", clients[i]->remoteIP().toString().c_str());
+        faultCaptureAppendf("[fault] bridge send_fail ip=%s", ripOut.c_str());
 #endif
       };
       // Log.verbose(F("[Bridge]: after bridge/out %p - %s" CR), clients[i]->remoteIP(), msgToString(message, length).c_str());

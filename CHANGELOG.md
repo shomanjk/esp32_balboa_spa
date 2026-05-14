@@ -8,6 +8,30 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.8.5] - 2026-05-14
+
+### Fixed
+
+- **Portal `/logs` Pause with WebSocket tail** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Closing the socket for Pause no longer triggers the WS **`onclose`** fallback that unconditionally started HTTP polling, which made the stream appear to keep running. **`onclose`** now starts poll fallback only when not paused; WS **`onmessage`** ignores frames while paused; in-flight **`GET /api/logs`** is aborted on Pause / mode switch / tab hide.
+
+### Changed
+
+- **Portal `/logs` layout** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Logs-only **`html`/`body`** flex column with **`100svh` / `100dvh`**, safe-area padding, and a flex-growing **`#logView`** (`min-height: 0`, **`flex: 1 1 12rem`**) so the viewer uses remaining viewport height on large displays. **`WebSocket tail`** defaults to checked in markup to match the script default.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.5`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.8.4] - 2026-05-14
+
+### Fixed
+
+- **Bridge client IP in logs** ([`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp)): AsyncTCP teardown and error callbacks often report **`remoteIP()`** as **`0.0.0.0`**. The firmware now caches each slot’s address when the client is assigned and uses that (with fallback) for disconnect/connect/timeout/error logging, **`bridgeSend`** send-fail / **`faultCapture`** lines, and **`[BridgeDiag]`** ingress **`from=`** when the pointer matches a slot.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.8.4`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.8.3] - 2026-05-14
 
 ### Fixed
