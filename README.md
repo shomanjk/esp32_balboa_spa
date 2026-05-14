@@ -62,6 +62,7 @@ Planned or deferred enhancements (not commitments; order and timing vary).
 
 - **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the firmware **`/status`** page).
 - **Equipment display names** — On the spa config page (or a dedicated settings area), let users assign friendly names per equipment slot (e.g. Pump 1 → "Lounger Jets", Pump 2 → "Deep Chair Jets"). Store names in firmware-backed nonvolatile storage so labels survive reboots and stay consistent across the web UI (`balboa-spa` + [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) APIs as needed). Optional later: expose the same labels to MQTT / Home Assistant discovery if useful.
+- **`TELNET_LOG` (optional Telnet listener)** — Implementation in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp) starts **TelnetStream** on TCP **23** when the compile flag is set; **`Log`** remains on **`webLogBufferGetLogPrint()`** (Serial + web ring). **Default [`platformio.ini`](platformio.ini) envs omit the flag** (no listener). A future **non-blocking** duplicate log sink over raw TCP/Telnet remains possible if operators want **`nc`**-style tailing without mirroring the global logger (mutex / WDT constraints).
 
 ---
 
@@ -269,7 +270,7 @@ pio run -e M5AtomLite-tub-ota -t upload
 | **`REMOTE_CLIENT`** | TCP client to tub-side gateway (remote/kitchen device). |
 | **`LOCAL_CONNECT`** | UDP discovery on port **30303** (Balboa-style discovery). |
 | **`BRIDGE`** | TCP server on **4257** (Homebridge plugin path). |
-| **`TELNET_LOG`** | Telnet logging. |
+| **`TELNET_LOG`** | Optional. When set, starts **TelnetStream** on TCP **23**; **`Log`** stays on Serial + web ring ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)). **Omitted** in default [`platformio.ini`](platformio.ini) tub/OTA envs. |
 | **`spaEpaper`** | ePaper UI (ESP32-S3 T5 env, etc.). |
 | **`M5_ATOM_LED`** | (Optional, **`M5AtomLite-tub`**) Atom RGB status / RS485 activity. |
 
@@ -279,8 +280,9 @@ pio run -e M5AtomLite-tub-ota -t upload
 '-DLOCAL_CONNECT'
 '-DLOCAL_CLIENT'
 '-DBRIDGE'
-'-DTELNET_LOG'
 ```
+
+Add **`-DTELNET_LOG`** only if you want the optional Telnet listener (not enabled in the checked-in tub/OTA envs).
 
 ### Example: remote ePaper module
 

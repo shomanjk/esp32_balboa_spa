@@ -1789,7 +1789,7 @@ void handleLogsPage(AsyncWebServerRequest *request)
   String html;
   html.reserve(28000);
   html = "<html class=\"logs-portal\">" + headLogs + "<body class=\"logs-portal\"><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page logs-page'>" + webMenuLogs + "<main id='mainContent'><section class='panel logs-panel'><div class='logs-stack'><h1>Device logs</h1>";
-  html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. When <code>TELNET_LOG</code> is enabled, <code>nc &lt;host&gt; 23</code> is still the lowest-overhead tail.</p>";
+  html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. Logs are teed to USB <code>Serial</code> (monitor baud) and this ring. For a live tail without USB, use this page or <code>GET /api/logs</code> (optional WebSocket tail). If the firmware was built with <code>TELNET_LOG</code>, <code>TelnetStream</code> also listens on TCP port 23; the global logger is <em>not</em> switched to Telnet (see Wi‑Fi boot messages).</p>";
   html += R"HTML(<style>
 html.logs-portal,body.logs-portal{min-height:100svh;min-height:100dvh}
 body.logs-portal{display:flex;flex-direction:column;margin:0;box-sizing:border-box;padding-bottom:env(safe-area-inset-bottom,0)}

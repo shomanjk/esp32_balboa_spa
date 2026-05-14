@@ -129,11 +129,11 @@ void wifiConnect()
     Log.notice(F("[WiFi]: Time: %s" CR), getStringTime().c_str());
     otaSetup();
 #ifdef TELNET_LOG
-    Log.notice(F("[WiFi]: Switching to telnet %p" CR), WiFi.localIP());
+    Log.notice(F("[WiFi]: TelnetStream listening on TCP port 23 (IP %p)" CR), WiFi.localIP());
     TelnetStream.begin();
     // Keep the global logger on Serial. Switching all logs to TelnetStream can
     // stall output paths and trigger WDT resets on some runtimes.
-    Log.notice(F("[WiFi]: Telnet stream available on port 23 (serial logger retained)" CR));
+    Log.notice(F("[WiFi]: Telnet listener up; serial + web log tee unchanged" CR));
 #endif
   }
 }
