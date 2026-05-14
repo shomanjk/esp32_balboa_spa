@@ -65,7 +65,7 @@ void cacheRead(uint8_t *data, size_t length)
 void processFragment(uint8_t *data, size_t length)
 {
   const String frameHex = msgToString(data, length);
-  BRIDGE_LOG_NOISY(F("[BridgeDiag]: fragment type=0x%02x len=%u frame=%s" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: fragment type=0x%x len=%u frame=%s" CR),
                    data[4],
                    static_cast<unsigned int>(length),
                    frameHex.c_str());
@@ -93,14 +93,14 @@ void processFragment(uint8_t *data, size_t length)
       break;
     default:
       Log.verbose(F("[Cache]: Unknown Request %x" CR), data[5]);
-      BRIDGE_LOG_NOISY(F("[BridgeDiag]: action=sendMessageToSpa reason=unknown_settings_request code=0x%02x" CR), data[5]);
+      BRIDGE_LOG_NOISY(F("[BridgeDiag]: action=sendMessageToSpa reason=unknown_settings_request code=0x%x" CR), data[5]);
       sendMessageToSpa(data, length);
       break;
     }
   }
   else
   {
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: action=sendMessageToSpa reason=pass_through type=0x%02x" CR), data[4]);
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: action=sendMessageToSpa reason=pass_through type=0x%x" CR), data[4]);
     sendMessageToSpa(data, length);
   }
 }
