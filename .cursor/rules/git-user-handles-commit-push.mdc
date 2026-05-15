@@ -1,10 +1,15 @@
 ---
-description: User handles git commit and push; agent may remind but must not run them unless asked
+description: Never commit or push without explicit user request; user runs git write operations
 alwaysApply: true
 ---
 
 # Git: commit and push
 
-- **Do not** run `git commit`, `git push`, or equivalent (e.g. `gh pr create` that implies push) unless the user **explicitly** asks you to perform that step.
-- **Do** run read-only git commands when useful: `git status`, `git diff`, `git log`, etc.
-- When changes should be saved or shared, **remind** the user in your reply (e.g. “commit and push when you’re ready”) instead of committing or pushing yourself.
+The **user** decides when work is committed or pushed. The agent does **not** run git write operations on their behalf unless they **clearly ask in that conversation** (e.g. “commit this”, “push to origin”, “create the PR and push”).
+
+- **Do not** run `git commit`, `git commit --amend`, `git push` / `git push --force`, `git tag` (when publishing), or **commands that imply a push** (e.g. `gh pr create`, `gh release create` with assets, `git svn dcommit`) **unless the user explicitly requests that step.**
+- **Do not** assume a task is “done” by committing or pushing; stop at file edits and summarize changes.
+- **Do** run read-only git when useful: `git status`, `git diff`, `git log`, etc.
+- When changes should be saved or shared, **remind** the user in your reply (e.g. “commit and push when you’re ready”) instead of running write git yourself.
+
+Project maintainer notes: [`AGENTS.md`](AGENTS.md).

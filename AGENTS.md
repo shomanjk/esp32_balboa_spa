@@ -98,6 +98,7 @@ Planned and deferred **product** direction lives in the README so it stays visib
 
 ## Conventions for agents
 
+- **Git:** Do **not** run **`git commit`**, **`git push`**, or push-implying **`gh`** steps unless the user **explicitly** asks in the same request — see [`.cursor/rules/git-user-handles-commit-push.mdc`](.cursor/rules/git-user-handles-commit-push.mdc). Summarize edits and let the maintainer commit/push.
 - Prefer **small, focused changes**; match existing style and naming.
 - **Never commit `.claude/`** (local Claude / agent worktrees); it is **gitignored**. Accidental gitlinks there broke `git submodule update` ([issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)).
 - **`config.h`** secrets: never commit; use **`config-example.h`** for templates only.
