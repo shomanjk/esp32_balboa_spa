@@ -8,6 +8,12 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Submodule setup and Windows `uploadfs` / `buildfs`** ([`scripts/extra_script.py`](scripts/extra_script.py), [`.gitignore`](.gitignore), [issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)): Accidental **`.claude/worktrees/…`** entries had been committed as gitlinks without `.gitmodules` entries, which broke `git submodule update --init --recursive` for fresh clones. **Removed `.claude/` from the entire repository history** (`git filter-repo`) so clones no longer carry that baggage; added **`.claude/`** to `.gitignore`. Replaced **`cp`** with **`shutil.copy2`** when copying `.env` into `balboa-spa/dist/` so LittleFS builds work on Windows without a POSIX `cp`.
+
+**Maintainers:** Pushing this update requires **`git push --force-with-lease`** to **`origin/ESP32`** (and any other rewritten branches). Contributors with old clones should **`git fetch origin`**, **`git reset --hard origin/ESP32`**, or re-clone.
+
 ## [2.9.0] - 2026-05-14
 
 ### Fixed

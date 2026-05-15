@@ -1,5 +1,6 @@
 Import("env", "projenv")
 import os
+import shutil
 import sys
 
 # Add the following line to your platformio.ini to enable this script
@@ -36,7 +37,7 @@ def before_buildfs(source, target, env):
         print('ERROR: npm run build failed in balboa-spa')
         sys.exit(1)
 
-    os.system('cp .env dist/.env')
+    shutil.copy2('.env', os.path.join('dist', '.env'))
     os.chdir('../')
 
 env.AddPreAction('$BUILD_DIR/littlefs.bin', before_buildfs)

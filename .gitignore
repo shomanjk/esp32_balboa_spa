@@ -4,6 +4,9 @@
 # macOS
 .DS_Store
 
+# Claude Code / local agent worktrees (never version)
+.claude/
+
 # Local PlatformIO installer artifact (if downloaded into repo root)
 get-platformio.py
 

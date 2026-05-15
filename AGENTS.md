@@ -99,6 +99,7 @@ Planned and deferred **product** direction lives in the README so it stays visib
 ## Conventions for agents
 
 - Prefer **small, focused changes**; match existing style and naming.
+- **Never commit `.claude/`** (local Claude / agent worktrees); it is **gitignored**. Accidental gitlinks there broke `git submodule update` ([issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)).
 - **`config.h`** secrets: never commit; use **`config-example.h`** for templates only.
 - When changing SPA behavior, update both places intentionally:
   - SPA source in submodule: `balboa-spa/src/...` (commit/push in SPA fork)
