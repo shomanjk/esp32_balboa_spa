@@ -2,6 +2,8 @@
 
 Community-reported combinations of **spa panel**, **board**, and **PlatformIO environment**. This is not a compatibility guarantee — add what you tested.
 
+For **planned** boards (no checked-in env yet), proposed bring-up steps and checklists live on **[Hardware targets](Hardware-targets)**.
+
 **To add a row:** edit this page or open an [Issue](https://github.com/shomanjk/esp32_balboa_spa/issues) with the same fields.
 
 ---
@@ -35,6 +37,7 @@ What does not:
 
 ## Official hardware docs in the main repo
 
+- [Hardware targets — bring-up checklist](Hardware-targets) — planned boards (e.g. AtomS3) before they have a PlatformIO env
 - [M5 Atom Lite + Atomic RS485 Base](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#m5-atom-lite--atomic-rs485-base-tub-side)
 - [config-example.h](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/config-example.h) — pins for M5 stack, generic ESP32, Unit RS485
 

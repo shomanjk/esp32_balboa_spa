@@ -263,6 +263,8 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
 
 **Alternate wiring:** Generic ESP32 **16/17**, or [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) on the Atom Grove (**TX485_Rx 32** / **TX485_Tx 26**) — comments in [`src/config-example.h`](src/config-example.h).
 
+**Other M5 Atom variants and boards:** Planned targets and a copy-paste **bring-up checklist** live in the wiki **[Hardware targets and bring-up checklist](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets)** (source: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md)). The **Atom Lite + Atomic RS485 Base** section above remains the **supported** tub-side M5 path until additional `env:` blocks land in [`platformio.ini`](platformio.ini).
+
 ---
 
 ## OTA updates (M5 Atom tub-side)

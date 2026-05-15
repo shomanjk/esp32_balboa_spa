@@ -23,6 +23,7 @@ These live in the [main repository](https://github.com/shomanjk/esp32_balboa_spa
 | Page | Purpose |
 |------|---------|
 | [Getting started](Getting-started) | First-time clone, `config.h`, flash, verify `/status` |
+| [Hardware targets](Hardware-targets) | Supported vs planned boards, bring-up checklist (e.g. AtomS3) |
 | [Troubleshooting FAQ](Troubleshooting-FAQ) | Symptom → checks → deeper repo links |
 | [Home Assistant setup](Home-Assistant-setup) | Broker, discovery, temp units, example automation |
 | [Hardware field notes](Hardware-field-notes) | Community-tested tubs and boards |
