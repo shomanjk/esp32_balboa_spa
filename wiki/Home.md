@@ -2,7 +2,7 @@
 
 ESP32 firmware that talks to a **Balboa** spa controller over **RS485**: read status, control equipment from the web portal, and publish state over **MQTT** / **Home Assistant**.
 
-**Last reviewed for firmware:** 2.9.0 (see [`VERSION`](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/main.h) in the main repo).
+**Last reviewed for firmware:** 2.10.0 (see [`VERSION`](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/main.h) in the main repo).
 
 ---
 

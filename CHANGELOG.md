@@ -8,6 +8,12 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-05-15
+
+### Changed
+
+- **Portal `GET /config` layout:** Responsive two-column grid from **720px** (aligned with `/status`), in-page section links, panels ordered **equipment wiring → controller identity → filter configuration → panel preferences → other datasets → LittleFS**, `dl` key/value rows for identity/preferences/metadata, equipment wiring as a **table**, Filter 1/2 summary cards plus concise footer rows, monospace hex in `<pre>` with horizontal scroll, and full-width panels for **Other datasets** and **LittleFS** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)).
+
 ### Added
 
 - **`GET /config` spa diagnostics:** Portal Spa Configuration page now shows **controller identity** from the Information response (`0x24`): software ID, **system model**, setup number, configuration signature, heater voltage/type (with protocol-minded labels), DIP switches, CRC; **preferences** block; expanded equipment CRC plus collapsible raw hex for information / preferences / configuration / filter / settings-0x04 / fault frames; **other datasets** (settings `0x04`, fault log) when received ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)). Filter Configuration and LittleFS sections render even when the equipment configuration frame is still missing.
@@ -22,6 +28,10 @@ where version numbers are used.
 - **Submodule setup and Windows `uploadfs` / `buildfs`** ([`scripts/extra_script.py`](scripts/extra_script.py), [`.gitignore`](.gitignore), [issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)): Accidental **`.claude/worktrees/…`** entries had been committed as gitlinks without `.gitmodules` entries, which broke `git submodule update --init --recursive` for fresh clones. **Removed `.claude/` from the entire repository history** (`git filter-repo`) so clones no longer carry that baggage; added **`.claude/`** to `.gitignore`. Replaced **`cp`** with **`shutil.copy2`** when copying `.env` into `balboa-spa/dist/` so LittleFS builds work on Windows without a POSIX `cp`.
 
 **Maintainers:** Pushing this update requires **`git push --force-with-lease`** to **`origin/ESP32`** (and any other rewritten branches). Contributors with old clones should **`git fetch origin`**, **`git reset --hard origin/ESP32`**, or re-clone.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.10.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.9.0] - 2026-05-14
 

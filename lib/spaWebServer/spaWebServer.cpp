@@ -1576,12 +1576,89 @@ void handleConfig(AsyncWebServerRequest *request)
 {
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
 
+  const char *configEnhancements =
+      "<style>"
+      "html{scroll-behavior:smooth;}"
+      ".config-layout{display:grid;grid-template-columns:1fr;gap:var(--space-3);}"
+      "@media (min-width:720px){.config-layout{grid-template-columns:1fr 1fr;}}"
+      ".config-layout .panel{margin-bottom:0;}"
+      ".config-span-full{grid-column:1/-1;}"
+      ".config-toc{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:0 0 var(--space-2) 0;padding:0;list-style:none;}"
+      ".config-toc li{margin:0;padding:0;border-bottom:none !important;}"
+      ".config-toc a{font-size:14px;color:#0f4a87;text-decoration:underline;}"
+      ".config-toc a:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px;}"
+      "dl.config-kv{margin:0;padding:0;}"
+      "dl.config-kv .kv-row{display:grid;grid-template-columns:minmax(110px,42%) 1fr;gap:6px 12px;padding:var(--space-1) 0;"
+      "border-bottom:1px dashed #e5eaef;align-items:start;}"
+      "dl.config-kv .kv-row:last-child{border-bottom:none;}"
+      "dl.config-kv dt{margin:0;font-weight:600;color:var(--muted);font-size:0.92rem;}"
+      "dl.config-kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
+      "table.config-equip{width:100%;border-collapse:collapse;margin-top:8px;}"
+      "table.config-equip th,table.config-equip td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}"
+      "table.config-equip th{font-size:13px;color:var(--muted);}"
+      ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 var(--space-3) 0;}"
+      "@media (max-width:560px){.config-filter-strip{grid-template-columns:1fr;}}"
+      ".config-filter-card{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
+      ".config-filter-card h2{margin:0 0 8px 0;font-size:0.88rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}"
+      ".config-filter-card p{margin:4px 0;font-size:14px;}"
+      "pre.config-hex{margin:8px 0 0 0;padding:10px 12px;font-size:12px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;"
+      "overflow-x:auto;word-break:break-all;white-space:pre-wrap;background:#f8fafc;border:1px solid var(--border);border-radius:8px;}"
+      ".config-layout details{margin-top:10px;}"
+      "</style>";
+
   String html;
-  html.reserve(34000);
-  html = "<html>" + headConfig + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig +
+  html.reserve(42000);
+  html = "<html>" + headConfig + String(configEnhancements) +
+         "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig +
          "<main id='mainContent'>" + ePaper;
 
-  html += "<section class='panel'><h1>Controller identity</h1>";
+  html += "<nav aria-label='Spa Config sections'><ul class='config-toc'>"
+          "<li><a href='#cfg-equipment'>Equipment wiring</a></li>"
+          "<li><a href='#cfg-identity'>Controller identity</a></li>"
+          "<li><a href='#cfg-filter'>Filter configuration</a></li>"
+          "<li><a href='#cfg-preferences'>Panel preferences</a></li>"
+          "<li><a href='#cfg-other'>Other datasets</a></li>"
+          "<li><a href='#cfg-littlefs'>LittleFS</a></li>"
+          "</ul></nav>";
+
+  html += "<div class='config-layout'>";
+
+  html += "<section class='panel' id='cfg-equipment'><h1>Equipment wiring (configuration)</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Which pumps, lights, and loads exist on this spa pack (configuration frame). "
+          "This differs from live runtime state on <a href='/status'>Spa Status</a>.</p>";
+  if (spaConfigurationData.lastUpdate == 0)
+  {
+    html += "<p style=\"margin:0\"><em>Configuration frame not available yet.</em></p>";
+  }
+  else
+  {
+    html += "<dl class=\"config-kv\">";
+    html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>magicNumber</dt><dd>" + String(spaConfigurationData.magicNumber) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>configuration CRC</dt><dd>" + String(spaConfigurationData.crc) + "</dd></div>";
+    html += "</dl>";
+    html += "<table class=\"config-equip\"><thead><tr><th>Load</th><th>Value</th></tr></thead><tbody>";
+    html += "<tr><td>Pump 1</td><td>" + String(spaConfigurationData.pump1) + "</td></tr>";
+    html += "<tr><td>Pump 2</td><td>" + String(spaConfigurationData.pump2) + "</td></tr>";
+    html += "<tr><td>Pump 3</td><td>" + String(spaConfigurationData.pump3) + "</td></tr>";
+    html += "<tr><td>Pump 4</td><td>" + String(spaConfigurationData.pump4) + "</td></tr>";
+    html += "<tr><td>Pump 5</td><td>" + String(spaConfigurationData.pump5) + "</td></tr>";
+    html += "<tr><td>Pump 6</td><td>" + String(spaConfigurationData.pump6) + "</td></tr>";
+    html += "<tr><td>Light 1</td><td>" + String(spaConfigurationData.light1) + "</td></tr>";
+    html += "<tr><td>Light 2</td><td>" + String(spaConfigurationData.light2) + "</td></tr>";
+    html += "<tr><td>Blower</td><td>" + String(spaConfigurationData.blower) + "</td></tr>";
+    html += "<tr><td>Circulation pump</td><td>" + String(spaConfigurationData.circulationPump) + "</td></tr>";
+    html += "<tr><td>Aux 1</td><td>" + String(spaConfigurationData.aux1) + "</td></tr>";
+    html += "<tr><td>Aux 2</td><td>" + String(spaConfigurationData.aux2) + "</td></tr>";
+    html += "<tr><td>Mister</td><td>" + String(spaConfigurationData.mister) + "</td></tr>";
+    html += "<tr><td>temp_scale</td><td>" + String(spaConfigurationData.temp_scale) + "</td></tr>";
+    html += "</tbody></table>";
+    html += "<details><summary><b>Raw configuration frame (hex)</b></summary><pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaConfigurationData.rawData, spaConfigurationData.rawDataLength, 48) + "</pre></details>";
+  }
+  html += "</section>";
+
+  html += "<section class='panel' id='cfg-identity'><h1>Controller identity</h1>";
   html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Decoded from the spa <strong>Information</strong> response "
           "(Balboa message type <code>0x24</code>). Field meanings match "
           "<a href=\"https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md\" target=\"_blank\" rel=\"noopener\">protocol.md — Information Response</a>.</p>";
@@ -1593,24 +1670,51 @@ void handleConfig(AsyncWebServerRequest *request)
   }
   else
   {
-    html += "<ul>";
-    html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaInformationData.lastUpdate) + "</li>";
-    html += "<li><b>Software ID (SSID style): </b>" + spaConfigTrimCopy(spaInformationData.softwareID) + "</li>";
-    html += "<li><b>System model (ASCII): </b>" + spaConfigTrimCopy(spaInformationData.model) + "</li>";
-    html += "<li><b>Setup number: </b>" + String(spaInformationData.setupNumber) + "</li>";
-    html += "<li><b>Configuration signature: </b>" + spaInformationConfigSignatureHex(spaInformationData) + "</li>";
-    html += "<li><b>Heater voltage (byte): </b>" + spaInformationHeaterVoltageLabel(spaInformationData.voltage) + "</li>";
-    html += "<li><b>Heater type (byte): </b>" + spaInformationHeaterTypeLabel(spaInformationData.heaterType) + "</li>";
-    html += "<li><b>DIP switch pair (as firmware stores): </b>" + String(spaInformationData.dipSwitch) + "</li>";
-    html += "<li><b>Frame CRC byte: </b>" + String(spaInformationData.crc) + "</li>";
-    html += "</ul>";
-    html += "<details style=\"margin-top:10px\"><summary><b>Raw information frame (hex)</b></summary>"
-            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
-            spaHexWordsUpper(spaInformationData.rawData, spaInformationData.rawDataLength, 48) + "</p></details>";
+    html += "<dl class=\"config-kv\">";
+    html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaInformationData.lastUpdate) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Software ID</dt><dd>" + spaConfigTrimCopy(spaInformationData.softwareID) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>System model</dt><dd>" + spaConfigTrimCopy(spaInformationData.model) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Setup number</dt><dd>" + String(spaInformationData.setupNumber) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Configuration signature</dt><dd>" + spaInformationConfigSignatureHex(spaInformationData) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Heater voltage</dt><dd>" + spaInformationHeaterVoltageLabel(spaInformationData.voltage) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Heater type</dt><dd>" + spaInformationHeaterTypeLabel(spaInformationData.heaterType) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>DIP switches</dt><dd>" + String(spaInformationData.dipSwitch) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Frame CRC byte</dt><dd>" + String(spaInformationData.crc) + "</dd></div>";
+    html += "</dl>";
+    html += "<details><summary><b>Raw information frame (hex)</b></summary><pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaInformationData.rawData, spaInformationData.rawDataLength, 48) + "</pre></details>";
     html += "</section>";
   }
 
-  html += "<section class='panel'><h1>Panel preferences</h1>";
+  html += "<section class='panel' id='cfg-filter'><h1>Filter configuration</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock. <b>Filter N Time</b> is the daily start of that filtration cycle. <b>Filter N Duration</b> is how long the pump runs for that cycle each day (circulation through the filter). Many tubs use two staggered cycles; the second may be unused on some packs.</p>";
+  html += "<div class=\"config-filter-strip\">";
+  html += "<div class=\"config-filter-card\"><h2>Filter 1</h2>"
+          "<p><strong>Start time:</strong> " +
+          formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</p>"
+                                                                                                   "<p><strong>Duration:</strong> " +
+          formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</p></div>";
+  html += "<div class=\"config-filter-card\"><h2>Filter 2</h2>"
+          "<p><strong>Start time:</strong> " +
+          formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</p>"
+                                                                                                   "<p><strong>Duration:</strong> " +
+          formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</p></div>";
+  html += "</div>";
+  html += "<dl class=\"config-kv\">";
+  html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</dd></div>";
+  if (spaFilterSettingsData.lastUpdate != 0)
+  {
+    html += "<div class=\"kv-row\"><dt>Filter 2 enabled</dt><dd>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</dd></div>";
+  }
+  html += "</dl>";
+  if (spaFilterSettingsData.lastUpdate != 0)
+  {
+    html += "<details><summary><b>Raw filter-settings frame (hex)</b></summary><pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength, 48) + "</pre></details>";
+  }
+  html += "</section>";
+
+  html += "<section class='panel' id='cfg-preferences'><h1>Panel preferences</h1>";
   html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">From the spa <strong>Preferences</strong> response. Numeric codes follow MQTT topics under "
           "<code>Spa/&lt;gateway&gt;/preferences/</code>.</p>";
   if (spaPreferencesData.lastUpdate == 0)
@@ -1619,56 +1723,21 @@ void handleConfig(AsyncWebServerRequest *request)
   }
   else
   {
-    html += "<ul>";
-    html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</li>";
-    html += "<li><b>reminders: </b>" + String(spaPreferencesData.reminders) + "</li>";
-    html += "<li><b>tempScale: </b>" + String(spaPreferencesData.tempScale) + "</li>";
-    html += "<li><b>clockMode: </b>" + String(spaPreferencesData.clockMode) + "</li>";
-    html += "<li><b>cleanupCycle: </b>" + String(spaPreferencesData.cleanupCycle) + "</li>";
-    html += "<li><b>dolphinAddress: </b>" + String(spaPreferencesData.dolphinAddress) + "</li>";
-    html += "<li><b>m8AI: </b>" + String(spaPreferencesData.m8AI) + "</li>";
-    html += "</ul>";
-    html += "<details style=\"margin-top:10px\"><summary><b>Raw preferences frame (hex)</b></summary>"
-            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
-            spaHexWordsUpper(spaPreferencesData.rawData, spaPreferencesData.rawDataLength, 48) + "</p></details>";
+    html += "<dl class=\"config-kv\">";
+    html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>reminders</dt><dd>" + String(spaPreferencesData.reminders) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>tempScale</dt><dd>" + String(spaPreferencesData.tempScale) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>clockMode</dt><dd>" + String(spaPreferencesData.clockMode) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>cleanupCycle</dt><dd>" + String(spaPreferencesData.cleanupCycle) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>dolphinAddress</dt><dd>" + String(spaPreferencesData.dolphinAddress) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>m8AI</dt><dd>" + String(spaPreferencesData.m8AI) + "</dd></div>";
+    html += "</dl>";
+    html += "<details><summary><b>Raw preferences frame (hex)</b></summary><pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaPreferencesData.rawData, spaPreferencesData.rawDataLength, 48) + "</pre></details>";
     html += "</section>";
   }
 
-  html += "<section class='panel'><h1>Equipment wiring (configuration)</h1>";
-  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Which pumps, lights, and loads exist on this spa pack (configuration frame). "
-          "This differs from live runtime state on <a href='/status'>Spa Status</a>.</p><ul>";
-  if (spaConfigurationData.lastUpdate == 0)
-  {
-    html += "<li><em>Configuration frame not available yet.</em></li>";
-    html += "</ul>";
-  }
-  else
-  {
-    html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</li>";
-    html += "<li><b>magicNumber: </b>" + String(spaConfigurationData.magicNumber) + "</li>";
-    html += "<li><b>configuration CRC byte: </b>" + String(spaConfigurationData.crc) + "</li>";
-    html += "<li><b>Pump 1: </b>" + String(spaConfigurationData.pump1) + "</li>";
-    html += "<li><b>Pump 2: </b>" + String(spaConfigurationData.pump2) + "</li>";
-    html += "<li><b>Pump 3: </b>" + String(spaConfigurationData.pump3) + "</li>";
-    html += "<li><b>Pump 4: </b>" + String(spaConfigurationData.pump4) + "</li>";
-    html += "<li><b>Pump 5: </b>" + String(spaConfigurationData.pump5) + "</li>";
-    html += "<li><b>Pump 6: </b>" + String(spaConfigurationData.pump6) + "</li>";
-    html += "<li><b>Light 1: </b>" + String(spaConfigurationData.light1) + "</li>";
-    html += "<li><b>Light 2: </b>" + String(spaConfigurationData.light2) + "</li>";
-    html += "<li><b>Blower: </b>" + String(spaConfigurationData.blower) + "</li>";
-    html += "<li><b>Circulation Pump: </b>" + String(spaConfigurationData.circulationPump) + "</li>";
-    html += "<li><b>Aux 1: </b>" + String(spaConfigurationData.aux1) + "</li>";
-    html += "<li><b>Aux 2: </b>" + String(spaConfigurationData.aux2) + "</li>";
-    html += "<li><b>Mister: </b>" + String(spaConfigurationData.mister) + "</li>";
-    html += "<li><b>temp_scale: </b>" + String(spaConfigurationData.temp_scale) + "</li>";
-    html += "</ul>";
-    html += "<details style=\"margin-top:10px\"><summary><b>Raw configuration frame (hex)</b></summary>"
-            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
-            spaHexWordsUpper(spaConfigurationData.rawData, spaConfigurationData.rawDataLength, 48) + "</p></details>";
-  }
-  html += "</section>";
-
-  html += "<section class='panel'><h1>Other spa datasets</h1><ul>";
+  html += "<section class='panel config-span-full' id='cfg-other'><h1>Other spa datasets</h1><ul>";
   if (spaSettings0x04Data.lastUpdate == 0)
   {
     html += "<li><b>Settings 0x04:</b> <em>not received yet</em></li>";
@@ -1678,9 +1747,8 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "<li><p style=\"margin:0 0 6px 0\"><b>Settings 0x04</b> — <span style=\"color:var(--muted)\">lastUpdate:</span> " +
             statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) +
             ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaSettings0x04Data.crc) + "</p>";
-    html += "<details><summary><b>Raw settings 0x04 frame (hex)</b></summary>"
-            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
-            spaHexWordsUpper(spaSettings0x04Data.rawData, spaSettings0x04Data.rawDataLength, 48) + "</p></details></li>";
+    html += "<details><summary><b>Raw settings 0x04 frame (hex)</b></summary><pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaSettings0x04Data.rawData, spaSettings0x04Data.rawDataLength, 48) + "</pre></details></li>";
   }
   if (spaFaultLogData.lastUpdate == 0)
   {
@@ -1692,37 +1760,18 @@ void handleConfig(AsyncWebServerRequest *request)
             "<span style=\"color:var(--muted)\">lastUpdate:</span> " +
             statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) +
             ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaFaultLogData.crc) + "</p>";
-    html += "<details><summary><b>Raw fault-log frame (hex)</b></summary>"
-            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
-            spaHexWordsUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength, 48) + "</p></details></li>";
+    html += "<details><summary><b>Raw fault-log frame (hex)</b></summary><pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength, 48) + "</pre></details></li>";
   }
   html += "</ul></section>";
 
-  html += "<section class='panel'><h1>Filter Configuration</h1>";
-  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock. <b>Filter N Time</b> is the daily start of that filtration cycle. <b>Filter N Duration</b> is how long the pump runs for that cycle each day (circulation through the filter). Many tubs use two staggered cycles; the second may be unused on some packs.</p><ul>";
-  html += "<li><b>lastUpdate (filter settings): </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</li>";
-  if (spaFilterSettingsData.lastUpdate != 0)
-  {
-    html += "<li><b>Filter 2 enabled: </b>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</li>";
-  }
-  html += "<li><b>Filter 1 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</li>";
-  html += "<li><b>Filter 1 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</li>";
-  html += "<li><b>Filter 2 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</li>";
-  html += "<li><b>Filter 2 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</li>";
-  html += "</ul>";
-  if (spaFilterSettingsData.lastUpdate != 0)
-  {
-    html += "<details style=\"margin-top:10px\"><summary><b>Raw filter-settings frame (hex)</b></summary>"
-            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
-            spaHexWordsUpper(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength, 48) + "</p></details>";
-  }
-  html += "</section>";
-
-  html += "<section class='panel'><h1>LittleFS Configuration</h1>";
+  html += "<section class='panel config-span-full' id='cfg-littlefs'><h1>LittleFS configuration</h1>";
   html += "<p class='chart-caption'>Load on demand to avoid large payloads on weak links.</p>";
   html += "<button class='equip-btn' type='button' id='cfgLoadLittleFsBtn'>Load LittleFS file list</button>";
   html += "<ul id='cfgLittleFsContainer'></ul>";
-  html += "</section><script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');if(!btn||!box)return;"
+  html += "</section></div>";
+
+  html += "<script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');if(!btn||!box)return;"
           "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
           "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
           "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
