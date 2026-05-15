@@ -10,6 +10,7 @@ where version numbers are used.
 
 ### Documentation
 
+- **Wiki [Hardware field notes](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-field-notes):** Cross-check **BP501** / **CL501X1** / agency strings against [Balboa BP 501/601](https://www.balboawatergroup.com/BP501/) and [ccutrer protocol.md](https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md); add label-reading guide and **BP501-CL501X1-AS** reporter row (source: [`wiki/Hardware-field-notes.md`](wiki/Hardware-field-notes.md)).
 - **README:** Under [Build with PlatformIO](README.md#build-with-platformio), document **firmware first, then `uploadfs`** for a first install, note that LittleFS assets are not in the firmware image by default, and link the [Getting started](https://github.com/shomanjk/esp32_balboa_spa/wiki/Getting-started) wiki checklist ([issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)).
 
 ### Fixed
