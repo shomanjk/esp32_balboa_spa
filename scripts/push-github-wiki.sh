@@ -26,8 +26,10 @@ rm -rf "${TMP}"
 if git clone "${REMOTE}" "${TMP}" 2>/dev/null; then
   :
 else
-  echo "Wiki git repo not found. Run: gh workflow run publish-wiki.yml" >&2
-  echo "Or create the first page on https://github.com/${OWNER}/${NAME}/wiki" >&2
+  echo "Wiki git repo not found (not bootstrapped yet)." >&2
+  echo "See wiki/BOOTSTRAP.md — create Home once on:" >&2
+  echo "  https://github.com/${OWNER}/${NAME}/wiki/_new?wiki%5Btitle%5D=Home" >&2
+  echo "Then run: gh workflow run publish-wiki.yml --ref $(git -C "${ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo ESP32)" >&2
   exit 1
 fi
 

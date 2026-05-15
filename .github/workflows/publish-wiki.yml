@@ -25,3 +25,5 @@ jobs:
           path: wiki
           strategy: init
           commit-message: "Sync wiki from ${{ github.sha }}"
+          ignore: |
+            BOOTSTRAP.md
