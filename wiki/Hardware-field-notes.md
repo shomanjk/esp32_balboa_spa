@@ -26,7 +26,7 @@ The firmware’s **information** response can expose a **system model** ASCII fi
 
 | Tub / panel (report) | Board / stack | PlatformIO env | RS485 notes | Outcome |
 |----------------------|---------------|----------------|-------------|---------|
-| Balboa **BP501**; agency **`BP501-CL501X1-AS`**; also stamped **CL501X1** (heater/pack segment — see above) | [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) + [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (stacked tub-side gateway) | `M5AtomLite-tub` | **`TX485_Rx` 22**, **`TX485_Tx` 19**; **`AUTO_TX true`**; A/B per base labeling (swap if no frames); [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer); BWG [BP 501](https://www.balboawatergroup.com/BP501/) | **Works** — maintainer tub-side stack ([README](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#m5-atom-lite--atomic-rs485-base-tub-side), [`config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/config-example.h)) |
+| Balboa **BP501**; agency **`BP501-CL501X1-AS`**; also stamped **CL501X1** (heater/pack segment — see above) | [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) + [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (stacked tub-side gateway) | `M5AtomLite-tub` | **`TX485_Rx` 22**, **`TX485_Tx` 19**; **`AUTO_TX true`**; A/B per base labeling (swap if no frames); [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer); BWG [BP 501](https://www.balboawatergroup.com/BP501/) | **Works** — maintainer tub-side stack ([README](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side), [`config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h)) |
 | *(example)* Balboa BP7xxx | M5 Atom Lite + Atomic RS485 Base | `M5AtomLite-tub` | A/B as labeled on base; `AUTO_TX true` | Example row |
 
 ---
@@ -52,8 +52,8 @@ What does not:
 ## Official hardware docs in the main repo
 
 - [Hardware targets — bring-up checklist](Hardware-targets) — planned boards (e.g. AtomS3) before they have a PlatformIO env
-- [M5 Atom Lite + Atomic RS485 Base](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#m5-atom-lite--atomic-rs485-base-tub-side)
-- [config-example.h](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/config-example.h) — pins for M5 stack, generic ESP32, Unit RS485
+- [M5 Atom Lite + Atomic RS485 Base](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side)
+- [config-example.h](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) — pins for M5 stack, generic ESP32, Unit RS485
 
 Bus tapping and wire colors: [ccutrer BWA wiki — physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer).
 

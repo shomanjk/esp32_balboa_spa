@@ -1,6 +1,6 @@
 # Home Assistant setup
 
-Practical walkthrough for MQTT telemetry and **MQTT Discovery**. Command topic reference remains in the [README](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#mqtt-and-home-assistant).
+Practical walkthrough for MQTT telemetry and **MQTT Discovery**. Command topic reference remains in the [README](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#mqtt-and-home-assistant).
 
 ---
 
@@ -61,7 +61,7 @@ To disable discovery entirely:
 
 ## 3. Celsius tubs
 
-Discovery uses a **static** `unit_of_measurement` (default **°F**). If your tub reports °C, add to `config.h` (see [config-example.h](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/config-example.h)):
+Discovery uses a **static** `unit_of_measurement` (default **°F**). If your tub reports °C, add to `config.h` (see [config-example.h](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h)):
 
 ```c
 #define MQTT_HA_TEMP_UNIT "\xC2\xB0" "C"
@@ -121,7 +121,7 @@ Payload: toggle
 
 Pump buttons use `Off`, `Low`, `High` (single-speed pumps: `Off` / `Low` only). Button codes match your spa config — use `/status` or MQTT status topics to identify equipment.
 
-Full v1 command list: [README — MQTT command topics](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#mqtt-command-topics-v1).
+Full v1 command list: [README — MQTT command topics](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#mqtt-command-topics-v1).
 
 ---
 

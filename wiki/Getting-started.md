@@ -1,6 +1,6 @@
 # Getting started
 
-Checklist for a first **tub-side** install (M5 Atom Lite + Atomic RS485 Base). For generic ESP32 boards, use the same steps but set UART pins per the [README M5 / pin section](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#m5-atom-lite--atomic-rs485-base-tub-side) and [`src/config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/main/src/config-example.h).
+Checklist for a first **tub-side** install (M5 Atom Lite + Atomic RS485 Base). For generic ESP32 boards, use the same steps but set UART pins per the [README M5 / pin section](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side) and [`src/config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h).
 
 ---
 
@@ -48,7 +48,7 @@ Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pi
 pio run -e M5AtomLite-tub -t upload
 ```
 
-Set `upload_port` in [`platformio.ini`](https://github.com/shomanjk/esp32_balboa_spa/blob/main/platformio.ini) or pass `--upload-port /dev/cu.…` if PlatformIO does not auto-detect USB.
+Set `upload_port` in [`platformio.ini`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/platformio.ini) or pass `--upload-port /dev/cu.…` if PlatformIO does not auto-detect USB.
 
 ### 4. Flash filesystem (web UI)
 
@@ -60,7 +60,7 @@ Run after the first firmware upload, and again when the web bundle changes.
 
 ### 5. Verify on the LAN
 
-1. Find the device: serial log shows hostname/IP, or try `http://spa-XXXXXXXXXXXX.local/` (hostname is derived from Wi‑Fi MAC — see [`wifiModule.cpp`](https://github.com/shomanjk/esp32_balboa_spa/blob/main/lib/wifiModule/wifiModule.cpp)).
+1. Find the device: serial log shows hostname/IP, or try `http://spa-XXXXXXXXXXXX.local/` (hostname is derived from Wi‑Fi MAC — see [`wifiModule.cpp`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/lib/wifiModule/wifiModule.cpp)).
 2. Open **`/status`** — live water temp and equipment should update within a short time.
 3. Open **`/state`** — Wi‑Fi, firmware version, RS485 health summary.
 4. Optional JSON checks:
@@ -85,7 +85,7 @@ Follow [Home Assistant setup](Home-Assistant-setup) once the spa bus is healthy.
 | `AUTO_TX` | **`true`** recommended |
 | No frames? | Verify A/B (swap if needed); check `/api/rs485` |
 
-Full detail: [README — M5 Atom Lite + Atomic RS485 Base](https://github.com/shomanjk/esp32_balboa_spa/blob/main/README.md#m5-atom-lite--atomic-rs485-base-tub-side).
+Full detail: [README — M5 Atom Lite + Atomic RS485 Base](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side).
 
 ---
 
@@ -93,6 +93,6 @@ Full detail: [README — M5 Atom Lite + Atomic RS485 Base](https://github.com/sh
 
 - [Troubleshooting FAQ](Troubleshooting-FAQ) if `/status` stays empty
 - [Home Assistant setup](Home-Assistant-setup)
-- [OTA workflow](https://github.com/shomanjk/esp32_balboa_spa/blob/main/OTA_LOGGING_WORKFLOW.md) for wireless updates
+- [OTA workflow](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/OTA_LOGGING_WORKFLOW.md) for wireless updates
 
 [← Wiki home](Home)

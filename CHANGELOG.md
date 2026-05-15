@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
+
 ## [2.10.0] - 2026-05-15
 
 ### Changed
