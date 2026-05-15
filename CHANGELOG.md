@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /config` spa diagnostics:** Portal Spa Configuration page now shows **controller identity** from the Information response (`0x24`): software ID, **system model**, setup number, configuration signature, heater voltage/type (with protocol-minded labels), DIP switches, CRC; **preferences** block; expanded equipment CRC plus collapsible raw hex for information / preferences / configuration / filter / settings-0x04 / fault frames; **other datasets** (settings `0x04`, fault log) when received ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)). Filter Configuration and LittleFS sections render even when the equipment configuration frame is still missing.
+
 ### Documentation
 
 - **Wiki [Hardware field notes](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-field-notes):** Cross-check **BP501** / **CL501X1** / agency strings against [Balboa BP 501/601](https://www.balboawatergroup.com/BP501/) and [ccutrer protocol.md](https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md); add label-reading guide and **BP501-CL501X1-AS** reporter row (source: [`wiki/Hardware-field-notes.md`](wiki/Hardware-field-notes.md)).

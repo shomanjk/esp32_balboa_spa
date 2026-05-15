@@ -1507,22 +1507,146 @@ void handleStatus(AsyncWebServerRequest *request)
   Log.verbose(F("[Web]: /status sent len=%u" CR), static_cast<unsigned>(statusOutLen));
 }
 
+static String spaConfigTrimCopy(const char *s)
+{
+  String out(s ? s : "");
+  out.trim();
+  return out;
+}
+
+/** Balboa Information Response inner payload starts at rawData[5] (see parseInformationResponse). */
+static String spaInformationConfigSignatureHex(const SpaInformationData &inf)
+{
+  constexpr unsigned kNeed = 5 + 17;
+  if (inf.rawDataLength < kNeed)
+  {
+    return String("(pending)");
+  }
+  const uint8_t *p = inf.rawData + 5;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%02X%02X%02X%02X", static_cast<unsigned>(p[13]), static_cast<unsigned>(p[14]),
+           static_cast<unsigned>(p[15]), static_cast<unsigned>(p[16]));
+  return String(buf);
+}
+
+static String spaInformationHeaterVoltageLabel(uint8_t hv)
+{
+  char hx[16];
+  snprintf(hx, sizeof(hx), "0x%02X", static_cast<unsigned>(hv));
+  if (hv == 0x01)
+  {
+    return String("240V class (") + hx + ")";
+  }
+  return String(hx);
+}
+
+static String spaInformationHeaterTypeLabel(uint8_t ht)
+{
+  char hx[16];
+  snprintf(hx, sizeof(hx), "0x%02X", static_cast<unsigned>(ht));
+  if (ht == 0x0a || ht == 0x06)
+  {
+    return String("Standard (") + hx + ")";
+  }
+  return String(hx);
+}
+
+static String spaHexWordsUpper(const uint8_t *data, uint8_t len, size_t maxShow)
+{
+  String out;
+  const size_t n = static_cast<size_t>(len) <= maxShow ? static_cast<size_t>(len) : maxShow;
+  for (size_t i = 0; i < n; ++i)
+  {
+    if (i > 0)
+    {
+      out += ' ';
+    }
+    char b[4];
+    snprintf(b, sizeof(b), "%02X", static_cast<unsigned>(data[i]));
+    out += b;
+  }
+  if (static_cast<size_t>(len) > maxShow)
+  {
+    out += " ...";
+  }
+  return out;
+}
+
 void handleConfig(AsyncWebServerRequest *request)
 {
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
 
   String html;
-  html.reserve(24000);
-  html = "<html>" + headConfig + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig + "<main id='mainContent'>" + ePaper + "<section class='panel'><h1>Spa Configuration</h1><ul>";
+  html.reserve(34000);
+  html = "<html>" + headConfig + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig +
+         "<main id='mainContent'>" + ePaper;
+
+  html += "<section class='panel'><h1>Controller identity</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Decoded from the spa <strong>Information</strong> response "
+          "(Balboa message type <code>0x24</code>). Field meanings match "
+          "<a href=\"https://github.com/ccutrer/balboa_worldwide_app/blob/main/doc/protocol.md\" target=\"_blank\" rel=\"noopener\">protocol.md — Information Response</a>.</p>";
+  if (spaInformationData.lastUpdate == 0)
+  {
+    html += "<p style=\"margin:0\"><em>Not received yet.</em> The gateway requests this after startup; wait on RS485 or check "
+            "<a href='/state'>ESP State</a> → Spa Data Freshness → Information.</p>";
+    html += "</section>";
+  }
+  else
+  {
+    html += "<ul>";
+    html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaInformationData.lastUpdate) + "</li>";
+    html += "<li><b>Software ID (SSID style): </b>" + spaConfigTrimCopy(spaInformationData.softwareID) + "</li>";
+    html += "<li><b>System model (ASCII): </b>" + spaConfigTrimCopy(spaInformationData.model) + "</li>";
+    html += "<li><b>Setup number: </b>" + String(spaInformationData.setupNumber) + "</li>";
+    html += "<li><b>Configuration signature: </b>" + spaInformationConfigSignatureHex(spaInformationData) + "</li>";
+    html += "<li><b>Heater voltage (byte): </b>" + spaInformationHeaterVoltageLabel(spaInformationData.voltage) + "</li>";
+    html += "<li><b>Heater type (byte): </b>" + spaInformationHeaterTypeLabel(spaInformationData.heaterType) + "</li>";
+    html += "<li><b>DIP switch pair (as firmware stores): </b>" + String(spaInformationData.dipSwitch) + "</li>";
+    html += "<li><b>Frame CRC byte: </b>" + String(spaInformationData.crc) + "</li>";
+    html += "</ul>";
+    html += "<details style=\"margin-top:10px\"><summary><b>Raw information frame (hex)</b></summary>"
+            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
+            spaHexWordsUpper(spaInformationData.rawData, spaInformationData.rawDataLength, 48) + "</p></details>";
+    html += "</section>";
+  }
+
+  html += "<section class='panel'><h1>Panel preferences</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">From the spa <strong>Preferences</strong> response. Numeric codes follow MQTT topics under "
+          "<code>Spa/&lt;gateway&gt;/preferences/</code>.</p>";
+  if (spaPreferencesData.lastUpdate == 0)
+  {
+    html += "<p style=\"margin:0\"><em>Not received yet.</em></p></section>";
+  }
+  else
+  {
+    html += "<ul>";
+    html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</li>";
+    html += "<li><b>reminders: </b>" + String(spaPreferencesData.reminders) + "</li>";
+    html += "<li><b>tempScale: </b>" + String(spaPreferencesData.tempScale) + "</li>";
+    html += "<li><b>clockMode: </b>" + String(spaPreferencesData.clockMode) + "</li>";
+    html += "<li><b>cleanupCycle: </b>" + String(spaPreferencesData.cleanupCycle) + "</li>";
+    html += "<li><b>dolphinAddress: </b>" + String(spaPreferencesData.dolphinAddress) + "</li>";
+    html += "<li><b>m8AI: </b>" + String(spaPreferencesData.m8AI) + "</li>";
+    html += "</ul>";
+    html += "<details style=\"margin-top:10px\"><summary><b>Raw preferences frame (hex)</b></summary>"
+            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
+            spaHexWordsUpper(spaPreferencesData.rawData, spaPreferencesData.rawDataLength, 48) + "</p></details>";
+    html += "</section>";
+  }
+
+  html += "<section class='panel'><h1>Equipment wiring (configuration)</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Which pumps, lights, and loads exist on this spa pack (configuration frame). "
+          "This differs from live runtime state on <a href='/status'>Spa Status</a>.</p><ul>";
   if (spaConfigurationData.lastUpdate == 0)
   {
-    html += "<li><b>Spa Configuration not available</b></li>";
-    html += "</ul></section>";
+    html += "<li><em>Configuration frame not available yet.</em></li>";
+    html += "</ul>";
   }
   else
   {
     html += "<li><b>lastUpdate: </b>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</li>";
     html += "<li><b>magicNumber: </b>" + String(spaConfigurationData.magicNumber) + "</li>";
+    html += "<li><b>configuration CRC byte: </b>" + String(spaConfigurationData.crc) + "</li>";
     html += "<li><b>Pump 1: </b>" + String(spaConfigurationData.pump1) + "</li>";
     html += "<li><b>Pump 2: </b>" + String(spaConfigurationData.pump2) + "</li>";
     html += "<li><b>Pump 3: </b>" + String(spaConfigurationData.pump3) + "</li>";
@@ -1537,29 +1661,77 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "<li><b>Aux 2: </b>" + String(spaConfigurationData.aux2) + "</li>";
     html += "<li><b>Mister: </b>" + String(spaConfigurationData.mister) + "</li>";
     html += "<li><b>temp_scale: </b>" + String(spaConfigurationData.temp_scale) + "</li>";
-    html += "</ul></section><section class='panel'><h1>Filter Configuration</h1>";
-    html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock. <b>Filter N Time</b> is the daily start of that filtration cycle. <b>Filter N Duration</b> is how long the pump runs for that cycle each day (circulation through the filter). Many tubs use two staggered cycles; the second may be unused on some packs.</p><ul>";
-    html += "<li><b>lastUpdate (filter settings): </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</li>";
-    if (spaFilterSettingsData.lastUpdate != 0)
-    {
-      html += "<li><b>Filter 2 enabled: </b>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</li>";
-    }
-    html += "<li><b>Filter 1 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</li>";
-    html += "<li><b>Filter 1 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</li>";
-    html += "<li><b>Filter 2 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</li>";
-    html += "<li><b>Filter 2 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</li>";
-    html += "</ul></section><section class='panel'><h1>LittleFS Configuration</h1>";
-    html += "<p class='chart-caption'>Load on demand to avoid large payloads on weak links.</p>";
-    html += "<button class='equip-btn' type='button' id='cfgLoadLittleFsBtn'>Load LittleFS file list</button>";
-    html += "<ul id='cfgLittleFsContainer'></ul>";
-    // Add more fields as needed
-    html += "</section><script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');if(!btn||!box)return;"
-            "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
-            "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
-            "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
+    html += "</ul>";
+    html += "<details style=\"margin-top:10px\"><summary><b>Raw configuration frame (hex)</b></summary>"
+            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
+            spaHexWordsUpper(spaConfigurationData.rawData, spaConfigurationData.rawDataLength, 48) + "</p></details>";
   }
+  html += "</section>";
+
+  html += "<section class='panel'><h1>Other spa datasets</h1><ul>";
+  if (spaSettings0x04Data.lastUpdate == 0)
+  {
+    html += "<li><b>Settings 0x04:</b> <em>not received yet</em></li>";
+  }
+  else
+  {
+    html += "<li><p style=\"margin:0 0 6px 0\"><b>Settings 0x04</b> — <span style=\"color:var(--muted)\">lastUpdate:</span> " +
+            statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) +
+            ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaSettings0x04Data.crc) + "</p>";
+    html += "<details><summary><b>Raw settings 0x04 frame (hex)</b></summary>"
+            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
+            spaHexWordsUpper(spaSettings0x04Data.rawData, spaSettings0x04Data.rawDataLength, 48) + "</p></details></li>";
+  }
+  if (spaFaultLogData.lastUpdate == 0)
+  {
+    html += "<li><b>Fault log:</b> <em>not received yet</em></li>";
+  }
+  else
+  {
+    html += "<li><p style=\"margin:0 0 6px 0\"><b>Fault log</b> (last controller response — firmware does not decode entries yet) — "
+            "<span style=\"color:var(--muted)\">lastUpdate:</span> " +
+            statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) +
+            ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaFaultLogData.crc) + "</p>";
+    html += "<details><summary><b>Raw fault-log frame (hex)</b></summary>"
+            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
+            spaHexWordsUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength, 48) + "</p></details></li>";
+  }
+  html += "</ul></section>";
+
+  html += "<section class='panel'><h1>Filter Configuration</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock. <b>Filter N Time</b> is the daily start of that filtration cycle. <b>Filter N Duration</b> is how long the pump runs for that cycle each day (circulation through the filter). Many tubs use two staggered cycles; the second may be unused on some packs.</p><ul>";
+  html += "<li><b>lastUpdate (filter settings): </b>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</li>";
+  if (spaFilterSettingsData.lastUpdate != 0)
+  {
+    html += "<li><b>Filter 2 enabled: </b>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</li>";
+  }
+  html += "<li><b>Filter 1 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</li>";
+  html += "<li><b>Filter 1 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</li>";
+  html += "<li><b>Filter 2 Time: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</li>";
+  html += "<li><b>Filter 2 Duration: </b>" + formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</li>";
+  html += "</ul>";
+  if (spaFilterSettingsData.lastUpdate != 0)
+  {
+    html += "<details style=\"margin-top:10px\"><summary><b>Raw filter-settings frame (hex)</b></summary>"
+            "<p style=\"margin:8px 0 0 0;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace\">" +
+            spaHexWordsUpper(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength, 48) + "</p></details>";
+  }
+  html += "</section>";
+
+  html += "<section class='panel'><h1>LittleFS Configuration</h1>";
+  html += "<p class='chart-caption'>Load on demand to avoid large payloads on weak links.</p>";
+  html += "<button class='equip-btn' type='button' id='cfgLoadLittleFsBtn'>Load LittleFS file list</button>";
+  html += "<ul id='cfgLittleFsContainer'></ul>";
+  html += "</section><script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');if(!btn||!box)return;"
+          "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
+          "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
+          "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
+
   html += "</main></div></body></html>";
-  String etag = String("W/\"cfg-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaConfigurationData.lastUpdate) + "-" + String(spaFilterSettingsData.lastUpdate) + "\"";
+  String etag = String("W/\"cfg-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaConfigurationData.lastUpdate) + "-" +
+              String(spaFilterSettingsData.lastUpdate) + "-" + String(spaInformationData.lastUpdate) + "-" +
+              String(spaPreferencesData.lastUpdate) + "-" + String(spaSettings0x04Data.lastUpdate) + "-" +
+              String(spaFaultLogData.lastUpdate) + "\"";
   sendHtmlWithEtag(request, html, etag);
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
   Log.verbose("[Web]: handleConfig %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
