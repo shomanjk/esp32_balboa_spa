@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Documentation
+
+- **README:** Under [Build with PlatformIO](README.md#build-with-platformio), document **firmware first, then `uploadfs`** for a first install, note that LittleFS assets are not in the firmware image by default, and link the [Getting started](https://github.com/shomanjk/esp32_balboa_spa/wiki/Getting-started) wiki checklist ([issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)).
+
 ### Fixed
 
 - **Submodule setup and Windows `uploadfs` / `buildfs`** ([`scripts/extra_script.py`](scripts/extra_script.py), [`.gitignore`](.gitignore), [issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)): Accidental **`.claude/worktrees/…`** entries had been committed as gitlinks without `.gitmodules` entries, which broke `git submodule update --init --recursive` for fresh clones. **Removed `.claude/` from the entire repository history** (`git filter-repo`) so clones no longer carry that baggage; added **`.claude/`** to `.gitignore`. Replaced **`cp`** with **`shutil.copy2`** when copying `.env` into `balboa-spa/dist/` so LittleFS builds work on Windows without a POSIX `cp`.

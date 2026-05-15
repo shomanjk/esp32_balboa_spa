@@ -213,6 +213,15 @@ Guardrails:
 
 Builds use **PlatformIO** ([`platformio.ini`](platformio.ini)).
 
+### Firmware and LittleFS (first install)
+
+1. Flash **firmware**: `pio run -e <env> -t upload`
+2. Flash the **filesystem** (web bundle): `pio run -e <env> -t uploadfs`
+
+The LittleFS assets live under **`balboa-spa/dist`** ([`data_dir`](platformio.ini)); they are **not** embedded in the firmware binary by default. Skipping **`uploadfs`** leaves the bundled SPA / static files missing until you upload the filesystem. Repeat **`uploadfs`** when the web bundle changes.
+
+Step-by-step checklist (clone, `config.h`, USB & OTA): **[`wiki/Getting-started.md`](wiki/Getting-started.md)** (published copy: [GitHub wiki · Getting started](https://github.com/shomanjk/esp32_balboa_spa/wiki/Getting-started)).
+
 ### Compile-time feature flags (how to change)
 
 Feature **macros** are enabled with **`-DNAME`** strings under each environment’s **`build_flags`** in [`platformio.ini`](platformio.ini).
