@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Push wiki/*.md to the GitHub wiki git backend (repo.wiki.git).
+# Requires: gh auth login, wiki enabled on the repository.
+# If clone fails with "Repository not found", initialize once via:
+#   gh workflow run publish-wiki.yml
+# or create any page on the repo Wiki tab, then re-run this script.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WIKI_SRC="${ROOT}/wiki"
+REPO="${GITHUB_REPOSITORY:-shomanjk/esp32_balboa_spa}"
+OWNER="${REPO%%/*}"
+NAME="${REPO##*/}"
+TMP="${TMPDIR:-/tmp}/${NAME}.wiki"
+
+if [[ ! -d "${WIKI_SRC}" ]] || ! compgen -G "${WIKI_SRC}/*.md" >/dev/null; then
+  echo "No markdown files in ${WIKI_SRC}" >&2
+  exit 1
+fi
+
+TOKEN="$(gh auth token)"
+REMOTE="https://${OWNER}:${TOKEN}@github.com/${OWNER}/${NAME}.wiki.git"
+
+rm -rf "${TMP}"
+if git clone "${REMOTE}" "${TMP}" 2>/dev/null; then
+  :
+else
+  echo "Wiki git repo not found. Run: gh workflow run publish-wiki.yml" >&2
+  echo "Or create the first page on https://github.com/${OWNER}/${NAME}/wiki" >&2
+  exit 1
+fi
+
+cp "${WIKI_SRC}"/*.md "${TMP}/"
+cd "${TMP}"
+git add -A
+if git diff --staged --quiet; then
+  echo "Wiki already up to date."
+  exit 0
+fi
+git commit -m "Sync wiki from $(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo local)"
+git push origin HEAD
+
+echo "Wiki updated: https://github.com/${OWNER}/${NAME}/wiki"
