@@ -11,6 +11,7 @@ where version numbers are used.
 ### Documentation
 
 - **README:** Add human-facing [**Overview**](README.md#overview) at the top (value, parts, setup expectations, shipped capabilities); rename former **Features** section to **Usage history and analytics**; remove duplicate **What this project is** (developer build roles summarized in Overview).
+- **README / wiki [Hardware field notes](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-field-notes):** Document community-tested **Molex `0451320403`** ([DigiKey `WM16117-ND`](https://www.digikey.com/short/p5ctrr0m)) for mating the factory header on a **Balboa BP501** spa board ([`wiki/Hardware-field-notes.md`](wiki/Hardware-field-notes.md)).
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
 

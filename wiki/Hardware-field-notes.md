@@ -22,11 +22,23 @@ The firmware’s **information** response can expose a **system model** ASCII fi
 
 ---
 
+## Parts that worked (community)
+
+Not a compatibility guarantee — verify pinout, wire gauge, and crimp tooling for your tub. You still need the correct **terminals** crimped into the housing (Molex publishes mate part numbers separately).
+
+| Part | Supplier | Use |
+|------|----------|-----|
+| **Molex `0451320403`** (4-circuit plug housing) | [DigiKey `WM16117-ND`](https://www.digikey.com/short/p5ctrr0m) | On a **Balboa BP501** tub, maintainer report: mates cleanly with the **factory-installed header** on the spa board so you can run a short harness to the M5 Atomic RS485 base **VH‑3.96** / bus terminals without cutting the factory harness. Confirm **12 V / GND / A / B** (or your board’s pin order) against [ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer) and your label before energizing. |
+
+Add other SKUs here when you have a tested combination.
+
+---
+
 ## Reported setups
 
 | Tub / panel (report) | Board / stack | PlatformIO env | RS485 notes | Outcome |
 |----------------------|---------------|----------------|-------------|---------|
-| Balboa **BP501**; agency **`BP501-CL501X1-AS`**; also stamped **CL501X1** (heater/pack segment — see above) | [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) + [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (stacked tub-side gateway) | `M5AtomLite-tub` | **`TX485_Rx` 22**, **`TX485_Tx` 19**; **`AUTO_TX true`**; A/B per base labeling (swap if no frames); [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer); BWG [BP 501](https://www.balboawatergroup.com/BP501/) | **Works** — maintainer tub-side stack ([README](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side), [`config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h)) |
+| Balboa **BP501**; agency **`BP501-CL501X1-AS`**; also stamped **CL501X1** (heater/pack segment — see above) | [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) + [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (stacked tub-side gateway) | `M5AtomLite-tub` | **`TX485_Rx` 22**, **`TX485_Tx` 19**; **`AUTO_TX true`**; A/B per base labeling (swap if no frames). **Harness:** [Molex `0451320403`](https://www.digikey.com/short/p5ctrr0m) (DigiKey `WM16117-ND`) plugged onto the **factory header** on the spa board → short leads to Atomic base (see [Parts that worked](#parts-that-worked-community)). [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer); BWG [BP 501](https://www.balboawatergroup.com/BP501/) | **Works** — maintainer tub-side stack ([README](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side), [`config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h)) |
 | *(example)* Balboa BP7xxx | M5 Atom Lite + Atomic RS485 Base | `M5AtomLite-tub` | A/B as labeled on base; `AUTO_TX true` | Example row |
 
 ---
