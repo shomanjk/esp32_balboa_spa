@@ -1,6 +1,56 @@
 # esp32_balboa_spa
 
+**Local Wi‑Fi gateway for Balboa spas — read and control your tub over RS485, with a web portal and Home Assistant-friendly MQTT.**
+
+## Overview
+
+Many Balboa hot tubs already communicate on an **RS485** bus inside the cabinet. Factory panels and vendor apps work fine day to day, but they rarely expose full status and control on **your home network** in a form you can automate. This project adds a small **ESP32 Wi‑Fi module** as a peer on that bus. You **do not** replace the Balboa controller—the gateway listens and sends the same kinds of frames the panel uses, while the physical spa panel keeps working.
+
+The result: water temperature, pumps, lights, setpoint, heating mode, and related panel commands become available on your LAN through a **browser**, **MQTT**, and **Home Assistant**, without routing everyday spa use through a vendor cloud.
+
+### Why people build this
+
+- **Local-first** — Status and control stay on **your Wi‑Fi**; basic use does not depend on a vendor cloud account.
+- **Home automation** — **MQTT** telemetry plus **Home Assistant MQTT Discovery** (device **Balboa Spa** in HA): dashboards, automations, and voice assistants through Home Assistant.
+- **Everyday convenience** — Phone-friendly **`/status`**: live temp, equipment, setpoint, and v1 controls without opening the tub cabinet each time.
+- **Visibility** — **`/config`** and **`/state`** for equipment layout, controller identity, Wi‑Fi/RS485 health, logs, and JSON APIs when you need to debug.
+- **Low recurring cost** — Roughly **$30–50** in parts for the documented M5 stack (below); an MQTT broker is optional and is often already running with Home Assistant.
+
+This is **moderate DIY**, not a sealed appliance: you need a safe **RS485 tap**, comfort with **PlatformIO flash** and **`config.h`**, and time to verify frames on **`/status`** before you rely on automations.
+
+### What you need
+
+- **Required:** Balboa spa with RS485 access ([ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer)); **2.4 GHz Wi‑Fi**; USB for the first firmware upload.
+- **Recommended (documented tub-side stack):** [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) + [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) — two boards that stack; the base includes the RS485 transceiver and 12→5 V for the Atom ([M5 tub-side section](#m5-atom-lite--atomic-rs485-base-tub-side)).
+- **Also supported:** Generic ESP32 dev board + RS485 module (default UART **GPIO 16/17** in [`src/config-example.h`](src/config-example.h)).
+- **Optional:** MQTT broker / Home Assistant; a second device only for an [ePaper remote display](#epaper-remote-display-optional) or the legacy [TCP bridge](#optional-homebridge-and-tcp-bridge-bridge) (Homebridge).
+
+**Hardware complexity:** software follows a checklist; the variable step is finding the correct **A/B** tap on your controller and confirming traffic on the bus.
+
+### How hard is setup?
+
+| Step | Effort |
+|------|--------|
+| Clone repo + `balboa-spa` submodule | One-time |
+| Copy `src/config.h` from [`config-example.h`](src/config-example.h); set Wi‑Fi (+ MQTT if desired) | ~10 minutes |
+| `pio run -e M5AtomLite-tub -t upload` then `-t uploadfs` | Longer the first time PlatformIO/toolchains install |
+| Wire RS485 A/B; confirm **`/status`** updates | Depends on tub access |
+
+**Start here:** [Wiki · Getting started](https://github.com/shomanjk/esp32_balboa_spa/wiki/Getting-started) (source: [`wiki/Getting-started.md`](wiki/Getting-started.md)). Build details: [Build with PlatformIO](#build-with-platformio); tub OTA: [OTA updates](#ota-updates-m5-atom-tub-side).
+
+### What you get
+
+- **Monitor** — Live status (temps, pumps, lights, heating mode, filter info) on **`/status`**; configuration and controller identity on **`/config`**.
+- **Control (v1)** — Pump/light/blower/mister toggles, **set temperature**, **temp units**, **panel clock** from **`/status`** and SCI **`/devices/sci`**; the same command set on **MQTT** `Spa/<gateway>/cmd/…` (see [MQTT and Home Assistant](#mqtt-and-home-assistant)). The LittleFS **`balboa-spa`** tab may differ—treat it as read-first unless you verify your build ([Web interface](#web-interface)).
+- **Integrate** — MQTT publish; **Home Assistant discovery**; optional **TCP bridge on port 4257** for [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa).
+- **Operate** — Built-in web UI; **`/logs`** with WebSocket tail; **OTA** (`M5AtomLite-tub-ota`); RS485 health and history via **`/api/rs485`** and related JSON routes.
+- **Optional** — Kitchen **ePaper** display (`REMOTE_CLIENT`); **Telnet** log listener only if you enable **`TELNET_LOG`** at compile time.
+
+*Best fit if you run (or want) Home Assistant, prefer local control, and are comfortable with a weekend wiring-and-flash project—not if you need a vendor-supported, plug-and-play cloud replacement.*
+
 **Changelog:** [CHANGELOG.md](CHANGELOG.md) (release history and compare links).
+
+**For developers:** One firmware tree supports multiple **build roles**—tub-side **RS485** gateway (`LOCAL_CLIENT`), **UDP discovery** (`LOCAL_CONNECT`), optional **TCP bridge** (`BRIDGE`), optional **Telnet** logging (`TELNET_LOG`), and a **TCP client + ePaper** remote role (`REMOTE_CLIENT`). See [Compiler definitions](#compiler-definitions) and [AGENTS.md](AGENTS.md).
 
 ## About this fork
 
@@ -39,15 +89,7 @@ This license does not require downstream users to pay royalties.
 
 ---
 
-## What this project is
-
-Use an **ESP32** module on the **RS485** bus of a **Balboa** spa controller to read status (temperatures, pumps, configuration, etc.), **send v1 spa commands** from the firmware **web portal** (`/status` controls and `/devices/sci`), and expose state over **MQTT**, the bundled **web UI** (LittleFS SPA), and optionally a **remote ePaper** UI.
-
-The codebase supports multiple **build roles**: tub-side **RS485** gateway, **UDP discovery** (`LOCAL_CONNECT`), optional **TCP bridge**, **Telnet** logging, and a **TCP client + ePaper** role for a second device (e.g. kitchen display) talking to the tub-side unit.
-
----
-
-## Features
+## Usage history and analytics
 
 - Caching of hot tub configuration to reduce traffic to the spa controller and improve client responsiveness.
 - Hourly tracking of hot tub temperature for 24 hours.

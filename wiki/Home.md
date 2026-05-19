@@ -2,6 +2,8 @@
 
 ESP32 firmware that talks to a **Balboa** spa controller over **RS485**: read status, control equipment from the web portal, and publish state over **MQTT** / **Home Assistant**.
 
+**Full overview (value, parts, setup, features):** [README · Overview](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#overview) in the main repo.
+
 **Last reviewed for firmware:** 2.10.0 (see [`VERSION`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/main.h) in the main repo).
 
 ---
@@ -10,7 +12,7 @@ ESP32 firmware that talks to a **Balboa** spa controller over **RS485**: read st
 
 These live in the [main repository](https://github.com/shomanjk/esp32_balboa_spa) and should be treated as the source of truth for build flags, APIs, and release behavior. File links below use the **`ESP32`** branch (GitHub default for this fork); **`main`** may lag and return **404** for some paths.
 
-- [README](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md) — features, build, M5 wiring, MQTT/HA topics, OTA, compiler flags
+- [README](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md) — [overview](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#overview), build, M5 wiring, MQTT/HA topics, OTA, compiler flags
 - [CHANGELOG](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/CHANGELOG.md) — release history
 - [GitHub Releases](https://github.com/shomanjk/esp32_balboa_spa/releases) — tagged snapshots
 - [OTA + live logging workflow](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/OTA_LOGGING_WORKFLOW.md)

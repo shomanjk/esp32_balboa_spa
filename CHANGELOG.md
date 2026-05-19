@@ -10,6 +10,8 @@ where version numbers are used.
 
 ### Documentation
 
+- **README:** Add human-facing [**Overview**](README.md#overview) at the top (value, parts, setup expectations, shipped capabilities); rename former **Features** section to **Usage history and analytics**; remove duplicate **What this project is** (developer build roles summarized in Overview).
+- **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
 
 ## [2.10.0] - 2026-05-15
