@@ -33,7 +33,13 @@ else
   exit 1
 fi
 
-cp "${WIKI_SRC}"/*.md "${TMP}/"
+for f in "${WIKI_SRC}"/*.md; do
+  case "$(basename "$f")" in
+    BOOTSTRAP.md) continue ;;
+  esac
+  cp "$f" "${TMP}/"
+done
+rm -f "${TMP}/BOOTSTRAP.md"
 cd "${TMP}"
 git add -A
 if git diff --staged --quiet; then

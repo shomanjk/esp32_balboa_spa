@@ -84,9 +84,7 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 
 **Layout:** Firmware-served pages `/status`, `/config`, and `/state` use a responsive layout (viewport scaling, wrapping nav, fluid charts/images) for phone-sized screens.
 
-### Screenshots (optional assets)
-
-Place images under [`docs/`](docs/) or update paths below.
+### Screenshots
 
 #### Spa status (`/status`)
 
