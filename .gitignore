@@ -21,6 +21,9 @@ src/main.ino.cpp
 # Local spa/gateway log exports (web portal JSON, telnet captures, etc.)
 /logs/
 
+# Local-only social / forum post drafts (not part of the firmware project)
+/docs/marketing/
+
 # Local Mosquitto in docker/mosquitto — optional secrets if you add password/TLS later
 docker/mosquitto/config/passwd
 docker/mosquitto/certs/
