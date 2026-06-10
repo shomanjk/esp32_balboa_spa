@@ -15,6 +15,12 @@ where version numbers are used.
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
 
+## [2.10.1] - 2026-06-10
+
+### Fixed
+
+- **Bridge MQTT noise** ([`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp)): Stop publishing `Client not connected` on `Spa/<gateway>/bridge/msg` for every RS485 frame when no TCP client is on port **4257** (was ~1–4/s on default tub builds). TCP forwarding and `bridge/out` MQTT when a client **is** connected are unchanged; ingress `bridge/msg` / `bridge/in` behavior is unchanged. Bridge TCP connect/disconnect now both publish once on `Spa/<gateway>/debug/message` (`Bridge Client Connected …` / `Bridge Client Disconnected …`).
+
 ## [2.10.0] - 2026-05-15
 
 ### Changed

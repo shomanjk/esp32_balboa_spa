@@ -116,14 +116,14 @@ void bridgeLoop()
           added = true;
           clients[i]->onData(clientDataAvailable);
           clients[i]->onDisconnect([slot](void *r, AsyncClient *c) {
-#if defined(DIAG_FAULT_CAPTURE)
             const String rip = bridgeRipForSlot(slot, c);
+#if defined(DIAG_FAULT_CAPTURE)
             Log.warning(F("[Bridge]: Disconnected from Spa %s" CR), rip.c_str());
             faultCaptureAppendf("[fault] bridge disconnect ip=%s", rip.c_str());
 #else
-            const String rip = bridgeRipForSlot(slot, c);
             Log.verbose(F("[Bridge]: Disconnected from Spa %s" CR), rip.c_str());
 #endif
+            publishDebug(("Bridge Client Disconnected (" + String(slot) + ") " + rip).c_str());
           });
           clients[i]->onConnect([slot](void *r, AsyncClient *c) {
 #if defined(DIAG_FAULT_CAPTURE)
@@ -282,7 +282,9 @@ void bridgeSend(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   }
   else
   {
-    publishBridge("Client not connected");
+    // RS485 frames are forwarded here even when no Homebridge/TCP client is connected;
+    // skip MQTT bridge/msg — publishing every frame spammed brokers (~1–4/s).
+    Log.verbose(F("[Bridge]: bridge/out skipped — no TCP client connected" CR));
   }
   data.clear();
 };
@@ -315,6 +317,6 @@ void bridgeSend(uint8_t *message, int length)
   }
   else
   {
-    publishBridge("Client not connected");
+    Log.verbose(F("[Bridge]: bridge/out skipped — no TCP client connected" CR));
   }
 };
