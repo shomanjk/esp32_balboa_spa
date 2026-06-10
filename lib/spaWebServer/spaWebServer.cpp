@@ -23,6 +23,7 @@
 #include <ctime>
 #include <memory>
 #include <spaMessage.h>
+#include <tempHistory.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
 #include <faultCapture.h>
@@ -877,29 +878,77 @@ static String statusFormatRuntimeHoursMinutes(unsigned long totalSeconds)
   return out;
 }
 
+/** Oldest-first comma list (matches chart / API order). */
+static String temperatureHistoryOldestFirstString()
+{
+  String out;
+  for (int i = TEMP_HISTORY_SLOTS - 1; i >= 0; i--)
+  {
+    if (out.length())
+    {
+      out += ", ";
+    }
+    out += String(tempHistoryData.samples[i]);
+  }
+  return out;
+}
+
+/** Same merge as ePaper `mergeGraphData`: history[22]..history[0] plus today (seconds); oldest-first. */
+static String mergedDailySecondsHistoryString(const float *history, unsigned long todaySeconds)
+{
+  String out;
+  for (int i = GRAPH_MAX_READINGS - 2; i >= 0; i--)
+  {
+    if (out.length())
+    {
+      out += ", ";
+    }
+    out += String(history[i]);
+  }
+  if (out.length())
+  {
+    out += ", ";
+  }
+  out += String(todaySeconds);
+  out += " (today)";
+  return out;
+}
+
+static void appendMergedDailySecondsHistory(JsonArray &arr, const float *history, unsigned long todaySeconds)
+{
+  for (int i = GRAPH_MAX_READINGS - 2; i >= 0; i--)
+  {
+    arr.add(history[i]);
+  }
+  arr.add(static_cast<float>(todaySeconds));
+}
+
 static void appendStatusHistoriesSection(String &html)
 {
+  const unsigned long heatTodaySec = spaStatusData.heatOn ? spaStatusData.heatOn->today() : spaStatusData.heaterOnTimeToday;
+  const unsigned long filterTodaySec = spaStatusData.filterOn ? spaStatusData.filterOn->today() : spaStatusData.filterOnTimeToday;
+
   html += "<div id=\"statusTempHistSection\" class=\"history-block status-temp-hist-anchor\">";
   html += "<h3>Temperature history</h3>";
-  html += "<p class=\"chart-caption\">Samples left (older) to right (newer). Raw list index 0 is newest.</p>";
+  html += "<p class=\"chart-caption\">Last 24 hours, every 10 minutes (left = older, right = now). Saved to flash hourly when changed; power loss may drop samples since last save.</p>";
   html += "<div class=\"chart-wrap\"><canvas id=\"statusTempHistChart\" height=\"140\" aria-label=\"Temperature history chart\"></canvas></div>";
-  html += "<details class=\"history-raw\"><summary>Raw temperature values</summary><pre>";
-  html += historyToString(spaStatusData.temperatureHistory);
+  html += "<details class=\"history-raw\"><summary>Raw temperature values (oldest first, matches chart)</summary><pre>";
+  html += temperatureHistoryOldestFirstString();
   html += "</pre></details></div>";
 
   html += "<div id=\"statusHeatHistSection\" class=\"history-block status-temp-hist-anchor\">";
   html += "<h3>Heater on-time history</h3>";
-  html += "<p class=\"chart-caption\">Seconds per day (raw); chart uses minutes per day (div 60).</p>";
+  html += "<p class=\"chart-caption\">Last 23 completed days plus today (in progress). Chart: minutes per day; rightmost point is today.</p>";
   html += "<div class=\"chart-wrap\"><canvas id=\"statusHeatHistChart\" height=\"140\" aria-label=\"Heater history chart\"></canvas></div>";
-  html += "<details class=\"history-raw\"><summary>Raw heat history (seconds per day)</summary><pre>";
-  html += historyToString(spaStatusData.heatOn->history());
+  html += "<details class=\"history-raw\"><summary>Raw heat history (seconds per day, oldest first)</summary><pre>";
+  html += mergedDailySecondsHistoryString(spaStatusData.heatOn->history(), heatTodaySec);
   html += "</pre></details></div>";
 
   html += "<div class=\"history-block\"><h3>Filter on-time history</h3>";
-  html += "<p class=\"chart-caption\">Seconds per day (raw); chart uses hours per day (div 3600).</p>";
+  html += "<p class=\"chart-caption\">Last 23 completed days plus today (in progress). Chart: hours per day; rightmost point is today.</p>";
   html += "<div class=\"chart-wrap\"><canvas id=\"statusFilterHistChart\" height=\"140\" aria-label=\"Filter history chart\"></canvas></div>";
-  html += "<details class=\"history-raw\"><summary>Raw filter history (seconds per day)</summary><pre>";
-  html += historyToString(spaStatusData.filterOn->history());
+  html += "<details class=\"history-raw\"><summary>Raw filter history (seconds per day, oldest first)</summary><pre>";
+  html += mergedDailySecondsHistoryString(spaStatusData.filterOn->history(), filterTodaySec);
   html += "</pre></details></div>";
 }
 
@@ -1239,21 +1288,27 @@ void handleStatus(AsyncWebServerRequest *request)
           "async function statusFetchControls(){return await statusFetchJson('/api/status/summary',4200);}"
           "function statusScaleHeat(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/60);return b;}"
           "function statusScaleFilter(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/3600);return b;}"
-          "function statusDrawLineChart(id,data,isTemp,isCelsius){"
-          "var c=document.getElementById(id);if(!c||!data||data.length<1)return;"
+          "function statusDrawLineChart(id,data,opt){"
+          "opt=opt||{};var c=document.getElementById(id);if(!c||!data||data.length<1)return;"
           "var ctx=c.getContext('2d');if(!ctx)return;"
-          "function fmtY(v){if(isTemp)return isCelsius?Number(v).toFixed(1):String(Math.round(Number(v)));return Number(v).toFixed(2);}"
+          "var isTemp=!!opt.temp;var isC=!!opt.celsius;var ySuf=opt.ySuffix||'';"
+          "var xL=opt.xLeft||'';var xM=opt.xMid||'';var xR=opt.xRight||'';"
+          "function fmtY(v){var s;if(isTemp){s=isC?Number(v).toFixed(1):String(Math.round(Number(v)));}else{s=Number(v).toFixed(2);}"
+          "return ySuf?(s+' '+ySuf):s;}"
           "function draw(W,H){"
           "ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#ccc';ctx.strokeRect(0.5,0.5,W-1,H-1);"
           "var lo=Infinity,hi=-Infinity,i,v;"
           "for(i=0;i<data.length;i++){v=Number(data[i]);if(!isFinite(v))continue;if(v<lo)lo=v;if(v>hi)hi=v;}"
-          "if(!isFinite(lo)||!isFinite(hi)){ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.fillText('No data',10,H/2);return;}"
+          "if(!isFinite(lo)||!isFinite(hi)){ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.fillText('No data yet',10,H/2);return;}"
           "if(hi-lo<1e-6){lo-=0.5;hi+=0.5;}"
-          "var pad=30,pw=W-2*pad,ph=H-22;"
-          "function yOf(val){return 14+ph-(val-lo)/(hi-lo)*ph;}"
-          "ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.fillText(fmtY(lo),4,H-6);ctx.fillText(fmtY(hi),4,12);"
-          "ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();"
-          "for(i=0;i<data.length;i++){var px=pad+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}"
+          "var padL=34,padR=8,padT=14,padB=28,pw=W-padL-padR,ph=H-padT-padB;"
+          "function yOf(val){return padT+ph-(val-lo)/(hi-lo)*ph;}"
+          "ctx.strokeStyle='#eef1f4';ctx.lineWidth=1;for(i=1;i<=3;i++){var gy=padT+ph*i/4;ctx.beginPath();ctx.moveTo(padL,gy);ctx.lineTo(padL+pw,gy);ctx.stroke();}"
+          "ctx.fillStyle='#333';ctx.font='10px sans-serif';ctx.textAlign='left';"
+          "ctx.fillText(fmtY(lo),4,H-padB+2);ctx.fillText(fmtY(hi),4,padT+2);"
+          "ctx.textAlign='center';if(xL)ctx.fillText(xL,padL,H-4);if(xM)ctx.fillText(xM,padL+pw/2,H-4);if(xR)ctx.fillText(xR,padL+pw,H-4);"
+          "ctx.textAlign='left';ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();"
+          "for(i=0;i<data.length;i++){var px=padL+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}"
           "ctx.stroke();}"
           "function render(){var p=c.parentElement;var pg=document.querySelector('.page');"
           "var cap=(pg&&pg.clientWidth)?pg.clientWidth:((document.documentElement&&document.documentElement.clientWidth)||window.innerWidth||980);"
@@ -1270,10 +1325,10 @@ void handleStatus(AsyncWebServerRequest *request)
           "c.addEventListener('contextrestored',scheduleRender,{passive:true});"
           "scheduleRender();}"
           "function statusRenderHistoryCharts(j){"
-          "if(!j)return;var tc=!!j.tempIsCelsius;"
-          "statusDrawLineChart('statusTempHistChart',j.tempHistory||[],true,tc);"
-          "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(j.heatSeconds||[]),false,false);"
-          "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(j.filterSeconds||[]),false,false);}"
+          "if(!j)return;var tc=!!j.tempIsCelsius;var deg=tc?'\\u00b0C':'\\u00b0F';"
+          "statusDrawLineChart('statusTempHistChart',j.tempHistory||[],{temp:1,celsius:tc,ySuffix:deg,xLeft:'-24h',xMid:'-12h',xRight:'now'});"
+          "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(j.heatSeconds||[]),{ySuffix:'min',xLeft:'-23d',xMid:'-12d',xRight:'today'});"
+          "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(j.filterSeconds||[]),{ySuffix:'hr',xLeft:'-23d',xMid:'-12d',xRight:'today'});}"
           "function statusScrollToHistoryAnchor(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}"
           "function statusSetHistoriesResult(text){var el=document.getElementById('statusHistoriesResult');if(el)el.textContent=text||'';}"
           "function statusHistoriesReady(c){return !!(c&&c.querySelector&&c.querySelector('#statusTempHistSection'));}"
@@ -2347,28 +2402,32 @@ void handleStatusHistoriesApi(AsyncWebServerRequest *request)
     return;
   }
 
-  DynamicJsonDocument doc(20480);
+  DynamicJsonDocument doc(28672);
   String historiesHtml;
-  historiesHtml.reserve(7000);
+  historiesHtml.reserve(9000);
   appendStatusHistoriesSection(historiesHtml);
   doc["html"] = historiesHtml;
   doc["tempIsCelsius"] = (statusSpaTempReady() && spaStatusData.tempScale) ? 1 : 0;
+  doc["tempSlotCount"] = TEMP_HISTORY_SLOTS;
+  doc["tempSampleMinutes"] = 10;
+  doc["heatIncludesToday"] = 1;
+  doc["filterIncludesToday"] = 1;
 
   JsonArray tempHistory = doc.createNestedArray("tempHistory");
-  for (int i = GRAPH_MAX_READINGS - 1; i >= 0; i--)
+  for (int i = TEMP_HISTORY_SLOTS - 1; i >= 0; i--)
   {
-    tempHistory.add(spaStatusData.temperatureHistory[i]);
+    tempHistory.add(tempHistoryData.samples[i]);
   }
+
+  const unsigned long heatTodaySec = spaStatusData.heatOn->today();
+  const unsigned long filterTodaySec = spaStatusData.filterOn->today();
+  doc["heatTodaySeconds"] = heatTodaySec;
+  doc["filterTodaySeconds"] = filterTodaySec;
+
   JsonArray heatSeconds = doc.createNestedArray("heatSeconds");
-  for (int i = GRAPH_MAX_READINGS - 1; i >= 0; i--)
-  {
-    heatSeconds.add(spaStatusData.heatOn->history()[i]);
-  }
+  appendMergedDailySecondsHistory(heatSeconds, spaStatusData.heatOn->history(), heatTodaySec);
   JsonArray filterSeconds = doc.createNestedArray("filterSeconds");
-  for (int i = GRAPH_MAX_READINGS - 1; i >= 0; i--)
-  {
-    filterSeconds.add(spaStatusData.filterOn->history()[i]);
-  }
+  appendMergedDailySecondsHistory(filterSeconds, spaStatusData.filterOn->history(), filterTodaySec);
 
   const size_t jsonNeed = measureJson(doc);
   if (jsonNeed == 0 || jsonNeed > doc.capacity())

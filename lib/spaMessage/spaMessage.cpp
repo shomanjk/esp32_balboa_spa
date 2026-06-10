@@ -4,6 +4,7 @@
 
 #include <spaUtilities.h>
 #include <Analytics.h>
+#include <tempHistory.h>
 #include <esp_task_wdt.h>
 
 #include "../../src/main.h"
@@ -41,6 +42,7 @@ RTC_NOINIT_ATTR SpaFaultLogData spaFaultLogData;
 // Analytics Data
 RTC_NOINIT_ATTR AnalyticsData heatOnData;
 RTC_NOINIT_ATTR AnalyticsData filterOnData;
+RTC_NOINIT_ATTR TempHistoryData tempHistoryData;
 
 // private functions
 bool parseStatusMessage(u_int8_t *, int);
@@ -54,7 +56,7 @@ void parseSettings0x04Response(u_int8_t *, int);
 void configurationRequest();
 void updateTemperatureHistory();
 
-TickTwo temperatureHistory(updateTemperatureHistory, .75 * 60 * 1000); // Initial interval is 1 minute, then hourly on first execution
+TickTwo temperatureHistory(updateTemperatureHistory, .75 * 60 * 1000); // First sample ~45s, then every 10 min
 
 void spaMessageSetup()
 {
@@ -147,6 +149,7 @@ void spaMessageSetup()
 
   spaStatusData.heatOn = new Analytics(&heatOnData, "HeatOn");
   spaStatusData.filterOn = new Analytics(&filterOnData, "FilterOn");
+  tempHistorySetup(&tempHistoryData);
   temperatureHistory.start();
 }
 
@@ -217,6 +220,7 @@ void spaMessageLoop()
     //  Log.verbose(F("[Mess]: No messages in Read Queue" CR));
   }
   temperatureHistory.update();
+  tempHistoryMaybePersist(&tempHistoryData);
 }
 
 void configurationRequest()
@@ -701,10 +705,6 @@ String getMapDescription(uint8_t element, const std::map<uint8_t, const char *> 
 
 void updateTemperatureHistory()
 {
-  temperatureHistory.interval(60 * 60 * 1000); // Hourly
-  for (int x = GRAPH_MAX_READINGS; x > 1; x--)
-  {
-    spaStatusData.temperatureHistory[x - 1] = spaStatusData.temperatureHistory[x - 2];
-  }
-  spaStatusData.temperatureHistory[0] = spaStatusData.currentTemp;
+  temperatureHistory.interval(TEMP_SAMPLE_INTERVAL_MS);
+  tempHistorySample(&tempHistoryData, spaStatusData.currentTemp);
 }

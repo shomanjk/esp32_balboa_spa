@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.10.6"
+#define VERSION "2.11.0"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 
@@ -81,6 +81,10 @@ extern String buildDefinitionString;
 #endif
 #endif
 
-#define GRAPH_MAX_READINGS 24 // Limited to 3-days here, but could go to 5-days = 40 as the data is issued  
+#define GRAPH_MAX_READINGS 24 // Limited to 3-days here, but could go to 5-days = 40 as the data is issued
+
+#define TEMP_HISTORY_SLOTS 144
+#define TEMP_SAMPLE_INTERVAL_MS (10UL * 60UL * 1000UL)
+#define TEMP_FLASH_SAVE_MIN_MS (60UL * 60UL * 1000UL)
 
 #endif

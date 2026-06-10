@@ -21,6 +21,7 @@ String formatNumberWithCommas(uint32_t num);
 String formatNumberWithCommas(int num);
 String formatNumberWithCommas(time_t num);
 void logPrintPrefix(Print *_logOutput, int logLevel);
+String historyToString(float *history, int count);
 String historyToString(float *history);
 String formatAsHourMinute(uint8_t hour, uint8_t minute);
 

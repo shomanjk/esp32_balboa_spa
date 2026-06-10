@@ -179,7 +179,6 @@ struct SpaStatusData
   unsigned long heaterOnTimeYesterday;
   unsigned long filterOnTimeToday;
   unsigned long filterOnTimeYesterday;
-  float temperatureHistory[GRAPH_MAX_READINGS];
   Analytics *heatOn;
   Analytics *filterOn;
 };

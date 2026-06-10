@@ -1,6 +1,7 @@
 #include "spaMqttMessage.h"
 #include "spaMessage.h"
 #include "balboa.h"
+#include <tempHistory.h>
 #include <Arduino.h>
 #include <ArduinoLog.h>
 #include <mqttModule.h>
@@ -108,7 +109,7 @@ void publishSpaStatusData()
 
   PUBLISH_STATUS_ELEMENT(filterOnTimeYesterday, "%u");
 
-  publishElement("temperatureHistory", "status", historyToString(spaStatusData.temperatureHistory).c_str());
+  publishElement("temperatureHistory", "status", historyToString(const_cast<float *>(tempHistoryData.samples), TEMP_HISTORY_SLOTS).c_str());
   publishElement("heaterHistory", "status", historyToString(spaStatusData.heatOn->history()).c_str());
   publishElement("filterHistory", "status", historyToString(spaStatusData.filterOn->history()).c_str());
 }

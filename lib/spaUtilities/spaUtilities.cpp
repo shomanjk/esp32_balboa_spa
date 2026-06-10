@@ -187,16 +187,25 @@ String weekday_D[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 String month_M[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 /*
-history - array of floats to convert to string, length is GRAPH_MAX_READINGS
+history - array of floats to convert to string (index 0 = newest when used for temp history)
 */
-String historyToString(float *history)
+String historyToString(float *history, int count)
 {
   String tempHistory = "";
-  for (int i = 0; i < GRAPH_MAX_READINGS; i++)
+  if (history == nullptr || count <= 0)
+  {
+    return tempHistory;
+  }
+  for (int i = 0; i < count; i++)
   {
     tempHistory += String(history[i]) + ", ";
   }
   return tempHistory;
+}
+
+String historyToString(float *history)
+{
+  return historyToString(history, GRAPH_MAX_READINGS);
 }
 
 /*

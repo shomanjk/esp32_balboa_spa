@@ -8,7 +8,15 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-06-10
+
+### Fixed
+
+- **Portal `/status` history charts** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Heater and filter series include **today in progress** (same merge as ePaper), with clearer captions, oldest-first raw lists, axis units, and relative X labels (`-24h`/`now`, `-23d`/`today`). **`GET /api/status/histories`** exposes merged `heatSeconds` / `filterSeconds` plus `heatTodaySeconds` / `filterTodaySeconds`.
+
 ### Changed
+
+- **Temperature history** ([`lib/tempHistory/`](lib/tempHistory/), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): **144 samples** at **10-minute** intervals (24h window) in RTC RAM; **`/TempHist.bin`** on LittleFS with hourly persist when the buffer changed. Removed `temperatureHistory[]` from [`SpaStatusData`](lib/spaMessage/balboa.h). Portal/MQTT/ePaper use the new series; **`GET /api/status/histories`** adds `tempSlotCount` / `tempSampleMinutes`.
 
 - **Licensing:** Firmware (`src/`, `lib/` except vendored carve-outs, build tooling, docs) is now **[PolyForm Noncommercial 1.0.0](LICENSE-firmware)** (licensor: **Jerrod Kogut (shomanjk)**); commercial use requires separate permission. The `balboa-spa/` web UI submodule stays **Apache-2.0**. See [`LICENSE`](LICENSE) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
@@ -18,6 +26,10 @@ where version numbers are used.
 - **README / wiki [Hardware field notes](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-field-notes):** Document community-tested **Molex `0451320403`** ([DigiKey `WM16117-ND`](https://www.digikey.com/short/p5ctrr0m)) for mating the factory header on a **Balboa BP501** spa board ([`wiki/Hardware-field-notes.md`](wiki/Hardware-field-notes.md)).
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.11.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.10.6] - 2026-06-10
 

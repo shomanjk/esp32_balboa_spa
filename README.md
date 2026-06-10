@@ -98,7 +98,7 @@ headers intact when redistributing those files.
 ## Usage history and analytics
 
 - Caching of hot tub configuration to reduce traffic to the spa controller and improve client responsiveness.
-- Hourly tracking of hot tub temperature for 24 hours.
+- **Temperature:** 10-minute samples for **24 hours** (144 points) in RAM; persisted to LittleFS (`/TempHist.bin`) at most hourly and only when the buffer changed since last save. Soft reboot keeps RTC detail; power loss restores the last flash snapshot.
 - Daily tracking of heater on-time (seconds), 24 days of history.
 - Daily tracking of filter on-time (seconds), 24 days of history.
 
@@ -393,7 +393,7 @@ In my setup I have the code base deployed twice, one connected to the Balboa spa
 ## Advanced Features
 
 * Caching of hot tub configuration, to reduce number of calls to SPA Controller and improve responsiveness of client applications
-* Hourly tracking of hot tub temperature for 24 hours
+* 10-minute temperature samples for 24 hours (144 points), hourly flash persist when changed
 * Daily tracking of heater on time in seconds. Keeps 24 days of history
 * Daily Tracking of filter on time in seconds. Keeps 24 days of history
 

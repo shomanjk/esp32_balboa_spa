@@ -10,6 +10,7 @@
 #include <spaUtilities.h>
 
 #include <spaMessage.h>
+#include <tempHistory.h>
 
 // Images / icons
 #include "pumpOff.h"
@@ -317,7 +318,7 @@ float *mergeGraphData(float current, float *historyData, int rangeAdjust)
 
 void displayTemperatureHistoryChart()
 {
-  DrawGraph(gx + 3 * gapX, gy + 0 * gapY + Y_MOVE, gwidth, gheight, 20, 40, TemperatureC, spaStatusData.temperatureHistory, GRAPH_MAX_READINGS, autoscale_on, barchart_off, right_to_left, "h");
+  DrawGraph(gx + 3 * gapX, gy + 0 * gapY + Y_MOVE, gwidth, gheight, 20, 40, TemperatureC, tempHistoryData.samples, TEMP_HISTORY_SLOTS, autoscale_on, barchart_off, right_to_left, "h");
 }
 void displayHeaterChart()
 {
@@ -408,7 +409,7 @@ void iconDemo()
       .height = lowHeatOn_height};
   drawCenteredIconWithText(arealh2, (uint8_t *)lowHeatOn_data, "Low / On");
 
-  DrawGraph(gx + 3 * gapX, (510 - 160) / 2 + 50, gwidth, gheight, 900, 1050, TemperatureC, spaStatusData.temperatureHistory, GRAPH_MAX_READINGS, autoscale_on, barchart_off, right_to_left, "h");
+  DrawGraph(gx + 3 * gapX, (510 - 160) / 2 + 50, gwidth, gheight, 900, 1050, TemperatureC, tempHistoryData.samples, TEMP_HISTORY_SLOTS, autoscale_on, barchart_off, right_to_left, "h");
   displayTemperatures(90, SCREEN_HEIGHT / 2 + 50, spaStatusData.currentTemp, spaStatusData.highSetTemp, spaStatusData.lowSetTemp);
 }
 

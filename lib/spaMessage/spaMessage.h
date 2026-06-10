@@ -5,7 +5,10 @@
 #include "balboa.h"
 #include "spaCommandDispatcher.h"
 
+struct TempHistoryData;
+
 extern RTC_NOINIT_ATTR SpaStatusData spaStatusData;
+extern RTC_NOINIT_ATTR TempHistoryData tempHistoryData;
 extern RTC_NOINIT_ATTR SpaConfigurationData spaConfigurationData;
 extern RTC_NOINIT_ATTR SpaInformationData spaInformationData;
 extern RTC_NOINIT_ATTR SpaSettings0x04Data spaSettings0x04Data;
