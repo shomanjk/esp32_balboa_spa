@@ -24,6 +24,12 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 - **`src/config.h`** is **gitignored** (see `.gitignore`). Copy from [`src/config-example.h`](src/config-example.h) and set Wi‑Fi, MQTT, **`TX485_Rx` / `TX485_Tx`**, **`AUTO_TX`**. Optional MQTT overrides: **`MQTT_HA_DISCOVERY`**, **`MQTT_DISCOVERY_PREFIX`**, **`MQTT_HA_TEMP_UNIT`** (see [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h) defaults).
 - **`VERSION`** string for serial logs: [`src/main.h`](src/main.h) (`#define VERSION`).
 
+## Licensing
+
+- **Firmware** (this repo’s `src/`, `lib/` except vendored carve-outs, build tooling, docs): [PolyForm Noncommercial 1.0.0](LICENSE-firmware). Commercial use requires separate permission.
+- **Web UI** (`balboa-spa/` submodule): Apache-2.0 (`balboa-spa/LICENSE`).
+- **Overview:** [`LICENSE`](LICENSE) · [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 ## Build system
 
 - **PlatformIO** ([`platformio.ini`](platformio.ini)). Web UI assets: `data_dir = balboa-spa/dist`, LittleFS, partition **`spa_module.csv`** (root).

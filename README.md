@@ -73,19 +73,25 @@ This is **moderate DIY**, not a sealed appliance: you need a safe **RS485 tap**,
 
 ## License
 
-This fork is licensed under **Apache License 2.0**; see [`LICENSE`](LICENSE).
+This repository uses **multiple licenses**; see [`LICENSE`](LICENSE).
 
-Third-party components included in this repository (including the `balboa-spa`
-submodule and vendored source files) have their own notices and licenses.
-See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and keep upstream
-license headers/notices intact when redistributing.
+| Component | License | Commercial sale |
+|-----------|---------|-----------------|
+| **Firmware** (`src/`, `lib/`, build tooling, docs, etc.) | [PolyForm Noncommercial 1.0.0](LICENSE-firmware) | Not allowed without separate permission from the licensor |
+| **Web UI** (`balboa-spa/` submodule) | [Apache-2.0](balboa-spa/LICENSE) | Allowed when Apache-2.0 conditions are met |
 
-### Commercial use
+**Firmware:** You may use, modify, and share the firmware for **noncommercial**
+purposes (personal hobby use, research, education, and similar) under
+[`LICENSE-firmware`](LICENSE-firmware). To **sell** hardware or services that
+include this firmware, or otherwise use it commercially, contact the maintainer
+via [GitHub Issues](https://github.com/shomanjk/esp32_balboa_spa/issues).
 
-Apache-2.0 is a permissive open-source license. That means others can use,
-modify, and sell products that include this code as long as they satisfy the
-license conditions (for example: preserve notices and include license text).
-This license does not require downstream users to pay royalties.
+**Web UI:** The `balboa-spa` submodule remains **Apache-2.0** and may be used
+commercially under that license.
+
+Vendored files and PlatformIO/npm dependencies have their own notices; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Keep upstream license
+headers intact when redistributing those files.
 
 ---
 

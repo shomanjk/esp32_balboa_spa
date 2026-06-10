@@ -1223,6 +1223,7 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "<section class=\"panel status-span-full\"><h2>Histories</h2>";
   html += "<p class=\"chart-caption\">Load this on demand to keep first render fast on weak Wi-Fi.</p>";
   html += "<button class=\"equip-btn\" type=\"button\" id=\"statusLoadHistoriesBtn\">Load history charts</button>";
+  html += "<div id=\"statusHistoriesResult\" class=\"status-control-result\"></div>";
   html += "<div id=\"statusHistoriesContainer\"></div>";
   html += "</section>";
 
@@ -1274,19 +1275,31 @@ void handleStatus(AsyncWebServerRequest *request)
           "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(j.heatSeconds||[]),false,false);"
           "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(j.filterSeconds||[]),false,false);}"
           "function statusScrollToHistoryAnchor(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}"
+          "function statusSetHistoriesResult(text){var el=document.getElementById('statusHistoriesResult');if(el)el.textContent=text||'';}"
+          "function statusHistoriesReady(c){return !!(c&&c.querySelector&&c.querySelector('#statusTempHistSection'));}"
           "let statusHistoriesLoading=false;"
           "async function statusLoadHistories(opt){"
           "opt=opt||{};var scrollTo=opt.scrollTo||'';"
           "var c=document.getElementById('statusHistoriesContainer');var btn=document.getElementById('statusLoadHistoriesBtn');"
-          "if(!c)return false;"
-          "if(c.getAttribute('data-loaded')==='1'){if(scrollTo)statusScrollToHistoryAnchor(scrollTo);return true;}"
-          "if(statusHistoriesLoading)return false;"
-          "statusHistoriesLoading=true;if(btn){btn.disabled=true;btn.textContent='Loading...';}"
+          "if(!c){statusSetHistoriesResult('History charts unavailable (page incomplete). Reload /status.');return false;}"
+          "if(c.getAttribute('data-loaded')==='1'){statusScrollToHistoryAnchor(scrollTo||'statusTempHistSection');statusSetHistoriesResult('');return true;}"
+          "if(statusHistoriesLoading){statusSetHistoriesResult('Still loading history charts...');return false;}"
+          "statusHistoriesLoading=true;statusSetHistoriesResult('');"
+          "if(btn){btn.disabled=true;btn.textContent='Loading...';}"
           "try{var j=await statusFetchJson('/api/status/histories',9000);"
-          "c.innerHTML=(j&&j.html)||'';statusRenderHistoryCharts(j);c.setAttribute('data-loaded','1');"
-          "if(btn)btn.textContent='History loaded';if(scrollTo)statusScrollToHistoryAnchor(scrollTo);"
-          "statusHistoriesLoading=false;return true;"
-          "}catch(e){if(btn){btn.disabled=false;btn.textContent='Retry history load';}statusHistoriesLoading=false;return false;}}"
+          "var html=(j&&j.html)?String(j.html):'';"
+          "if(!html.length)throw new Error('empty_html');"
+          "c.innerHTML=html;"
+          "if(!statusHistoriesReady(c)){c.innerHTML='';throw new Error('missing_sections');}"
+          "statusRenderHistoryCharts(j);c.setAttribute('data-loaded','1');"
+          "if(btn)btn.textContent='History loaded';"
+          "statusScrollToHistoryAnchor(scrollTo||'statusTempHistSection');"
+          "return true;"
+          "}catch(e){c.removeAttribute('data-loaded');"
+          "if(btn){btn.disabled=false;btn.textContent='Retry history load';}"
+          "statusSetHistoriesResult('History load failed: '+(e&&e.message?e.message:e)+'. Try again.');"
+          "return false;"
+          "}finally{statusHistoriesLoading=false;}}"
           "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
           "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
           "function statusSetEquipStateClass(key,state){var c=statusEquipCell(key);if(!c||c.classList.contains('equip-absent'))return;"
@@ -1377,14 +1390,15 @@ void handleStatus(AsyncWebServerRequest *request)
           "function statusStopPolling(){if(!statusPollTimer)return;clearTimeout(statusPollTimer);statusPollTimer=0;}"
           "document.addEventListener('visibilitychange',function(){if(document.hidden){statusStopPolling();}else{statusStartPolling();}});"
           "window.addEventListener('beforeunload',statusStopPolling);"
-          "document.getElementById('statusLoadHistoriesBtn').addEventListener('click',function(){statusLoadHistories({});});"
+          "(function(){"
+          "var loadBtn=document.getElementById('statusLoadHistoriesBtn');"
+          "if(loadBtn)loadBtn.addEventListener('click',function(){statusLoadHistories({});});"
           "document.addEventListener('click',function(e){"
           "var t=e.target&&e.target.closest?e.target.closest('a.status-temp-chart-link[data-history-anchor]'):null;"
           "if(!t)return;var anchor=t.getAttribute('data-history-anchor');if(!anchor)return;"
-          "var hc=document.getElementById('statusHistoriesContainer');"
-          "if(!hc||hc.getAttribute('data-loaded')==='1')return;"
           "e.preventDefault();statusLoadHistories({scrollTo:anchor});});"
           "statusStartPolling();"
+          "})();"
           "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
           "if(code===17)return (snap.light1>0)===on;"
           "if(code===18)return (snap.light2>0)===on;"
@@ -2327,8 +2341,13 @@ void handleStatusSummaryApi(AsyncWebServerRequest *request)
 
 void handleStatusHistoriesApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(16384);
+  if (!spaStatusData.heatOn || !spaStatusData.filterOn)
+  {
+    request->send(503, "application/json", "{\"error\":\"analytics_not_ready\"}");
+    return;
+  }
+
+  DynamicJsonDocument doc(20480);
   String historiesHtml;
   historiesHtml.reserve(7000);
   appendStatusHistoriesSection(historiesHtml);
@@ -2351,8 +2370,25 @@ void handleStatusHistoriesApi(AsyncWebServerRequest *request)
     filterSeconds.add(spaStatusData.filterOn->history()[i]);
   }
 
-  serializeJson(doc, *response);
-  request->send(response);
+  const size_t jsonNeed = measureJson(doc);
+  if (jsonNeed == 0 || jsonNeed > doc.capacity())
+  {
+    Log.error("[Web]: /api/status/histories JSON overflow need=%u cap=%u" CR,
+              static_cast<unsigned>(jsonNeed), static_cast<unsigned>(doc.capacity()));
+    request->send(500, "application/json", "{\"error\":\"json_overflow\"}");
+    return;
+  }
+
+  String payload;
+  payload.reserve(jsonNeed + 1);
+  if (serializeJson(doc, payload) == 0)
+  {
+    Log.error("[Web]: /api/status/histories serialize failed need=%u" CR, static_cast<unsigned>(jsonNeed));
+    request->send(500, "application/json", "{\"error\":\"serialize_failed\"}");
+    return;
+  }
+
+  request->send(200, "application/json", payload);
 }
 
 void handleStateLittleFsApi(AsyncWebServerRequest *request)

@@ -8,12 +8,26 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **Licensing:** Firmware (`src/`, `lib/` except vendored carve-outs, build tooling, docs) is now **[PolyForm Noncommercial 1.0.0](LICENSE-firmware)** (licensor: **Jerrod Kogut (shomanjk)**); commercial use requires separate permission. The `balboa-spa/` web UI submodule stays **Apache-2.0**. See [`LICENSE`](LICENSE) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 ### Documentation
 
 - **README:** Add human-facing [**Overview**](README.md#overview) at the top (value, parts, setup expectations, shipped capabilities); rename former **Features** section to **Usage history and analytics**; remove duplicate **What this project is** (developer build roles summarized in Overview).
 - **README / wiki [Hardware field notes](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-field-notes):** Document community-tested **Molex `0451320403`** ([DigiKey `WM16117-ND`](https://www.digikey.com/short/p5ctrr0m)) for mating the factory header on a **Balboa BP501** spa board ([`wiki/Hardware-field-notes.md`](wiki/Hardware-field-notes.md)).
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
+
+## [2.10.6] - 2026-06-10
+
+### Fixed
+
+- **Portal `/status` history charts** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Harden lazy-load UX for **Load history charts** and chart-icon links — validate injected HTML before marking loaded, scroll to the chart section after load, show visible errors (`#statusHistoriesResult`) instead of silent no-ops, fix chart-icon handler to always delegate to `statusLoadHistories`, null-safe listener init, and `finally` guard on the loading flag. **`GET /api/status/histories`** null-checks analytics pointers, bumps JSON capacity, and returns explicit errors on overflow/serialize failure.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.10.6`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.10.5] - 2026-06-10
 

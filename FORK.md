@@ -14,13 +14,14 @@ The web UI credits [jozefnad/balboa-spa](https://github.com/jozefnad/balboa-spa)
 
 ## Licensing posture for this fork
 
-- Root project license: Apache-2.0 (`LICENSE`).
-- Third-party attributions and included component licenses: `THIRD_PARTY_NOTICES.md`.
+- **Firmware** (everything except `balboa-spa/` and third-party carve-outs):
+  [PolyForm Noncommercial 1.0.0](LICENSE-firmware). Noncommercial use is
+  permitted; **commercial use requires separate permission** from the licensor.
+- **Web UI** (`balboa-spa/` submodule): Apache-2.0 (`balboa-spa/LICENSE`).
+  Commercial use is allowed when Apache-2.0 conditions are met.
+- **Overview and scope:** [`LICENSE`](LICENSE).
+- **Third-party attributions:** [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 - Upstream license headers in vendored files must be preserved when distributing source.
-
-Apache-2.0 allows commercial redistribution (including sale of products that
-include this code) provided license obligations are met; it is not a
-royalty-bearing license.
 
 ## Optional: compare with an “upstream” remote
 
