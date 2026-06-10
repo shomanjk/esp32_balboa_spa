@@ -147,6 +147,7 @@ void setup()
 
 void loop()
 {
+  esp_task_wdt_reset();
 #ifdef LOCAL_CLIENT
   rs485Loop();
 #endif

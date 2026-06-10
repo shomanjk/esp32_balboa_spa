@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.10.2"
+#define VERSION "2.10.3"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 
@@ -38,9 +38,9 @@
 #define INITIAL_WDT_TIMEOUT 300 // Reset ESP32 if wifi is not connected within 5 minutes
 #if defined(ESP32S3)
 #warning "Need to look into S3 watchdog timer"
-#define RUNNING_WDT_TIMEOUT 1200  // Reset ESP32 if no SPA messages are received for 60 seconds
+#define RUNNING_WDT_TIMEOUT 1200  // Spa silence watchdog + loop TWDT (seconds) after spa id is assigned
 #else
-#define RUNNING_WDT_TIMEOUT 60  // Reset ESP32 if no SPA messages are received for 60 seconds
+#define RUNNING_WDT_TIMEOUT 60  // Spa silence watchdog + loop TWDT (seconds) after spa id is assigned
 #endif
 
 #define logSection(section)                                                  \

@@ -1,0 +1,27 @@
+---
+description: Never bump VERSION/CHANGELOG or OTA-flash without explicit user request
+alwaysApply: true
+---
+
+# Firmware: version bumps and OTA
+
+The **user** decides when firmware is versioned or flashed to hardware. The agent does **not** bump versions or run OTA/USB uploads unless they **clearly ask in that conversation** (e.g. “patch bump and OTA”, “flash my device”, “upload to spa-…”).
+
+## Do not without explicit ask
+
+- Change **`VERSION`** in [`src/main.h`](src/main.h) or cut a release section in [`CHANGELOG.md`](CHANGELOG.md) for shipping
+- Run **`pio run -e <env> -t upload`**, **`espota`**, or other commands that **flash firmware** to a tub device
+- Run **`pio run -e <env> -t uploadfs`** unless the user asked to flash filesystem assets
+
+## OK without asking (implementation and verification)
+
+- Edit firmware/libs, run **`pio run -e <env>`** (compile only)
+- Read-only checks: **`GET /api/version`**, MQTT subscribe, serial monitor, **`git status`** / **`git diff`**
+- Summarize changes and **remind** the user when they may want to version or flash (e.g. “bump version and OTA when you’re ready”)
+
+## When the user asks to flash
+
+- Confirm **environment** (`M5AtomLite-tub`, `M5AtomLite-tub-ota`, etc.) and **target** if ambiguous
+- Version/changelog updates belong in the **same** request only if they asked for both
+
+Project context: [`AGENTS.md`](AGENTS.md), [`platformio.ini`](platformio.ini).

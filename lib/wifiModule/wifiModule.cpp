@@ -116,6 +116,7 @@ void wifiConnect()
 
   while (WiFi.status() != WL_CONNECTED && millis() < timeout)
   {
+    esp_task_wdt_reset();
     yield();
   }
   if (WiFi.status() != WL_CONNECTED)

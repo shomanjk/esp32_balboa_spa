@@ -14,6 +14,8 @@ void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 
 void rs485Setup();
 void rs485Loop();
+/** After spa id is assigned: restart if no valid RS485 frame for `RUNNING_WDT_TIMEOUT` seconds. */
+void rs485CheckSpaSilenceWatchdog();
 void rs485ClearToSend();
 void rs485SampleHistory();
 const char *rs485HealthCode();

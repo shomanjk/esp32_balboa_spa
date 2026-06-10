@@ -9,6 +9,7 @@
 
 #include  <spaUtilities.h>
 #include <spaMessage.h>
+#include <restartReason.h>
 
 #include "rs485.h"
 #include "../../src/config.h"
@@ -146,7 +147,34 @@ void rs485Loop()
   }
 
   rs485SampleHistory();
+  rs485CheckSpaSilenceWatchdog();
 };
+
+void rs485CheckSpaSilenceWatchdog()
+{
+  if (id != WIFI_MODULE_ID || rs485Stats.lastValidFrameMs == 0)
+  {
+    return;
+  }
+  const uint32_t silenceMs = static_cast<uint32_t>(RUNNING_WDT_TIMEOUT) * 1000UL;
+  const uint32_t ageMs = millis() - rs485Stats.lastValidFrameMs;
+  if (ageMs <= silenceMs)
+  {
+    return;
+  }
+  static bool restartArmed = true;
+  if (!restartArmed)
+  {
+    return;
+  }
+  restartArmed = false;
+  setLastRestartReason("SPA silence watchdog");
+  Log.error(F("[rs485]: No valid frame for %lums (limit %us), restarting" CR),
+            static_cast<unsigned long>(ageMs),
+            static_cast<unsigned>(RUNNING_WDT_TIMEOUT));
+  delay(50);
+  ESP.restart();
+}
 
 void rs485DrainUart()
 {
@@ -247,7 +275,10 @@ void rs485ProcessByte(uint8_t x, uint8_t uartAvailable)
           id = WIFI_MODULE_ID;
           Log.verbose(F("[rs485]: Set SPA id 0x0A" CR));
           sendExistingClientResponse(id);
-          esp_task_wdt_init(RUNNING_WDT_TIMEOUT, true); // enable panic so ESP32 restarts
+          // Shorter TWDT catches a stuck loop; spa silence uses rs485CheckSpaSilenceWatchdog().
+          esp_task_wdt_init(RUNNING_WDT_TIMEOUT, true);
+          Log.notice(F("[rs485]: Spa id assigned; loop TWDT %us, spa silence watchdog armed" CR),
+                     (unsigned)RUNNING_WDT_TIMEOUT);
           spaMessage.clear();
         }
 

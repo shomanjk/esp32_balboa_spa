@@ -15,6 +15,12 @@ where version numbers are used.
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
 
+## [2.10.3] - 2026-06-10
+
+### Fixed
+
+- **Task watchdog (TASK_WDT) panics on tub builds** ([`src/main.ino`](src/main.ino), [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp), [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)): Feed the task WDT every `loop()` iteration and during the Wi‑Fi connect wait so Wi‑Fi outages no longer starve the watchdog while RS485 is still healthy (`spaMessageLoop` only ran when `WL_CONNECTED`, and `esp_task_wdt_reset()` was only called when dequeuing the spa read queue). Replace the implicit “no spa traffic” TWDT behavior with an explicit **SPA silence watchdog** (`rs485CheckSpaSilenceWatchdog`) that restarts cleanly when no valid RS485 frame arrives for `RUNNING_WDT_TIMEOUT` seconds after spa id assignment.
+
 ## [2.10.2] - 2026-06-10
 
 ### Fixed
