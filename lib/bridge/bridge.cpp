@@ -74,6 +74,18 @@ static String bridgeRipForClient(AsyncClient *c)
   return c->remoteIP().toString();
 }
 
+static bool bridgeAnyClientConnected()
+{
+  for (int i = 0; i < MAX_BRIDGE_CLIENTS; i++)
+  {
+    if (clients[i] && clients[i]->connected())
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 void bridgeSetup()
 {
   String s = WiFi.macAddress();
@@ -124,6 +136,10 @@ void bridgeLoop()
             Log.verbose(F("[Bridge]: Disconnected from Spa %s" CR), rip.c_str());
 #endif
             publishDebug(("Bridge Client Disconnected (" + String(slot) + ") " + rip).c_str());
+            if (!bridgeAnyClientConnected())
+            {
+              Log.notice(F("[Bridge]: bridge/out idle — no TCP client connected" CR));
+            }
           });
           clients[i]->onConnect([slot](void *r, AsyncClient *c) {
 #if defined(DIAG_FAULT_CAPTURE)
@@ -280,12 +296,6 @@ void bridgeSend(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
     Log.verbose(F("[Bridge]: bridge/out %s" CR), msgToString(data).c_str());
     mqtt.publish((mqttTopic + "bridge/out").c_str(), msgToString(data).c_str());
   }
-  else
-  {
-    // RS485 frames are forwarded here even when no Homebridge/TCP client is connected;
-    // skip MQTT bridge/msg — publishing every frame spammed brokers (~1–4/s).
-    Log.verbose(F("[Bridge]: bridge/out skipped — no TCP client connected" CR));
-  }
   data.clear();
 };
 
@@ -314,9 +324,5 @@ void bridgeSend(uint8_t *message, int length)
   {
     // Log.verbose(F("[Bridge]: bridge/out %s" CR), msgToString(message, length).c_str());
     mqtt.publish((mqttTopic + "bridge/out").c_str(), msgToString(message, length).c_str());
-  }
-  else
-  {
-    Log.verbose(F("[Bridge]: bridge/out skipped — no TCP client connected" CR));
   }
 };
