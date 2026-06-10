@@ -15,6 +15,12 @@ where version numbers are used.
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
 
+## [2.10.4] - 2026-06-10
+
+### Changed
+
+- **DIAG fault log on `GET /api/version`** ([`lib/faultCapture/faultCapture.cpp`](lib/faultCapture/faultCapture.cpp)): `faultLog` is now an array of objects (`uptimeMs`, `msg`, optional `wallUnix` / `wallTime`) plus `deviceUptimeMs` for same-boot comparison. RTC ring layout bump clears legacy string-only entries on first boot after upgrade.
+
 ## [2.10.3] - 2026-06-10
 
 ### Fixed

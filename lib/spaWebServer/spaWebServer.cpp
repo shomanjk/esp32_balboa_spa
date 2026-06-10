@@ -2148,9 +2148,9 @@ void handleVersion(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
 #if defined(DIAG_FAULT_CAPTURE)
-  // faultLog can hold 16×~96-char lines; ArduinoJson evicts oldest keys when full — append
+  // faultLog: up to 16 structured objects; ArduinoJson evicts oldest keys when full — append
   // fault data first, then firmware metadata, so version/build/hostname are never dropped.
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(5120);
   faultCaptureAppendToJson(doc.to<JsonObject>());
 #else
   DynamicJsonDocument doc(512);

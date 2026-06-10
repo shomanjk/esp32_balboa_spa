@@ -2,25 +2,34 @@
 
 #include <cstdarg>
 #include <cstring>
+#include <time.h>
 
 #include <esp_system.h>
 
 #if defined(DIAG_FAULT_CAPTURE)
 #include <ArduinoJson.h>
 
-#define FAULT_MAGIC 0xFA914CA8u
+/** Bump when RTC ring layout changes (invalidates prior slow-memory contents). */
+#define FAULT_MAGIC 0xFA914CA9u
 #define FAULT_LINES 16
-#define FAULT_MAX 96
+#define FAULT_MSG_MAX 80
 
 #define FAULT_ABORT_MAGIC 0xA601EE01u
 #define FAULT_INGRESS_MAGIC 0xB266DC01u
 
 typedef struct
 {
+  uint32_t uptimeMs;
+  uint32_t wallUnix;
+  char msg[FAULT_MSG_MAX];
+} FaultCaptureEntry;
+
+typedef struct
+{
   uint32_t magic;
   uint16_t head;
   uint16_t count;
-  char lines[FAULT_LINES][FAULT_MAX];
+  FaultCaptureEntry lines[FAULT_LINES];
 } FaultCaptureRing;
 
 RTC_NOINIT_ATTR static FaultCaptureRing s_fc;
@@ -71,6 +80,46 @@ static void faultCaptureEnsureInit()
   }
 }
 
+static uint32_t faultCaptureWallUnix()
+{
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 0))
+  {
+    return 0;
+  }
+  time_t now = 0;
+  time(&now);
+  return now > 0 ? static_cast<uint32_t>(now) : 0;
+}
+
+static void faultCaptureFormatWallIso(uint32_t wallUnix, char *out, size_t outLen)
+{
+  if (out == nullptr || outLen == 0 || wallUnix == 0)
+  {
+    return;
+  }
+  time_t t = static_cast<time_t>(wallUnix);
+  struct tm timeinfo;
+  if (localtime_r(&t, &timeinfo) == nullptr)
+  {
+    return;
+  }
+  strftime(out, outLen, "%Y-%m-%dT%H:%M:%S", &timeinfo);
+}
+
+static const char *faultCaptureMessageText(const char *line)
+{
+  if (line == nullptr)
+  {
+    return "";
+  }
+  if (strncmp(line, "[fault] ", 8) == 0)
+  {
+    return line + 8;
+  }
+  return line;
+}
+
 void faultCaptureInit()
 {
   faultCaptureEnsureInit();
@@ -88,7 +137,7 @@ void faultCaptureOnBootFromResetReason()
   const esp_reset_reason_t r = esp_reset_reason();
   if (r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || r == ESP_RST_WDT)
   {
-    char buf[FAULT_MAX];
+    char buf[96];
     snprintf(buf, sizeof(buf), "[fault] boot after %s", faultResetReasonName(r));
     faultCaptureAppend(buf);
   }
@@ -138,14 +187,13 @@ void faultCaptureAppend(const char *line)
     return;
   }
   faultCaptureEnsureInit();
-  size_t n = strlen(line);
-  if (n >= FAULT_MAX)
-  {
-    n = FAULT_MAX - 1;
-  }
+  const char *msg = faultCaptureMessageText(line);
   const uint16_t w = static_cast<uint16_t>(s_fc.head % FAULT_LINES);
-  memcpy(s_fc.lines[w], line, n);
-  s_fc.lines[w][n] = '\0';
+  FaultCaptureEntry *entry = &s_fc.lines[w];
+  entry->uptimeMs = millis();
+  entry->wallUnix = faultCaptureWallUnix();
+  strncpy(entry->msg, msg, FAULT_MSG_MAX - 1);
+  entry->msg[FAULT_MSG_MAX - 1] = '\0';
   s_fc.head = static_cast<uint16_t>((s_fc.head + 1) % FAULT_LINES);
   if (s_fc.count < FAULT_LINES)
   {
@@ -155,7 +203,7 @@ void faultCaptureAppend(const char *line)
 
 void faultCaptureAppendf(const char *fmt, ...)
 {
-  char buf[FAULT_MAX];
+  char buf[96];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -166,6 +214,7 @@ void faultCaptureAppendf(const char *fmt, ...)
 void faultCaptureAppendToJson(JsonObject root)
 {
   faultCaptureEnsureInit();
+  root["deviceUptimeMs"] = millis();
   JsonArray arr = root.createNestedArray("faultLog");
   if (s_fc.count > 0)
   {
@@ -173,7 +222,20 @@ void faultCaptureAppendToJson(JsonObject root)
     for (uint16_t i = 0; i < s_fc.count; i++)
     {
       const uint16_t idx = static_cast<uint16_t>((start + i) % FAULT_LINES);
-      arr.add(s_fc.lines[idx]);
+      const FaultCaptureEntry *entry = &s_fc.lines[idx];
+      JsonObject item = arr.createNestedObject();
+      item["uptimeMs"] = entry->uptimeMs;
+      item["msg"] = entry->msg;
+      if (entry->wallUnix != 0)
+      {
+        item["wallUnix"] = entry->wallUnix;
+        char wallIso[20];
+        faultCaptureFormatWallIso(entry->wallUnix, wallIso, sizeof(wallIso));
+        if (wallIso[0] != '\0')
+        {
+          item["wallTime"] = wallIso;
+        }
+      }
     }
   }
   if (s_ingress_magic == FAULT_INGRESS_MAGIC)

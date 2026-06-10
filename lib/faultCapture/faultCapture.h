@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-/** Ring of short text lines in RTC slow memory (survives panic reboot; not power loss). */
+/** Ring of fault entries in RTC slow memory (survives panic reboot; not power loss). */
 void faultCaptureInit();
 /** Call once early in boot; appends a line if last reset was panic/WDT. */
 void faultCaptureOnBootFromResetReason();
@@ -14,7 +14,10 @@ void faultCaptureAppendf(const char *fmt, ...) __attribute__((format(printf, 1, 
 
 #if defined(DIAG_FAULT_CAPTURE)
 #include <ArduinoJson.h>
-/** Append oldest→newest lines into `root["faultLog"]` (creates array). */
+/**
+ * Append oldest→newest faults into `root["faultLog"]` as objects:
+ * `{ uptimeMs, msg, wallUnix?, wallTime? }`, plus `deviceUptimeMs` for same-boot comparison.
+ */
 void faultCaptureAppendToJson(JsonObject root);
 /**
  * Called from linker-wrapped `esp_system_abort` before the system panics.
