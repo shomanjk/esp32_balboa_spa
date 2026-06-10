@@ -1036,7 +1036,8 @@ void handleStatus(AsyncWebServerRequest *request)
       ".equip-btn{background:#0f4a87;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:.84rem;}"
       ".equip-btn:disabled{opacity:.55;cursor:not-allowed;}"
       ".range-bands{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0;}"
-      "@media (max-width:520px){.range-bands{grid-template-columns:1fr;}}"
+      "#statusBandLow{grid-column:1;grid-row:1;}#statusBandHigh{grid-column:2;grid-row:1;}"
+      "@media (max-width:520px){.range-bands{grid-template-columns:1fr;}#statusBandLow,#statusBandHigh{grid-column:auto;grid-row:auto;}}"
       ".range-band{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#fafbfc;}"
       "button.range-band{display:block;width:100%;margin:0;text-align:start;font:inherit;color:inherit;"
       "appearance:none;-webkit-appearance:none;border-radius:8px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .12s;}"
@@ -1103,15 +1104,7 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "</span></dd></div>";
     html += "</dl>";
     html += "<div class=\"range-bands\" role=\"group\" aria-label=\"Temperature range setpoints\">";
-    html += "<button type=\"button\" id=\"statusBandLow\" data-range-band=\"low\" class=\"range-band";
-    html += activeHigh ? "" : " range-band-active-low";
-    html += "\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\" aria-label=\"Use low temperature range\" aria-pressed='";
-    html += activeHigh ? "false" : "true";
-    html += "' title=\"Switch to low range\"";
-    html += activeHigh ? "" : " disabled";
-    html += "><span class=\"range-band-title\"><span>Low range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▼</span></span><span id=\"statusBandLowVal\" class=\"range-band-temp\">";
-    html += statusBandStoredSetpointText(spaStatusData.lowSetTemp);
-    html += "</span></button><button type=\"button\" id=\"statusBandHigh\" data-range-band=\"high\" class=\"range-band";
+    html += "<button type=\"button\" id=\"statusBandHigh\" data-range-band=\"high\" class=\"range-band";
     html += activeHigh ? " range-band-active-high" : "";
     html += "\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"on\" aria-label=\"Use high temperature range\" aria-pressed='";
     html += activeHigh ? "true" : "false";
@@ -1119,6 +1112,14 @@ void handleStatus(AsyncWebServerRequest *request)
     html += activeHigh ? " disabled" : "";
     html += "><span class=\"range-band-title\"><span>High range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▲</span></span><span id=\"statusBandHighVal\" class=\"range-band-temp\">";
     html += statusBandStoredSetpointText(spaStatusData.highSetTemp);
+    html += "</span></button><button type=\"button\" id=\"statusBandLow\" data-range-band=\"low\" class=\"range-band";
+    html += activeHigh ? "" : " range-band-active-low";
+    html += "\" onclick=\"statusSendButton(this)\" data-button=\"80\" data-state=\"off\" aria-label=\"Use low temperature range\" aria-pressed='";
+    html += activeHigh ? "false" : "true";
+    html += "' title=\"Switch to low range\"";
+    html += activeHigh ? "" : " disabled";
+    html += "><span class=\"range-band-title\"><span>Low range setpoint</span><span class=\"range-band-indicator\" aria-hidden=\"true\">▼</span></span><span id=\"statusBandLowVal\" class=\"range-band-temp\">";
+    html += statusBandStoredSetpointText(spaStatusData.lowSetTemp);
     html += "</span></button></div>";
     html += "<p class=\"range-hint\">Click a range above to switch. Set temp applies to the highlighted range only.</p>";
     html += "<div class=\"status-control-row\"><label for=\"statusSetTempInput\" class=\"equip-label\">Set temp <span id=\"statusSetTempScopeLabel\">";

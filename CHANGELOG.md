@@ -8,6 +8,26 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.11.2] - 2026-06-10
+
+### Fixed
+
+- **`/status` temperature range bands (desktop)** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Pin low/high setpoint buttons to **grid row 1** on wide viewports so they stay side by side after the DOM reorder for mobile stacking.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.11.2`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.11.1] - 2026-06-10
+
+### Changed
+
+- **`/status` temperature range bands** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): High/low setpoint buttons stack **high on top, low below** on narrow viewports; desktop layout unchanged (low left, high right). DOM order matches mobile stack so tab and screen-reader order align with visual layout.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.11.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.11.0] - 2026-06-10
 
 ### Fixed
