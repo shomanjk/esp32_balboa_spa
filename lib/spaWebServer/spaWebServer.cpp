@@ -2148,7 +2148,10 @@ void handleVersion(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
 #if defined(DIAG_FAULT_CAPTURE)
-  DynamicJsonDocument doc(3072);
+  // faultLog can hold 16×~96-char lines; ArduinoJson evicts oldest keys when full — append
+  // fault data first, then firmware metadata, so version/build/hostname are never dropped.
+  DynamicJsonDocument doc(4096);
+  faultCaptureAppendToJson(doc.to<JsonObject>());
 #else
   DynamicJsonDocument doc(512);
 #endif
@@ -2160,9 +2163,6 @@ void handleVersion(AsyncWebServerRequest *request)
   doc["repoReadmeUrl"] = FIRMWARE_REPO_README_URL;
   doc["releasesUrl"] = FIRMWARE_REPO_RELEASES_URL;
   doc["releasesLatestApiUrl"] = FIRMWARE_REPO_RELEASES_LATEST_API_URL;
-#if defined(DIAG_FAULT_CAPTURE)
-  faultCaptureAppendToJson(doc.to<JsonObject>());
-#endif
   serializeJson(doc, *response);
   request->send(response);
 }

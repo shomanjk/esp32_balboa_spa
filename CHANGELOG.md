@@ -15,6 +15,12 @@ where version numbers are used.
 - **Wiki [Home](https://github.com/shomanjk/esp32_balboa_spa/wiki):** Link to README Overview ([`wiki/Home.md`](wiki/Home.md)).
 - **Wiki:** Use `blob/ESP32/` for in-repo links (`README`, `FORK.md`, `OTA_LOGGING_WORKFLOW.md`, etc.) so URLs match the default branch and avoid **404** when `main` lags ([`wiki/*.md`](wiki/)).
 
+## [2.10.2] - 2026-06-10
+
+### Fixed
+
+- **`GET /api/version` with `DIAG_FAULT_CAPTURE`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Append `faultLog` / `lastBridgeIngress` before firmware metadata and size the JSON doc to **4096** bytes so a full 16-line fault ring no longer evicts `version`, `build`, `hostname`, and related fields (ArduinoJson drops oldest keys when the pool is exhausted).
+
 ## [2.10.1] - 2026-06-10
 
 ### Fixed
