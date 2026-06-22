@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **Documentation sync** ([`README.md`](README.md), [`AGENTS.md`](AGENTS.md), [`esp32_robustness_hardening_revised.plan.md`](esp32_robustness_hardening_revised.plan.md)): Align command-write scope with shipped behavior — MQTT **`cmd/#`** dispatch and web SCI paths are implemented; **`TimeFormat`** is web + config export/import (not deferred); note remaining gap for MQTT **`cmd/timeFormat`**. Robustness plan marks command-path phase complete and updates baseline/gap lists.
+
 ## [2.14.0] - 2026-06-22
 
 ### Added

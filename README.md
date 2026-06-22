@@ -108,7 +108,7 @@ headers intact when redistributing those files.
 
 Planned or deferred enhancements (not commitments; order and timing vary).
 
-**Recently shipped (see [CHANGELOG](CHANGELOG.md#unreleased)):** editable filter 1/2 schedules on **`/config`** and via balboa-spa SCI **`Filters`**; JSON config **export/import** for writable settings (filter, panel clock, temp units) with read-only identity snapshots.
+**Recently shipped (see [CHANGELOG](CHANGELOG.md) [2.12.0]–[2.14.0]):** editable filter 1/2 schedules on **`/config`** and via balboa-spa SCI **`Filters`**; JSON config **export/import** (filter, panel clock, temp units, **`clockFormat`**); MQTT filter schedule writes; fault-log decode and **`reminderText`** telemetry.
 
 - **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the firmware **`/status`** page).
 - **Equipment display names** — On the spa config page (or a dedicated settings area), let users assign friendly names per equipment slot (e.g. Pump 1 → "Lounger Jets", Pump 2 → "Deep Chair Jets"). Store names in firmware-backed nonvolatile storage so labels survive reboots and stay consistent across the web UI (`balboa-spa` + [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) APIs as needed). Optional later: expose the same labels to MQTT / Home Assistant discovery if useful.
@@ -130,7 +130,7 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 
 ![Web UI example](docs/balboa-spa-web.png)
 
-**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, and panel-clock controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** to the spa over RS485). **`/config`** supports **filter schedule editing** and **JSON backup/restore**. The **LittleFS** `balboa-spa` bundle uses the same SCI **`Filters`** paths for filter read/write; other control surfaces may still differ from upstream — treat as **read-first** unless you verify them for your build.
+**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, panel-clock, and **12h/24h format** controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** / **`TimeFormat`** to the spa over RS485). **`/config`** supports **filter schedule editing** and **JSON backup/restore**. The **LittleFS** `balboa-spa` bundle uses the same SCI **`Filters`** paths for filter read/write; other control surfaces may still differ from upstream — treat as **read-first** unless you verify them for your build.
 
 **Layout:** Firmware-served pages `/status`, `/config`, and `/state` use a responsive layout (viewport scaling, wrapping nav, fluid charts/images) for phone-sized screens.
 
@@ -186,8 +186,10 @@ To keep protocol risk low, command-write implementation is intentionally staged:
   - **Set panel clock** (`SystemTime`, Balboa `0x21`) via `HH:MM` or gateway sync.
   - **Filter cycle schedules** (Balboa `0x23`) via **`/config`**, **`GET/POST /api/config/filter`**, SCI **`Filters`**, and **MQTT** **`cmd/filter`** (+ granular **`cmd/filter/filter{1,2}/…`** sub-topics).
   - **Config backup/restore** — **`GET /api/config/export`**, **`POST /api/config/import`** (writable settings only; identity snapshots for warnings).
+- **Also in scope (v1) — web and config export/import only (no MQTT topic yet):**
+  - **Panel clock format** (`TimeFormat`, Balboa `0x21` piggyback) — SCI **`TimeFormat`** (`12`/`24`), **`/status`** controls, export/import **`clockFormat`**.
 - **Deferred (post-v1):**
-  - `TimeFormat`
+  - MQTT **`cmd/timeFormat`** (or equivalent) for panel 12h/24h
   - Raw configuration / preferences frame writes (`0x2E`, `0x26` beyond temp scale)
 
 ### MQTT command topics (v1)

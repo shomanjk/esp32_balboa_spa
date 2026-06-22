@@ -1,13 +1,13 @@
 ---
 name: ESP32 Robustness Hardening
-overview: Define a reliability-first hardening roadmap for tub-installed ESP32 firmware, prioritizing concrete failure handling, command-path completion, and observable degraded states without over-engineering fleet-style controls.
+overview: Reliability-first hardening roadmap for tub-installed ESP32 firmware. Command-path completion (shared web + MQTT dispatcher) is largely done; remaining work prioritizes backpressure/telemetry, health snapshots, staged recovery, and OTA verification.
 todos:
   - id: backpressure-input-hardening
     content: Harden queue ownership, malformed input handling, and low-memory/backpressure behavior
     status: pending
   - id: command-path
     content: Complete shared MQTT and web command execution pipeline with validation and acknowledgements
-    status: pending
+    status: completed
   - id: health-snapshot
     content: Add lightweight health snapshot telemetry and machine-readable health endpoint
     status: pending
@@ -34,20 +34,22 @@ isProject: false
 
 ## Current Baseline (already present)
 
-- Task watchdog is initialized in [`src/main.ino`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/src/main.ino) and reset during active message processing in [`lib/spaMessage/spaMessage.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaMessage/spaMessage.cpp) and OTA progress in [`lib/wifiModule/wifiModule.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/wifiModule/wifiModule.cpp).
-- Spa data structures already track `lastUpdate` / `lastRequest`, and stale detection is already used in [`lib/spaMessage/spaMessage.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaMessage/spaMessage.cpp).
-- Basic node telemetry already publishes over MQTT in [`lib/mqttModule/mqttModule.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/mqttModule/mqttModule.cpp).
-- OTA support, auth options, timeout controls, and OTA lifecycle logging already exist in [`lib/wifiModule/wifiModule.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/wifiModule/wifiModule.cpp).
-- Restart reason persistence already exists in [`lib/restartReason/restartReason.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/restartReason/restartReason.cpp).
-- OTA-capable partitioning is already configured in [`spa_module.csv`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/spa_module.csv).
+- Task watchdog is initialized in [`src/main.ino`](src/main.ino) and reset during active message processing in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp) and OTA progress in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp).
+- Spa data structures already track `lastUpdate` / `lastRequest`, and stale detection is already used in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp).
+- **Shared command dispatcher** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)) serves web SCI **`device_request`** paths and MQTT **`Spa/<gateway>/cmd/#`**; outcomes publish to **`cmd/result`** JSON.
+- Basic node telemetry already publishes over MQTT in [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp).
+- RS485 and Wi-Fi health surfaces exist (`GET /api/rs485`, `/api/wifi`, `/api/version`); web log ring + optional **`TELNET_LOG`** listener.
+- **`DIAG_FAULT_CAPTURE`** (tub envs): RTC slow-memory fault ring, panic/WDT breadcrumbs, **`faultLog`** on **`GET /api/version`** ([`lib/faultCapture/`](lib/faultCapture/)).
+- OTA support, auth options, timeout controls, and OTA lifecycle logging already exist in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp).
+- Restart reason persistence already exists in [`lib/restartReason/restartReason.cpp`](lib/restartReason/restartReason.cpp).
+- OTA-capable partitioning is already configured in [`spa_module.csv`](spa_module.csv).
 
 ## Key Gaps To Close
 
-- MQTT command callback currently echoes payloads instead of dispatching validated commands in [`lib/mqttModule/mqttModule.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/mqttModule/mqttModule.cpp).
-- Web `device_request` handling parses requests but does not execute control actions in [`lib/spaWebServer/spaWebServer.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaWebServer/spaWebServer.cpp).
-- Queue overflow paths log dropped messages but need explicit ownership cleanup, counters, and telemetry in [`lib/spaMessage/spaMessage.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaMessage/spaMessage.cpp) and [`lib/localRS485Communication/rs485.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/localRS485Communication/rs485.cpp).
-- Web XML parsing assumes request structure exists and should be hardened against malformed or partial input in [`lib/spaWebServer/spaWebServer.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaWebServer/spaWebServer.cpp).
-- Health visibility is spread across stale-data checks and ad hoc node status topics; there is no single machine-readable health summary.
+- Command path is **implemented** for v1 web + MQTT topics; remaining polish: optional **`applied`** ack semantics (state observed in later status), rate limiting / dedupe, and MQTT **`cmd/timeFormat`** parity with web **`TimeFormat`**.
+- Queue overflow paths log dropped messages but need explicit ownership cleanup, counters, and telemetry in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp) and [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp).
+- Web XML parsing should be hardened further against malformed or partial input in [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp).
+- Health visibility is spread across stale-data checks and ad hoc node status topics; there is no single machine-readable health summary (`/api/health`).
 - Recovery behavior is mostly implicit today: Wi-Fi reconnect and MQTT reconnect exist, but there is no bounded escalation policy tied to sustained subsystem failure.
 - OTA is usable, but post-update success criteria and production guidance should be made explicit rather than fleet-style staged rollout.
 
@@ -61,16 +63,15 @@ isProject: false
 - Add lightweight low-heap and queue-depth reporting to help distinguish logic faults from memory pressure.
 - Prefer simple failure containment over recovery abstraction in this phase.
 
-### Phase 2: Control Path Completion
+### Phase 2: Control Path Completion *(largely done — polish remaining)*
 
-- Implement a single shared command executor used by both MQTT and web requests.
-- Flow: command ingestion -> validation -> Balboa frame build/enqueue -> acknowledgement publication/response.
-- Define acknowledgements carefully:
-- `accepted` means the command was parsed and queued successfully.
-- `applied` means the resulting spa state was later observed in status data.
-- `rejected` means validation or enqueue failed.
-- Add rate limiting / dedupe guards to avoid repeated command storms from retries or UI polling.
-- Keep protocol-specific ingestion thin; put command semantics in one place.
+**Shipped:** single shared command executor ([`spaCommandDispatcher`](lib/spaMessage/spaCommandDispatcher.cpp)) for MQTT and web; ingestion → validation → frame enqueue → **`accepted`** / **`rejected`** on web XML and MQTT **`cmd/result`**.
+
+**Still open:**
+
+- Optional **`applied`** ack semantics: confirm resulting spa state in later status data (today only **`accepted`** / **`rejected`**).
+- Rate limiting / dedupe guards to avoid repeated command storms from retries or UI polling.
+- MQTT **`cmd/timeFormat`** for panel 12h/24h (web SCI **`TimeFormat`** and config export/import **`clockFormat`** already work).
 
 ### Phase 3: Lightweight Health Snapshot
 
@@ -133,13 +134,13 @@ isProject: false
 
 ## Key Files To Modify
 
-- Core loop/orchestration: [`src/main.ino`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/src/main.ino)
-- RS485 hooks and counters: [`lib/localRS485Communication/rs485.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/localRS485Communication/rs485.cpp)
-- Message freshness, queue handling, and command enqueue: [`lib/spaMessage/spaMessage.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaMessage/spaMessage.cpp)
-- MQTT command and health topics: [`lib/mqttModule/mqttModule.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/mqttModule/mqttModule.cpp)
-- Wi-Fi/OTA recovery and policy: [`lib/wifiModule/wifiModule.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/wifiModule/wifiModule.cpp)
-- Web command parsing and health endpoint: [`lib/spaWebServer/spaWebServer.cpp`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/lib/spaWebServer/spaWebServer.cpp)
-- Production defaults/docs: [`src/config-example.h`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/src/config-example.h), [`README.md`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/README.md), [`CHANGELOG.md`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/CHANGELOG.md), [`AGENTS.md`](/Users/jerrodkogut/Documents/Dev Projects/esp32_balboa_spa/AGENTS.md)
+- Core loop/orchestration: [`src/main.ino`](src/main.ino)
+- RS485 hooks and counters: [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)
+- Message freshness, queue handling, and command enqueue: [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)
+- MQTT command and health topics: [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp)
+- Wi-Fi/OTA recovery and policy: [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)
+- Web command parsing and health endpoint: [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)
+- Production defaults/docs: [`src/config-example.h`](src/config-example.h), [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), [`AGENTS.md`](AGENTS.md)
 
 ## Notes On Scope
 
