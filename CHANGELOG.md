@@ -8,6 +8,66 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.12.4] - 2026-06-10
+
+### Fixed
+
+- **Filter 2 disable save/readback** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Normalize disabled Filter 2 schedule fields on POST and RS485 cache; schedule follow-up filter reads ~2s after writes; UI verification compares **`enabled`** only when Filter 2 is off (avoids false “readback mismatch”).
+- **`/config` filter start time vs spa panel format** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Start time pickers use `lang` hints (`en-US` / `en-GB`) from live **`clockMode`** so 12h/24h UI aligns with the spa panel (still `type="time"`; values remain 24h wire format).
+
+### Changed
+
+- **`/config` filter UI copy** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Shorten duration labels and filter section caption; bottom-align Filter 1/2 field blocks.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.12.4`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.12.3] - 2026-06-10
+
+### Fixed
+
+- **`/config` filter save readback** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): After a verified save, update the **Filter 2 enabled** summary row from `GET /api/config/filter` (was stale until full page reload).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.12.3`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.12.2] - 2026-06-10
+
+### Fixed
+
+- **`/config` filter cards layout** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Start time and duration fields **bottom-align** across Filter 1 and Filter 2 columns (Filter 1 has top padding where Filter 2’s enable checkbox sits; Filter 1 cannot be disabled on the controller).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.12.2`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.12.1] - 2026-06-10
+
+### Fixed
+
+- **`/config` filter duration fields** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Duration uses **hours + minutes** number inputs instead of a clock-style time picker (no AM/PM on duration). Fixes blank display when the controller reports a **24 h** cycle (`24:00` is invalid for HTML `type="time"`).
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.12.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.12.0] - 2026-06-10
+
+### Added
+
+- **Filter schedule writes (Balboa `0x23`)** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Shared **`spaSetFilterCycles()`** with validation, RS485 frame build, and post-write **`spaRequestFilterSettings()`** readback. SCI **`Filters`** read/write routing fixed (writes no longer blocked by the early `"Filters"` catch-all). **`GET`/`POST /api/config/filter`** JSON API; editable filter 1/2 schedule on **`/config`** with save + readback polling.
+- **Spa config backup & restore** ([`lib/spaWebServer/spaConfigExport.cpp`](lib/spaWebServer/spaConfigExport.cpp)): **`GET /api/config/export`** downloads writable settings (filter, panel clock, temp units) plus read-only snapshots (information, configuration, preferences, settings `0x04`, fault log). **`POST /api/config/import`** applies writable sections with identity mismatch warnings (model / configuration signature); blocked unless **`force: true`**. **`/config`** Backup & restore panel (download, preview with **`dryRun`**, apply).
+
+### Changed
+
+- **SCI filter compatibility:** **`target_name="Request">Filters`** read and **`target_name="Filters">${base64}`** write match [balboa-spa `balboa.js`](https://github.com/jozefnad/balboa-spa/blob/master/src/assets/balboa.js) envelope bytes `[4..11]`.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.12.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.11.2] - 2026-06-10
 
 ### Fixed

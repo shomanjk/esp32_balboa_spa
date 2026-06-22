@@ -2,6 +2,36 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-06-10 - Filter cycle writes (`0x23`) + config export/import
+
+- **Implementation:** [`spaSetFilterCycles`](../lib/spaMessage/spaCommandDispatcher.cpp) queues **`0a bf 23`** + 8 payload bytes (Filter 2 disabled → byte +4 = **`0x00`**; enabled → **`(hour & 0x7F) | 0x80`**), then calls [`spaRequestFilterSettings()`](../lib/spaMessage/spaMessage.cpp). SCI routing in [`spaWebServer.cpp`](../lib/spaWebServer/spaWebServer.cpp): read **`Request`/`Filters`**, write **`Filters`** + base64 → **`decodeSciFilterBlob`** bytes `[4..11]` (matches [balboa-spa `balboa.js`](https://github.com/jozefnad/balboa-spa/blob/master/src/assets/balboa.js) `parseFilterCycles` / `generateFilterCyclesArray`). JSON: **`GET/POST /api/config/filter`**, **`GET /api/config/export`**, **`POST /api/config/import`** ([`spaConfigExport.cpp`](../lib/spaWebServer/spaConfigExport.cpp)).
+- **Firmware build:** `pio run -e M5AtomLite-tub` succeeds (compile-only verification).
+- **balboa-spa SCI parity (code review):** `getFilterCycles()` → `target_name="Request">Filters`; `setFilterCycles()` → `target_name="Filters">${base64}`; decoded indices `[4..11]` align with firmware parser. No submodule changes required.
+- **Outcome:** *Pending tub-side confirmation* — run matrix below on live spa and record pass/fail per step.
+
+### Tub validation matrix (pending)
+
+Pre-flight: note model from **`/config`** → Controller identity; capture baseline filter section + raw **`0x23`** hex; confirm panel clock on **`/status`**.
+
+| Step | Action | Pass criteria | Result |
+|------|--------|---------------|--------|
+| A | **`POST /api/config/filter`**: shift Filter 1 start +15 min | GET + raw hex + panel menu match | *pending* |
+| B | **`POST /api/config/filter`**: change Filter 1 duration | Same | *pending* |
+| C | Enable Filter 2 with schedule | `filt2Enable=yes`, bit 7 set in hex | *pending* |
+| D | Disable Filter 2 | byte +4 = `0x00` in hex | *pending* |
+| E | balboa-spa tab: same edit as A | SCI accepted, readback match | *pending* |
+| F | Reboot gateway | Schedule persists on tub | *pending* |
+
+Backup/restore (optional after A–F):
+
+| Step | Action | Pass criteria | Result |
+|------|--------|---------------|--------|
+| G | **`GET /api/config/export`** with fresh data | JSON has `writable` + `snapshot`; file downloads | *pending* |
+| H | Re-import same file (`dryRun: true`) | No warnings; writable sections listed | *pending* |
+| I | Apply same file | Readback matches | *pending* |
+| J | Edit filter in file, re-import | Only filter changes on tub | *pending* |
+| K | Import from different tub export | Warning + blocked until `force` | *pending* |
+
 ## 2026-05-14 - Bridge / BWA `LoadProhibited` in `Print::write` (issue #4 follow-up)
 
 - **Symptom:** Guru **`LoadProhibited`**, **`EXCVADDR: 0x00000008`**, decoded stack through **`AsyncTCP` → `bridge::clientDataAvailable` → `cacheRead` → `processFragment`** (fragment **`[BridgeDiag]`** log line) into **ArduinoLog → `Print::write`**.

@@ -346,6 +346,192 @@ SpaCommandResult spaSetSpaPanelClockFormat(bool use24Hour, SpaCommandSource sour
   return queueFrame(frame, "set_time_format", source);
 }
 
+namespace
+{
+bool filterDurationValid(uint8_t durHour, uint8_t durMinute, bool allowZero)
+{
+  if (durHour > 24 || durMinute > 59)
+  {
+    return false;
+  }
+  if (durHour == 24 && durMinute != 0)
+  {
+    return false;
+  }
+  const bool zeroDuration = durHour == 0 && durMinute == 0;
+  if (!allowZero && zeroDuration)
+  {
+    return false;
+  }
+  return true;
+}
+
+bool filterStartValid(uint8_t hour, uint8_t minute)
+{
+  return hour <= 23 && minute <= 59;
+}
+} // namespace
+
+void spaNormalizeFilter2Schedule(SpaFilterCycleSettings &settings)
+{
+  if (!settings.filt2Enable)
+  {
+    settings.filt2Hour = 0;
+    settings.filt2Minute = 0;
+    settings.filt2DurHour = 0;
+    settings.filt2DurMinute = 0;
+  }
+}
+
+void spaNormalizeFilter2Cache(SpaFilterSettingsData &data)
+{
+  if (!data.filt2Enable)
+  {
+    data.filt2Hour = 0;
+    data.filt2Minute = 0;
+    data.filt2DurationHour = 0;
+    data.filt2DurationMinute = 0;
+  }
+}
+
+bool spaValidateFilterCycleSettings(const SpaFilterCycleSettings &settings, const char **outReason)
+{
+  if (!filterStartValid(settings.filt1Hour, settings.filt1Minute))
+  {
+    if (outReason)
+    {
+      *outReason = "invalid_filter1_start";
+    }
+    return false;
+  }
+  if (!filterDurationValid(settings.filt1DurHour, settings.filt1DurMinute, false))
+  {
+    if (outReason)
+    {
+      *outReason = "invalid_filter1_duration";
+    }
+    return false;
+  }
+  if (settings.filt2Enable)
+  {
+    if (!filterStartValid(settings.filt2Hour, settings.filt2Minute))
+    {
+      if (outReason)
+      {
+        *outReason = "invalid_filter2_start";
+      }
+      return false;
+    }
+    if (!filterDurationValid(settings.filt2DurHour, settings.filt2DurMinute, false))
+    {
+      if (outReason)
+      {
+        *outReason = "invalid_filter2_duration";
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+bool spaParseFilterCyclePayload(const uint8_t *eightBytes, SpaFilterCycleSettings &out)
+{
+  if (eightBytes == nullptr)
+  {
+    return false;
+  }
+  out.filt1Hour = eightBytes[0];
+  out.filt1Minute = eightBytes[1];
+  out.filt1DurHour = eightBytes[2];
+  out.filt1DurMinute = eightBytes[3];
+  out.filt2Enable = (eightBytes[4] & 0x80) != 0;
+  out.filt2Hour = eightBytes[4] & 0x7F;
+  out.filt2Minute = eightBytes[5];
+  out.filt2DurHour = eightBytes[6];
+  out.filt2DurMinute = eightBytes[7];
+  if (!out.filt2Enable && eightBytes[4] == 0x00)
+  {
+    out.filt2Hour = 0;
+    out.filt2Minute = 0;
+    out.filt2DurHour = 0;
+    out.filt2DurMinute = 0;
+  }
+  const char *reason = nullptr;
+  return spaValidateFilterCycleSettings(out, &reason);
+}
+
+bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilterSettingsData &cached)
+{
+  if (a.filt1Hour != cached.filt1Hour || a.filt1Minute != cached.filt1Minute ||
+      a.filt1DurHour != cached.filt1DurationHour || a.filt1DurMinute != cached.filt1DurationMinute)
+  {
+    return false;
+  }
+  if (a.filt2Enable != cached.filt2Enable)
+  {
+    return false;
+  }
+  if (!a.filt2Enable)
+  {
+    return true;
+  }
+  return a.filt2Hour == cached.filt2Hour && a.filt2Minute == cached.filt2Minute &&
+         a.filt2DurHour == cached.filt2DurationHour && a.filt2DurMinute == cached.filt2DurationMinute;
+}
+
+SpaCommandResult spaSetFilterCycles(const SpaFilterCycleSettings &settings, SpaCommandSource source)
+{
+  if (!spaHasFreshStatus())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
+  }
+  if (spaFilterSettingsData.lastUpdate == 0)
+  {
+    return {false, SPA_COMMAND_NOT_READY, "filter_settings_not_ready"};
+  }
+
+  SpaFilterCycleSettings normalized = settings;
+  spaNormalizeFilter2Schedule(normalized);
+
+  const char *reason = nullptr;
+  if (!spaValidateFilterCycleSettings(normalized, &reason))
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, reason ? reason : "invalid_filter_payload"};
+  }
+
+  if (spaFilterCycleSettingsEqual(normalized, spaFilterSettingsData))
+  {
+    return {true, SPA_COMMAND_ACCEPTED, "accepted"};
+  }
+
+  uint8_t filt2HourByte = 0x00;
+  if (normalized.filt2Enable)
+  {
+    filt2HourByte = (uint8_t)((normalized.filt2Hour & 0x7F) | 0x80);
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(destinationId());
+  frame.push(kBroadcastChannel);
+  frame.push(Filter_Cycles_Type);
+  frame.push(normalized.filt1Hour);
+  frame.push(normalized.filt1Minute);
+  frame.push(normalized.filt1DurHour);
+  frame.push(normalized.filt1DurMinute);
+  frame.push(filt2HourByte);
+  frame.push(normalized.filt2Enable ? normalized.filt2Minute : 0);
+  frame.push(normalized.filt2Enable ? normalized.filt2DurHour : 0);
+  frame.push(normalized.filt2Enable ? normalized.filt2DurMinute : 0);
+
+  SpaCommandResult result = queueFrame(frame, "set_filter_cycles", source);
+  if (result.accepted)
+  {
+    spaRequestFilterSettings();
+    spaScheduleFilterSettingsReadbackFollowup(2);
+  }
+  return result;
+}
+
 SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source)
 {
   if (!spaHasFreshStatus())
@@ -375,6 +561,36 @@ SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaComm
   frame.push(hourByte);
   frame.push(minute);
   return queueFrame(frame, "set_time", source);
+}
+
+SpaCommandResult spaSetSpaPanelClockTimeEx(uint8_t hour24, uint8_t minute, bool use24Hour, SpaCommandSource source)
+{
+  if (!spaHasFreshStatus())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
+  }
+  if (minute > 59)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "minute out of range"};
+  }
+  if (hour24 > 23)
+  {
+    return {false, SPA_COMMAND_INVALID_ARGUMENT, "hour out of range"};
+  }
+
+  uint8_t hourByte = hour24 & 0x7F;
+  if (use24Hour)
+  {
+    hourByte |= 0x80;
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(destinationId());
+  frame.push(kBroadcastChannel);
+  frame.push(Set_Time_Type);
+  frame.push(hourByte);
+  frame.push(minute);
+  return queueFrame(frame, "set_time_ex", source);
 }
 
 SpaCommandResult spaSendToggleDiagnostic(

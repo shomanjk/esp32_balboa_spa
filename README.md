@@ -40,7 +40,7 @@ This is **moderate DIY**, not a sealed appliance: you need a safe **RS485 tap**,
 
 ### What you get
 
-- **Monitor** — Live status (temps, pumps, lights, heating mode, filter info) on **`/status`**; configuration and controller identity on **`/config`**.
+- **Monitor** — Live status (temps, pumps, lights, heating mode, filter info) on **`/status`**; configuration (including **editable filter schedules** and **config backup/restore**) on **`/config`**.
 - **Control (v1)** — Pump/light/blower/mister toggles, **set temperature**, **temp units**, **panel clock** from **`/status`** and SCI **`/devices/sci`**; the same command set on **MQTT** `Spa/<gateway>/cmd/…` (see [MQTT and Home Assistant](#mqtt-and-home-assistant)). The LittleFS **`balboa-spa`** tab may differ—treat it as read-first unless you verify your build ([Web interface](#web-interface)).
 - **Integrate** — MQTT publish; **Home Assistant discovery**; optional **TCP bridge on port 4257** for [homebridge-plugin-bwaspa](https://github.com/vincedarley/homebridge-plugin-bwaspa).
 - **Operate** — Built-in web UI; **`/logs`** with WebSocket tail; **OTA** (`M5AtomLite-tub-ota`); RS485 health and history via **`/api/rs485`** and related JSON routes.
@@ -108,6 +108,8 @@ headers intact when redistributing those files.
 
 Planned or deferred enhancements (not commitments; order and timing vary).
 
+**Recently shipped (see [CHANGELOG](CHANGELOG.md#unreleased)):** editable filter 1/2 schedules on **`/config`** and via balboa-spa SCI **`Filters`**; JSON config **export/import** for writable settings (filter, panel clock, temp units) with read-only identity snapshots.
+
 - **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the firmware **`/status`** page).
 - **Equipment display names** — On the spa config page (or a dedicated settings area), let users assign friendly names per equipment slot (e.g. Pump 1 → "Lounger Jets", Pump 2 → "Deep Chair Jets"). Store names in firmware-backed nonvolatile storage so labels survive reboots and stay consistent across the web UI (`balboa-spa` + [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) APIs as needed). Optional later: expose the same labels to MQTT / Home Assistant discovery if useful.
 - **`TELNET_LOG` (optional Telnet listener)** — Implementation in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp) starts **TelnetStream** on TCP **23** when the compile flag is set; **`Log`** remains on **`webLogBufferGetLogPrint()`** (Serial + web ring). **Default [`platformio.ini`](platformio.ini) envs omit the flag** (no listener). A future **non-blocking** duplicate log sink over raw TCP/Telnet remains possible if operators want **`nc`**-style tailing without mirroring the global logger (mutex / WDT constraints).
@@ -128,7 +130,7 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 
 ![Web UI example](docs/balboa-spa-web.png)
 
-**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, and panel-clock controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** to the spa over RS485). The **LittleFS** `balboa-spa` bundle may still differ from upstream; treat its control surfaces as **read-first** unless you verify them for your build.
+**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, and panel-clock controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** to the spa over RS485). **`/config`** supports **filter schedule editing** and **JSON backup/restore**. The **LittleFS** `balboa-spa` bundle uses the same SCI **`Filters`** paths for filter read/write; other control surfaces may still differ from upstream — treat as **read-first** unless you verify them for your build.
 
 **Layout:** Firmware-served pages `/status`, `/config`, and `/state` use a responsive layout (viewport scaling, wrapping nav, fluid charts/images) for phone-sized screens.
 
@@ -160,6 +162,9 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 | `/api/rs485/raw` | `limit` (default **80**, cap **256**) | Bounded recent RX bytes: `bytesHex`, `items[]` with `tMs`, `gapMs`, `byte`, `mode`, `uartAvailable`. |
 | `/api/rs485/history` | `limit` (default **20**, cap **60**) | Rolling RS485 snapshots (newest first): per-snapshot `health`, counters, `mode`, `detectPhase`. |
 | `/api/status/controls` | — | Live snapshot for **`/status`** polling: pumps, lights, temps, **spa/heating** fields, setpoint bounds, and snapshot freshness metadata. |
+| `/api/config/filter` | — | Filter 1/2 schedule (`ready`, `lastUpdate`, start/duration fields). **POST** JSON body applies via **`spaSetFilterCycles`**. |
+| `/api/config/export` | — | Download spa config JSON (`writable` + `snapshot` + `readiness`). |
+| `/api/config/import` | — | **POST** JSON to preview (`dryRun: true`) or apply writable settings; optional **`force`** for identity mismatch. |
 
 ---
 
@@ -179,8 +184,11 @@ To keep protocol risk low, command-write implementation is intentionally staged:
   - **Set temperature units** (`TempUnits`, Balboa `0x27`) via `C`/`F`.
 - **Also in scope (v1):**
   - **Set panel clock** (`SystemTime`, Balboa `0x21`) via `HH:MM` or gateway sync.
+  - **Filter cycle schedules** (Balboa `0x23`) via **`/config`**, **`GET/POST /api/config/filter`**, and SCI **`Filters`** (balboa-spa).
+  - **Config backup/restore** — **`GET /api/config/export`**, **`POST /api/config/import`** (writable settings only; identity snapshots for warnings).
 - **Deferred (post-v1):**
   - `TimeFormat`
+  - Raw configuration / preferences frame writes (`0x2E`, `0x26` beyond temp scale)
 
 ### MQTT command topics (v1)
 

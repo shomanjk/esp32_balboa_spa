@@ -153,6 +153,36 @@ void spaMessageSetup()
   temperatureHistory.start();
 }
 
+namespace
+{
+uint8_t filterSettingsFollowupReadsRemaining = 0;
+unsigned long filterSettingsFollowupNextMs = 0;
+
+void spaFilterSettingsReadbackFollowupTick()
+{
+  if (filterSettingsFollowupReadsRemaining == 0 || millis() < filterSettingsFollowupNextMs)
+  {
+    return;
+  }
+  spaRequestFilterSettings();
+  filterSettingsFollowupReadsRemaining--;
+  if (filterSettingsFollowupReadsRemaining > 0)
+  {
+    filterSettingsFollowupNextMs = millis() + 2000;
+  }
+}
+} // namespace
+
+void spaScheduleFilterSettingsReadbackFollowup(uint8_t extraReads)
+{
+  if (extraReads == 0)
+  {
+    return;
+  }
+  filterSettingsFollowupReadsRemaining = extraReads;
+  filterSettingsFollowupNextMs = millis() + 2000;
+}
+
 void spaMessageLoop()
 {
   // Log.verbose(F("[Mess]: spaMessageLoop - %d" CR), uxQueueMessagesWaiting(spaReadQueue));
@@ -221,6 +251,7 @@ void spaMessageLoop()
   }
   temperatureHistory.update();
   tempHistoryMaybePersist(&tempHistoryData);
+  spaFilterSettingsReadbackFollowupTick();
 }
 
 void configurationRequest()
@@ -623,6 +654,7 @@ void parseFilterResponse(u_int8_t *message, int length)
   spaFilterSettingsData.filt2Minute = hexArray[5];
   spaFilterSettingsData.filt2DurationHour = hexArray[6];
   spaFilterSettingsData.filt2DurationMinute = hexArray[7];
+  spaNormalizeFilter2Cache(spaFilterSettingsData);
 
   // Log.verbose(F("[Mess]: Filter Response: %s" CR), msgToString(hexArray, length - 7).c_str());
   publishSpaFilterSettingsData();
@@ -642,6 +674,13 @@ void parseSettings0x04Response(u_int8_t *message, int length)
 
   // Log.verbose(F("[Mess]: Settings 0x04 Response: %s" CR), msgToString(hexArray, length - 7).c_str());
   publishSpaSettings0x04Data();
+}
+
+void spaRequestFilterSettings()
+{
+  unsigned char filter_settings_request[] = FILTER_SETTINGS_REQUEST;
+  sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request));
+  spaFilterSettingsData.lastRequest = getTime();
 }
 
 void sendMessageToSpa(uint8_t *data, int length)

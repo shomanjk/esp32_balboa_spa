@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+struct SpaFilterSettingsData;
+
 enum SpaCommandSource
 {
   SPA_COMMAND_SOURCE_UNKNOWN = 0,
@@ -24,7 +26,21 @@ struct SpaCommandResult
   const char *reason;
 };
 
+struct SpaFilterCycleSettings
+{
+  uint8_t filt1Hour;
+  uint8_t filt1Minute;
+  uint8_t filt1DurHour;
+  uint8_t filt1DurMinute;
+  bool filt2Enable;
+  uint8_t filt2Hour;
+  uint8_t filt2Minute;
+  uint8_t filt2DurHour;
+  uint8_t filt2DurMinute;
+};
+
 bool spaCanAcceptCommands();
+bool spaHasFreshStatus();
 /** Balboa 0x20 limits for current `spaStatusData.tempScale` + `tempRange` (see protocol.md). */
 void spaProtocolActiveSetpointBand(float &minBand, float &maxBand);
 SpaCommandResult spaSendToggleCommand(uint8_t itemCode, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
@@ -41,6 +57,16 @@ SpaCommandResult spaSetTemperatureScale(bool celsius, SpaCommandSource source = 
 SpaCommandResult spaSetSpaPanelClockFormat(bool use24Hour, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 /** Balboa `0x21` set panel clock (hour 0–23, minute 0–59). High bit of hour follows current `spaStatusData.clockMode` (24h vs 12h display). */
 SpaCommandResult spaSetSpaPanelClockTime(uint8_t hour24, uint8_t minute, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Balboa `0x21` set panel clock and 12h/24h display bit in one frame. */
+SpaCommandResult spaSetSpaPanelClockTimeEx(uint8_t hour24, uint8_t minute, bool use24Hour, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Balboa `0x23` set filter 1/2 daily cycle schedules (8-byte payload). */
+SpaCommandResult spaSetFilterCycles(const SpaFilterCycleSettings &settings, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Clear filter 2 start/duration when disabled (wire + readback normalization). */
+void spaNormalizeFilter2Schedule(SpaFilterCycleSettings &settings);
+void spaNormalizeFilter2Cache(SpaFilterSettingsData &cached);
+bool spaValidateFilterCycleSettings(const SpaFilterCycleSettings &settings, const char **outReason = nullptr);
+bool spaParseFilterCyclePayload(const uint8_t *eightBytes, SpaFilterCycleSettings &out);
+bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilterSettingsData &cached);
 SpaCommandResult spaSendToggleDiagnostic(
     uint8_t itemCode,
     bool useWifiDestination,

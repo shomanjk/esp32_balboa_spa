@@ -22,6 +22,10 @@ void spaMessageLoop();
 
 void sendMessageToSpa(uint8_t *data, int length);
 void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
+/** Queue a filter-settings read (`0x22` subcode `0x01`) to refresh `spaFilterSettingsData`. */
+void spaRequestFilterSettings();
+/** After a filter write, queue extra filter reads at ~2s intervals (controller apply lag). */
+void spaScheduleFilterSettingsReadbackFollowup(uint8_t extraReads = 2);
 
 String getMapDescription(uint8_t element, const std::map<uint8_t, const char*>& suppliedMap);
 

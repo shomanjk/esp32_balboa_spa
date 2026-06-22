@@ -31,6 +31,7 @@
 #include <mqttModule.h>
 #include "../../src/config.h"
 #include "../../src/main.h"
+#include "spaConfigExport.h"
 
 // Local functions
 
@@ -63,6 +64,10 @@ void handleLogsApi(AsyncWebServerRequest *request);
 void handleLogsPage(AsyncWebServerRequest *request);
 void handleLogsConfigGet(AsyncWebServerRequest *request);
 void handleLogsConfigPost(AsyncWebServerRequest *request);
+void handleConfigFilterGet(AsyncWebServerRequest *request);
+void handleConfigFilterPost(AsyncWebServerRequest *request);
+void handleConfigExport(AsyncWebServerRequest *request);
+void handleConfigImportPost(AsyncWebServerRequest *request);
 String parseBody(String body);
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
 String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
@@ -406,6 +411,10 @@ void spaWebServerLoop()
     server.on("/api/logs", HTTP_GET, handleLogsApi);
     server.on("/api/logs/config", HTTP_GET, handleLogsConfigGet);
     server.on("/api/logs/config", HTTP_POST, handleLogsConfigPost, NULL, handleBody);
+    server.on("/api/config/filter", HTTP_GET, handleConfigFilterGet);
+    server.on("/api/config/filter", HTTP_POST, handleConfigFilterPost, NULL, handleBody);
+    server.on("/api/config/export", HTTP_GET, handleConfigExport);
+    server.on("/api/config/import", HTTP_POST, handleConfigImportPost, NULL, handleBody);
     server.on("/logs", HTTP_GET, handleLogsPage);
     wsLog.onEvent(onWsLogEvent);
     server.addHandler(&wsLog);
@@ -1642,6 +1651,38 @@ static String spaHexWordsUpper(const uint8_t *data, uint8_t len, size_t maxShow)
   return out;
 }
 
+static String configTimeInputValue(uint8_t hour, uint8_t minute)
+{
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%02u:%02u", static_cast<unsigned>(hour), static_cast<unsigned>(minute));
+  return String(buf);
+}
+
+/** Panel clock display: status byte 9 bit 1 (0x02) = 24-hour; clear = 12-hour AM/PM. */
+static bool spaPanelClockFormatIs24Hour()
+{
+  if (!spaHasFreshStatus())
+  {
+    return true;
+  }
+  return (spaStatusData.clockMode & 0x02) != 0;
+}
+
+/** `type=time` values stay HH:MM (24h wire format); `lang` steers the native picker UI. */
+static String configFilterTimeInputLangAttr(bool use24Hour)
+{
+  return String(" lang=\"") + (use24Hour ? "en-GB" : "en-US") + "\"";
+}
+
+static String configFilterDurationFieldsHtml(const char *hourId, const char *minId, uint8_t durHour, uint8_t durMinute)
+{
+  return String("<span class=\"config-dur-fields\">") + "<input id='" + hourId +
+         "' type='number' min='0' max='24' step='1' value='" + String(durHour) + "' aria-label='Duration hours' />" +
+         "<span class=\"config-dur-unit\">h</span>" + "<input id='" + minId +
+         "' type='number' min='0' max='59' step='15' value='" + String(durMinute) + "' aria-label='Duration minutes' />" +
+         "<span class=\"config-dur-unit\">min</span></span>";
+}
+
 void handleConfig(AsyncWebServerRequest *request)
 {
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
@@ -1666,11 +1707,20 @@ void handleConfig(AsyncWebServerRequest *request)
       "table.config-equip{width:100%;border-collapse:collapse;margin-top:8px;}"
       "table.config-equip th,table.config-equip td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}"
       "table.config-equip th{font-size:13px;color:var(--muted);}"
-      ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 var(--space-3) 0;}"
+      ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch;margin:0 0 var(--space-3) 0;}"
       "@media (max-width:560px){.config-filter-strip{grid-template-columns:1fr;}}"
-      ".config-filter-card{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
+      ".config-filter-card{display:flex;flex-direction:column;min-height:100%;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
       ".config-filter-card h2{margin:0 0 8px 0;font-size:0.88rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}"
       ".config-filter-card p{margin:4px 0;font-size:14px;}"
+      ".config-filter-card label{display:block;font-size:13px;color:var(--muted);margin:8px 0 4px 0;}"
+      ".config-filter-card label.config-filter-enable{margin-top:0;}"
+      ".config-filter-fields{margin-top:auto;}"
+      ".config-filter-card input[type=time]{width:100%;max-width:160px;padding:6px 8px;font-size:14px;}"
+      ".config-dur-fields{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;}"
+      ".config-dur-fields input[type=number]{width:4.5em;padding:6px 8px;font-size:14px;}"
+      ".config-dur-unit{font-size:14px;color:var(--muted);}"
+      ".config-backup-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0;}"
+      "#cfgImportPreview{margin:10px 0;font-size:14px;white-space:pre-wrap;}"
       "pre.config-hex{margin:8px 0 0 0;padding:10px 12px;font-size:12px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;"
       "overflow-x:auto;word-break:break-all;white-space:pre-wrap;background:#f8fafc;border:1px solid var(--border);border-radius:8px;}"
       ".config-layout details{margin-top:10px;}"
@@ -1683,6 +1733,7 @@ void handleConfig(AsyncWebServerRequest *request)
          "<main id='mainContent'>" + ePaper;
 
   html += "<nav aria-label='Spa Config sections'><ul class='config-toc'>"
+          "<li><a href='#cfg-backup'>Backup &amp; restore</a></li>"
           "<li><a href='#cfg-equipment'>Equipment wiring</a></li>"
           "<li><a href='#cfg-identity'>Controller identity</a></li>"
           "<li><a href='#cfg-filter'>Filter configuration</a></li>"
@@ -1692,6 +1743,18 @@ void handleConfig(AsyncWebServerRequest *request)
           "</ul></nav>";
 
   html += "<div class='config-layout'>";
+
+  html += "<section class='panel config-span-full' id='cfg-backup'><h1>Backup &amp; restore</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Download writable spa settings (filter schedules, panel clock, temp units) plus read-only snapshots for identity checks. "
+          "Restore applies writable sections only; equipment wiring and preferences snapshots are never written to the controller.</p>";
+  html += "<div class=\"config-backup-actions\">"
+          "<button class='equip-btn' type='button' id='cfgExportBtn'>Download config</button>"
+          "<input type='file' id='cfgImportFile' accept='application/json,.json' />"
+          "<button class='equip-btn' type='button' id='cfgImportPreviewBtn'>Preview restore</button>"
+          "<button class='equip-btn' type='button' id='cfgImportApplyBtn'>Apply restore</button>"
+          "<label style='font-size:14px'><input type='checkbox' id='cfgImportForce'/> Force (ignore spa identity mismatch)</label>"
+          "</div>";
+  html += "<pre id='cfgImportPreview' class='config-hex' style='display:none'></pre></section>";
 
   html += "<section class='panel' id='cfg-equipment'><h1>Equipment wiring (configuration)</h1>";
   html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Which pumps, lights, and loads exist on this spa pack (configuration frame). "
@@ -1757,29 +1820,52 @@ void handleConfig(AsyncWebServerRequest *request)
   }
 
   html += "<section class='panel' id='cfg-filter'><h1>Filter configuration</h1>";
-  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock. <b>Filter N Time</b> is the daily start of that filtration cycle. <b>Filter N Duration</b> is how long the pump runs for that cycle each day (circulation through the filter). Many tubs use two staggered cycles; the second may be unused on some packs.</p>";
-  html += "<div class=\"config-filter-strip\">";
-  html += "<div class=\"config-filter-card\"><h2>Filter 1</h2>"
-          "<p><strong>Start time:</strong> " +
-          formatAsHourMinute(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute) + "</p>"
-                                                                                                   "<p><strong>Duration:</strong> " +
-          formatAsHourMinute(spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute) + "</p></div>";
-  html += "<div class=\"config-filter-card\"><h2>Filter 2</h2>"
-          "<p><strong>Start time:</strong> " +
-          formatAsHourMinute(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute) + "</p>"
-                                                                                                   "<p><strong>Duration:</strong> " +
-          formatAsHourMinute(spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute) + "</p></div>";
-  html += "</div>";
+  {
+    html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Times use the spa panel clock time and format "
+            "(<a href='/status'>configure on Spa Status</a>).</p>";
+  }
+  if (spaFilterSettingsData.lastUpdate == 0)
+  {
+    html += "<p style=\"margin:0\"><em>Filter settings not received yet — editing disabled until RS485 data is available.</em></p>";
+  }
+  else
+  {
+    const String f1Start = configTimeInputValue(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute);
+    const String f2Start = configTimeInputValue(spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute);
+    const String filterTimeLang = configFilterTimeInputLangAttr(spaPanelClockFormatIs24Hour());
+    html += "<div class=\"config-filter-strip\">";
+    html += "<div class=\"config-filter-card\"><h2>Filter 1</h2>"
+            "<div class=\"config-filter-fields\">"
+            "<label for='cfgF1Start'>Start time</label>"
+            "<input id='cfgF1Start' type='time' step='900'" + filterTimeLang + " value='" + f1Start + "' />"
+            "<label>Duration</label>"
+            + configFilterDurationFieldsHtml("cfgF1DurH", "cfgF1DurM", spaFilterSettingsData.filt1DurationHour,
+                                             spaFilterSettingsData.filt1DurationMinute) +
+            "</div></div>";
+    html += "<div class=\"config-filter-card\"><h2>Filter 2</h2>"
+            "<label class='config-filter-enable'><input type='checkbox' id='cfgF2Enable'" +
+            String(spaFilterSettingsData.filt2Enable ? " checked" : "") + " /> Enable filter 2</label>"
+            "<div class=\"config-filter-fields\">"
+            "<label for='cfgF2Start'>Start time</label>"
+            "<input id='cfgF2Start' type='time' step='900'" + filterTimeLang + " value='" + f2Start + "' />"
+            "<label>Duration</label>"
+            + configFilterDurationFieldsHtml("cfgF2DurH", "cfgF2DurM", spaFilterSettingsData.filt2DurationHour,
+                                             spaFilterSettingsData.filt2DurationMinute) +
+            "</div></div>";
+    html += "</div>";
+    html += "<button class='equip-btn' type='button' id='cfgFilterSaveBtn'>Save filter schedule</button>";
+    html += "<p id='cfgFilterStatus' style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'></p>";
+  }
   html += "<dl class=\"config-kv\">";
-  html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</dd></div>";
+  html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd id='cfgFilterLastUpdate'>" + statusLastUpdateDisplayHtml(spaFilterSettingsData.lastUpdate) + "</dd></div>";
   if (spaFilterSettingsData.lastUpdate != 0)
   {
-    html += "<div class=\"kv-row\"><dt>Filter 2 enabled</dt><dd>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>Filter 2 enabled</dt><dd id='cfgFilter2Enabled'>" + String(spaFilterSettingsData.filt2Enable ? "yes" : "no") + "</dd></div>";
   }
   html += "</dl>";
   if (spaFilterSettingsData.lastUpdate != 0)
   {
-    html += "<details><summary><b>Raw filter-settings frame (hex)</b></summary><pre class=\"config-hex\">" +
+    html += "<details><summary><b>Raw filter-settings frame (hex)</b></summary><pre class=\"config-hex\" id='cfgFilterRawHex'>" +
             spaHexWordsUpper(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength, 48) + "</pre></details>";
   }
   html += "</section>";
@@ -1841,14 +1927,64 @@ void handleConfig(AsyncWebServerRequest *request)
   html += "<ul id='cfgLittleFsContainer'></ul>";
   html += "</section></div>";
 
-  html += "<script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');if(!btn||!box)return;"
-          "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
+  html += "<script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');"
+          "if(btn&&box){btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
           "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
-          "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
+          "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});}"
+          "function cfgParseHm(v){if(!v||v.indexOf(':')<0)return{h:0,m:0};var p=v.split(':');return{h:parseInt(p[0],10)||0,m:parseInt(p[1],10)||0};}"
+          "function cfgParseDur(hId,mId){var hEl=document.getElementById(hId);var mEl=document.getElementById(mId);"
+          "var h=hEl?parseInt(hEl.value,10):0;var m=mEl?parseInt(mEl.value,10):0;return{h:isNaN(h)?0:h,m:isNaN(m)?0:m};}"
+          "function cfgFilterPayload(){var s1=cfgParseHm(document.getElementById('cfgF1Start')&&document.getElementById('cfgF1Start').value);"
+          "var d1=cfgParseDur('cfgF1DurH','cfgF1DurM');"
+          "var s2=cfgParseHm(document.getElementById('cfgF2Start')&&document.getElementById('cfgF2Start').value);"
+          "var d2=cfgParseDur('cfgF2DurH','cfgF2DurM');"
+          "var en=document.getElementById('cfgF2Enable')&&document.getElementById('cfgF2Enable').checked;"
+          "var f2s={startHour:s2.h,startMinute:s2.m,durationHour:en?d2.h:0,durationMinute:en?d2.m:0};"
+          "return{filter1:{startHour:s1.h,startMinute:s1.m,durationHour:d1.h,durationMinute:d1.m},"
+          "filter2:{enabled:!!en,startHour:en?s2.h:0,startMinute:en?s2.m:0,durationHour:f2s.durationHour,durationMinute:f2s.durationMinute}};}"
+          "function cfgFilter2Matches(reqF2,gotF2){if(!reqF2||!gotF2)return false;"
+          "if(!!reqF2.enabled!==!!gotF2.enabled)return false;if(!gotF2.enabled)return true;"
+          "return reqF2.startHour===gotF2.startHour&&reqF2.startMinute===gotF2.startMinute&&"
+          "reqF2.durationHour===gotF2.durationHour&&reqF2.durationMinute===gotF2.durationMinute;}"
+          "function cfgFilterMatches(req,got){if(!req||!got||!req.filter1||!got.filter1||!req.filter2||!got.filter2)return false;"
+          "return req.filter1.startHour===got.filter1.startHour&&req.filter1.startMinute===got.filter1.startMinute&&"
+          "req.filter1.durationHour===got.filter1.durationHour&&req.filter1.durationMinute===got.filter1.durationMinute&&"
+          "cfgFilter2Matches(req.filter2,got.filter2);}"
+          "function cfgFilterSyncMeta(j){var f2=document.getElementById('cfgFilter2Enabled');"
+          "if(f2&&j&&j.filter2)f2.textContent=j.filter2.enabled?'yes':'no';}"
+          "var saveBtn=document.getElementById('cfgFilterSaveBtn');if(saveBtn){saveBtn.addEventListener('click',function(){"
+          "var st=document.getElementById('cfgFilterStatus');var req=cfgFilterPayload();var baseLast=0;"
+          "fetch('/api/config/filter',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){baseLast=j.lastUpdate||0;"
+          "return fetch('/api/config/filter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req)});"
+          "}).then(function(r){return r.json();}).then(function(j){if(!j.accepted){if(st)st.textContent='Save rejected: '+(j.reason||'unknown');return;}"
+          "if(st)st.textContent='Queued — verifying readback…';var tries=0;var timer=setInterval(function(){tries++;"
+          "fetch('/api/config/filter',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
+          "var got={filter1:j.filter1,filter2:j.filter2};if(cfgFilterMatches(req,got)||(j.lastUpdate&&j.lastUpdate>baseLast)){"
+          "clearInterval(timer);cfgFilterSyncMeta(j);if(st)st.textContent='Saved — verified on controller.';}else if(tries>=12){clearInterval(timer);"
+          "if(st)st.textContent='Queued — readback mismatch (controller may have ignored write).';}}).catch(function(){});},2000);"
+          "}).catch(function(e){if(st)st.textContent='Save failed.';});});}"
+          "var exBtn=document.getElementById('cfgExportBtn');if(exBtn){exBtn.addEventListener('click',function(){"
+          "fetch('/api/config/export',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.blob();}).then(function(b){"
+          "var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='spa-config.json';a.click();URL.revokeObjectURL(a.href);"
+          "}).catch(function(){});});}"
+          "function cfgImportRun(dry){var f=document.getElementById('cfgImportFile');var prev=document.getElementById('cfgImportPreview');"
+          "var force=document.getElementById('cfgImportForce')&&document.getElementById('cfgImportForce').checked;if(!f||!f.files||!f.files[0]){"
+          "if(prev){prev.style.display='block';prev.textContent='Choose a JSON file first.';}return;}"
+          "var reader=new FileReader();reader.onload=function(){try{var data=JSON.parse(reader.result);data.dryRun=!!dry;data.force=!!force;"
+          "fetch('/api/config/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})"
+          ".then(function(r){return r.json();}).then(function(j){if(prev){prev.style.display='block';prev.textContent=JSON.stringify(j,null,2);}"
+          "if(!dry&&j.accepted&&!j.blocked){setTimeout(function(){location.reload();},1500);}}).catch(function(){"
+          "if(prev){prev.style.display='block';prev.textContent='Import request failed.';}});}catch(e){if(prev){prev.style.display='block';"
+          "prev.textContent='Invalid JSON file.';}}};reader.readAsText(f.files[0]);}"
+          "var pv=document.getElementById('cfgImportPreviewBtn');if(pv){pv.addEventListener('click',function(){cfgImportRun(true);});}"
+          "var ap=document.getElementById('cfgImportApplyBtn');if(ap){ap.addEventListener('click',function(){cfgImportRun(false);});}"
+          "})();</script>";
 
   html += "</main></div></body></html>";
   String etag = String("W/\"cfg-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaConfigurationData.lastUpdate) + "-" +
-              String(spaFilterSettingsData.lastUpdate) + "-" + String(spaInformationData.lastUpdate) + "-" +
+              String(spaFilterSettingsData.lastUpdate) + "-" + String(spaFilterSettingsData.filt1Hour) + "-" +
+              String(spaFilterSettingsData.filt1Minute) + "-" + String(spaFilterSettingsData.filt2Enable) + "-" +
+              String(spaInformationData.lastUpdate) + "-" +
               String(spaPreferencesData.lastUpdate) + "-" + String(spaSettings0x04Data.lastUpdate) + "-" +
               String(spaFaultLogData.lastUpdate) + "\"";
   sendHtmlWithEtag(request, html, etag);
@@ -3035,6 +3171,183 @@ String encodeResponse(uint8_t rawData[BALBOA_MESSAGE_SIZE], uint8_t length)
   }
 }
 
+static String filterSciReadResponse()
+{
+  return "<device_request target_name='Filters'>" +
+         encodeResponse(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength) +
+         "</device_request>";
+}
+
+static bool decodeSciFilterBlob(const String &b64, uint8_t outEight[8], String *err)
+{
+  if (b64.length() == 0)
+  {
+    if (err)
+    {
+      *err = "empty_filter_payload";
+    }
+    return false;
+  }
+  unsigned char decoded[32];
+  memset(decoded, 0, sizeof(decoded));
+  const unsigned int decodedLen = decode_base64((unsigned char *)b64.c_str(), decoded);
+  if (decodedLen < 12)
+  {
+    if (err)
+    {
+      *err = "invalid_filter_payload";
+    }
+    return false;
+  }
+  if (decodedLen >= 4 && !(decoded[0] == 13 && decoded[1] == 0x0A && decoded[2] == 0xBF && decoded[3] == 0x23))
+  {
+    Log.verbose(F("[Web]: SCI filter blob header unexpected; using bytes 4-11" CR));
+  }
+  for (int i = 0; i < 8; i++)
+  {
+    outEight[i] = decoded[4 + i];
+  }
+  return true;
+}
+
+static bool parseFilterPostJson(const DynamicJsonDocument &doc, SpaFilterCycleSettings &out, const char **errReason)
+{
+  JsonObjectConst f1;
+  JsonObjectConst f2;
+  if (doc.containsKey("filter"))
+  {
+    JsonObjectConst filter = doc["filter"];
+    f1 = filter["filter1"];
+    f2 = filter["filter2"];
+  }
+  else
+  {
+    f1 = doc["filter1"];
+    f2 = doc["filter2"];
+  }
+  if (f1.isNull() || f2.isNull())
+  {
+    if (errReason)
+    {
+      *errReason = "invalid_filter_payload";
+    }
+    return false;
+  }
+  out.filt1Hour = f1["startHour"] | 0;
+  out.filt1Minute = f1["startMinute"] | 0;
+  out.filt1DurHour = f1["durationHour"] | 0;
+  out.filt1DurMinute = f1["durationMinute"] | 0;
+  out.filt2Enable = f2["enabled"] | false;
+  out.filt2Hour = f2["startHour"] | 0;
+  out.filt2Minute = f2["startMinute"] | 0;
+  out.filt2DurHour = f2["durationHour"] | 0;
+  out.filt2DurMinute = f2["durationMinute"] | 0;
+  spaNormalizeFilter2Schedule(out);
+  return spaValidateFilterCycleSettings(out, errReason);
+}
+
+void handleConfigFilterGet(AsyncWebServerRequest *request)
+{
+  DynamicJsonDocument doc(768);
+  spaConfigAppendFilterGetJson(doc.to<JsonObject>());
+  String body;
+  serializeJson(doc, body);
+  request->send(200, "application/json", body);
+}
+
+void handleConfigFilterPost(AsyncWebServerRequest *request)
+{
+  if (request->_tempObject == nullptr)
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"reason\":\"no_body\"}");
+    return;
+  }
+  String *bodyPtr = (String *)request->_tempObject;
+  String body = *bodyPtr;
+  delete bodyPtr;
+  request->_tempObject = nullptr;
+
+  DynamicJsonDocument doc(768);
+  if (deserializeJson(doc, body))
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"reason\":\"bad_json\"}");
+    return;
+  }
+
+  SpaFilterCycleSettings settings{};
+  const char *err = nullptr;
+  if (!parseFilterPostJson(doc, settings, &err))
+  {
+    DynamicJsonDocument out(256);
+    out["accepted"] = false;
+    out["reason"] = err ? err : "invalid_filter_payload";
+    String reply;
+    serializeJson(out, reply);
+    request->send(400, "application/json", reply);
+    return;
+  }
+
+  SpaCommandResult result = spaSetFilterCycles(settings, SPA_COMMAND_SOURCE_WEB);
+  DynamicJsonDocument out(256);
+  out["accepted"] = result.accepted;
+  out["reason"] = result.reason;
+  String reply;
+  serializeJson(out, reply);
+  request->send(result.accepted ? 200 : 409, "application/json", reply);
+}
+
+void handleConfigExport(AsyncWebServerRequest *request)
+{
+  DynamicJsonDocument doc(4096);
+  spaConfigAppendExportJson(doc.to<JsonObject>());
+  String body;
+  serializeJson(doc, body);
+
+  String hostname = WiFi.getHostname() ? String(WiFi.getHostname()) : String("spa");
+  hostname.replace(" ", "-");
+  const time_t now = getTime();
+  struct tm tmUtc;
+  char ts[32] = "export";
+  if (gmtime_r(&now, &tmUtc) != nullptr)
+  {
+    strftime(ts, sizeof(ts), "%Y%m%d-%H%M", &tmUtc);
+  }
+  String filename = "spa-config-" + hostname + "-" + String(ts) + ".json";
+
+  AsyncWebServerResponse *response = request->beginResponse(200, "application/json", body);
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+  request->send(response);
+}
+
+void handleConfigImportPost(AsyncWebServerRequest *request)
+{
+  if (request->_tempObject == nullptr)
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"error\":\"no_body\"}");
+    return;
+  }
+  String *bodyPtr = (String *)request->_tempObject;
+  String body = *bodyPtr;
+  delete bodyPtr;
+  request->_tempObject = nullptr;
+
+  DynamicJsonDocument doc(8192);
+  if (deserializeJson(doc, body))
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"error\":\"bad_json\"}");
+    return;
+  }
+
+  const bool dryRun = doc["dryRun"] | false;
+  const bool force = doc["force"] | false;
+
+  DynamicJsonDocument report(4096);
+  spaConfigImportFromJson(doc, report.to<JsonObject>(), dryRun, force);
+  String reply;
+  serializeJson(report, reply);
+  request->send(200, "application/json", reply);
+}
+
 void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
 {
   // Log.verbose("[Web]: handleBody Request %s %s %d received from %p" CR, request->methodToString(), request->url().c_str(), index, request->client()->remoteIP());
@@ -3089,11 +3402,6 @@ String parseBody(String body)
   {
     response = encodeResponse(spaInformationData.rawData, spaInformationData.rawDataLength);
   }
-  else if (body.indexOf("Filters") > 0)
-  {
-    //<device_request target_name="Filters">${encodedValue}</device_request>
-    response = "<device_request target_name='Filters'>" + encodeResponse(spaFilterSettingsData.rawData, spaFilterSettingsData.rawDataLength) + "</device_request>";
-  }
   else if (body.indexOf("device_request") > 0)
   {
     using namespace tinyxml2;
@@ -3114,8 +3422,50 @@ String parseBody(String body)
     const char *deviceRequestValue = deviceRequestElement->GetText();
     String target = (targetName ? String(targetName) : "");
     String value = (deviceRequestValue ? String(deviceRequestValue) : "");
+    value.trim();
 
-    if (target == "Button")
+    if (target == "Request" && value.equalsIgnoreCase("Filters"))
+    {
+      response = filterSciReadResponse();
+    }
+    else if (target == "Filters")
+    {
+      if (value.length() == 0)
+      {
+        response = filterSciReadResponse();
+      }
+      else
+      {
+        uint8_t payload[8];
+        String decodeErr;
+        if (!decodeSciFilterBlob(value, payload, &decodeErr))
+        {
+          response = "<device_request target_name='Filters' result='rejected' error='" + decodeErr + "'></device_request>";
+        }
+        else
+        {
+          SpaFilterCycleSettings settings{};
+          if (!spaParseFilterCyclePayload(payload, settings))
+          {
+            response = "<device_request target_name='Filters' result='rejected' error='invalid_filter_payload'></device_request>";
+          }
+          else
+          {
+            SpaCommandResult result = spaSetFilterCycles(settings, SPA_COMMAND_SOURCE_WEB);
+            if (result.accepted)
+            {
+              response = "<device_request target_name='Filters' result='accepted'></device_request>";
+            }
+            else
+            {
+              response = "<device_request target_name='Filters' result='rejected' error='" + String(result.reason) + "'></device_request>";
+            }
+            Log.verbose("[Web]: Filters write -> %s" CR, result.reason);
+          }
+        }
+      }
+    }
+    else if (target == "Button")
     {
       int separator = value.indexOf(':');
       String itemCodeRaw = (separator > 0 ? value.substring(0, separator) : value);
