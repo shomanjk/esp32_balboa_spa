@@ -44,6 +44,7 @@
 #define SETTINGS_0X04_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x04, 0x00, 0x00, 0xf4, 0x7e}
 #define FILTER_SETTINGS_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x01, 0x00, 0x00, 0x34, 0x7e}
 #define INFORMATION_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x02, 0x00, 0x00, 0x89, 0x7e}
+#define FAULT_LOG_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x20, 0xff, 0x00, 0xcb, 0x7e}
 
 /*
 Settings Code	Name	Subsequent Arguments	Response
@@ -350,5 +351,33 @@ const std::map<uint8_t, const char *> lockedMap = {
 const std::map<uint8_t, const char *> onOffMap = {
     {0, "Off"},
     {1, "On"}};
+
+const std::map<uint8_t, const char *> reminderTypeMap = {
+    {0x00, "None"},
+    {0x04, "Clean Filter"},
+    {0x09, "Check Sanitizer"},
+    {0x0A, "Check pH"},
+    {0x1E, "Fault"}};
+
+const std::map<uint8_t, const char *> faultCodeMap = {
+    {15, "Sensors are out of sync"},
+    {16, "The water flow is low"},
+    {17, "The water flow has failed"},
+    {18, "The settings have been reset"},
+    {19, "Priming Mode"},
+    {20, "The clock has failed"},
+    {21, "The settings have been reset"},
+    {22, "Program memory failure"},
+    {26, "Sensors are out of sync -- Call for service"},
+    {27, "The heater is dry"},
+    {28, "The heater may be dry"},
+    {29, "The water is too hot"},
+    {30, "The heater is too hot"},
+    {31, "Sensor A Fault"},
+    {32, "Sensor B Fault"},
+    {34, "A pump may be stuck on"},
+    {35, "Hot fault"},
+    {36, "The GFCI test failed"},
+    {37, "Standby Mode (Hold Mode)"}};
 
 #endif

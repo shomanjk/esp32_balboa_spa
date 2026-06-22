@@ -28,5 +28,7 @@ void spaRequestFilterSettings();
 void spaScheduleFilterSettingsReadbackFollowup(uint8_t extraReads = 2);
 
 String getMapDescription(uint8_t element, const std::map<uint8_t, const char*>& suppliedMap);
+String spaFaultMessageForCode(uint8_t code, uint8_t totEntry);
+String spaFormatFaultLogTime(const SpaFaultLogData &data);
 
 #endif

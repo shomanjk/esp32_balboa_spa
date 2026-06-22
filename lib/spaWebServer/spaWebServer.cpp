@@ -1008,6 +1008,7 @@ void handleStatus(AsyncWebServerRequest *request)
       ".heat-hero--ok{border-color:#b8cfe8;background:#f2f7fc;}.heat-hero--ok .heat-hero-icon{color:#0f4a87;}"
       ".heat-hero--init{border-color:#e6c200;background:#fffbeb;}.heat-hero--init .heat-hero-icon{color:#b8860b;}"
       ".heat-hero--alert{border-color:#e57373;background:#fff5f5;}.heat-hero--alert .heat-hero-icon{color:#c62828;}"
+      ".kv-row--alert dt,.kv-row--alert dd{color:#c62828;font-weight:600;}"
       ".heat-hero--heat-idle{border-color:#dde2e8;background:#eef1f4;}.heat-hero--heat-idle .heat-hero-icon{color:#5f6c7b;}"
       ".heat-hero--heat-on{border-color:#ffab91;background:#ffe8e0;}.heat-hero--heat-on .heat-hero-icon{color:#bf360c;}"
       ".heat-hero--heat-alt{border-color:#ffe082;background:#fff8e1;}.heat-hero--heat-alt .heat-hero-icon{color:#8d6e00;}"
@@ -1267,6 +1268,17 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "<section class=\"panel\"><h2>Panel and flags</h2><dl class=\"kv\">";
   appendStatusKvRow(html, "Panel Locked", getMapDescription(spaStatusData.panelLocked, lockedMap));
   appendStatusKvRow(html, "Settings Lock", getMapDescription(spaStatusData.settingsLock, lockedMap));
+  {
+    const String reminderTxt = getMapDescription(spaStatusData.reminderType, reminderTypeMap);
+    html += "<div class=\"kv-row";
+    if (spaStatusData.reminderType != 0)
+    {
+      html += " kv-row--alert";
+    }
+    html += "\" id=\"statusReminderRow\"><dt>Reminder</dt><dd id=\"statusReminderVal\">";
+    html += reminderTxt;
+    html += "</dd></div>";
+  }
   appendStatusKvRow(html, "M8 Cycle Time", String(spaStatusData.m8CycleTime));
   appendStatusKvRow(html, "Notification", String(spaStatusData.notification));
   appendStatusKvRow(html, "Flags 19", String(spaStatusData.flags19));
@@ -1438,6 +1450,8 @@ void handleStatus(AsyncWebServerRequest *request)
           "var f12=document.getElementById('statusClockFormat12Btn');var f24=document.getElementById('statusClockFormat24Btn');var is24=String(snap.clockFormat||'').toLowerCase().indexOf('24')>=0;"
           "if(f12)f12.disabled=!is24;if(f24)f24.disabled=is24;"
           "var fm=document.getElementById('statusFilterModeVal');if(fm&&typeof snap.filterModeText==='string')fm.textContent=snap.filterModeText;"
+          "var rv=document.getElementById('statusReminderVal');if(rv&&typeof snap.reminderText==='string')rv.textContent=snap.reminderText;"
+          "var rr=document.getElementById('statusReminderRow');if(rr){if(Number(snap.reminderType||0)>0)rr.classList.add('kv-row--alert');else rr.classList.remove('kv-row--alert');}"
           "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
           "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
           "}"
@@ -1912,10 +1926,17 @@ void handleConfig(AsyncWebServerRequest *request)
   }
   else
   {
-    html += "<li><p style=\"margin:0 0 6px 0\"><b>Fault log</b> (last controller response — firmware does not decode entries yet) — "
+    html += "<li><p style=\"margin:0 0 6px 0\"><b>Fault log</b> — "
             "<span style=\"color:var(--muted)\">lastUpdate:</span> " +
             statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) +
             ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaFaultLogData.crc) + "</p>";
+    html += "<dl class=\"kv\" style=\"margin:0 0 8px 0\">";
+    appendStatusKvRow(html, "Fault code", String(spaFaultLogData.faultCode));
+    appendStatusKvRow(html, "Fault message", spaFaultLogData.faultMessage);
+    appendStatusKvRow(html, "Total entries", String(spaFaultLogData.totEntry));
+    appendStatusKvRow(html, "Current entry", String(spaFaultLogData.currEntry));
+    appendStatusKvRow(html, "Occurred", spaFormatFaultLogTime(spaFaultLogData));
+    html += "</dl>";
     html += "<details><summary><b>Raw fault-log frame (hex)</b></summary><pre class=\"config-hex\">" +
             spaHexWordsUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength, 48) + "</pre></details></li>";
   }
@@ -2504,6 +2525,8 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["filterModeText"] = String(getMapDescription(spaStatusData.filterMode, filterModeMap));
   doc["filter1_running"] = spaFilter1Running() ? 1 : 0;
   doc["filter2_running"] = spaFilter2Running() ? 1 : 0;
+  doc["reminderType"] = spaStatusData.reminderType;
+  doc["reminderText"] = getMapDescription(spaStatusData.reminderType, reminderTypeMap);
   doc["gatewayTimeHHMM"] = statusGatewayLocalTimeHHMM();
 }
 

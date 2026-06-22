@@ -651,3 +651,19 @@ Interpretation:
 
 - A/B parameters did not produce any evidence of accepted/apply behavior for Light1.
 - The remaining evidence points away from simple destination/pad/CTS-edge timing differences and toward controller-specific command semantics and/or client-ownership constraints not yet modeled.
+
+### 2026-06-22 fault log decode + reminder text (tub validation checklist)
+
+Firmware change (not a command-write experiment): decode **`0x28`** fault-log responses, request via **`0x22`/`0x20`/`0xFF`** in **`configurationRequest()`**, and expose **`reminderText`** on MQTT/**`/status`**.
+
+**Tub checklist (pending live run):**
+
+1. Serial log after boot: configuration batch includes **`FaultLog`** when fault data is stale.
+2. **`GET /api/config/export`** → **`snapshot.faultLog`**: **`faultCode`**, **`faultMessage`**, **`faultLogTime`** populated (or **`None`** when no stored fault).
+3. **`/config`** → Other spa datasets → fault log shows decoded KV rows + raw hex collapsible.
+4. **`/status`** → Panel and flags → **Reminder** row shows **`None`** or matches panel message.
+5. MQTT: **`Spa/<gateway>/faultLog/faultMessage`**, **`…/status/reminderText`** update after spa traffic.
+6. HA: rediscover; diagnostic entities **`fault_code`**, **`fault_message`**, **`fault_log_time`**, **`reminder`** appear.
+
+**Bench note:** [`emulator/spaEmulator.js`](../emulator/spaEmulator.js) does not simulate **`0x28`**; fault decode needs tub traffic or injected frame.
+

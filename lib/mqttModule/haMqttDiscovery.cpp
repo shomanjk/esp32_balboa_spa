@@ -610,6 +610,11 @@ namespace
     publishBinarySensor(macSlugStr, "settings_lock", "Spa settings lock", "status", "settingsLock", nullptr, "Locked", "Unlocked");
 
     publishSensor(macSlugStr, "temp_scale", "Spa temperature scale", "status", "tempScale", nullptr, nullptr, nullptr, "diagnostic", nullptr);
+
+    publishSensor(macSlugStr, "reminder", "Spa reminder", "status", "reminderText", nullptr, nullptr, nullptr, "diagnostic", "mdi:bell-outline");
+    publishSensor(macSlugStr, "fault_code", "Spa fault code", "faultLog", "faultCode", nullptr, nullptr, nullptr, "diagnostic", "mdi:alert-circle-outline");
+    publishSensor(macSlugStr, "fault_message", "Spa fault message", "faultLog", "faultMessage", nullptr, nullptr, nullptr, "diagnostic", "mdi:alert-circle-outline");
+    publishSensor(macSlugStr, "fault_log_time", "Spa fault log time", "faultLog", "faultLogTime", nullptr, nullptr, nullptr, "diagnostic", "mdi:clock-alert-outline");
   }
 
   uint8_t pumpSpeedConfigForBit(uint32_t bit)

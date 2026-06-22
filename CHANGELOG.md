@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-06-22
+
+### Added
+
+- **Fault log decode and fetch** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)): Proactive **`FAULT_LOG_REQUEST`** (`0x22` / `0x20` / `0xFF`) in **`configurationRequest()`**; **`parseFaultResponse()`** decodes code, message, entry counts, and relative time. MQTT **`faultLog/*`** topics include **`faultLogTime`**; **`/config`** and config export snapshot show decoded fields; HA discovery sensors for fault code, message, and time.
+- **Reminder text** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h), [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **`reminderTypeMap`** maps status byte 6 to human-readable text; MQTT **`status/reminderText`**; **`/status`** reminder row with alert styling when active; HA diagnostic **`reminder`** sensor.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.14.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.13.0] - 2026-06-22
 
 ### Added

@@ -213,6 +213,14 @@ void spaConfigAppendExportJson(JsonObject root)
   if (spaFaultLogData.lastUpdate != 0)
   {
     JsonObject fault = snapshot.createNestedObject("faultLog");
+    fault["faultCode"] = spaFaultLogData.faultCode;
+    fault["faultMessage"] = spaFaultLogData.faultMessage;
+    fault["totEntry"] = spaFaultLogData.totEntry;
+    fault["currEntry"] = spaFaultLogData.currEntry;
+    fault["daysAgo"] = spaFaultLogData.daysAgo;
+    fault["hour"] = spaFaultLogData.hour;
+    fault["minutes"] = spaFaultLogData.minutes;
+    fault["faultLogTime"] = spaFormatFaultLogTime(spaFaultLogData);
     fault["rawHex"] = rawFrameHexUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength);
   }
 }

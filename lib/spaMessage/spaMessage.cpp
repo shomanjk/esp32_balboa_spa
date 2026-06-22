@@ -263,6 +263,7 @@ void configurationRequest()
   unsigned char settings_request[] = SETTINGS_0X04_REQUEST;
   unsigned char filter_settings_request[] = FILTER_SETTINGS_REQUEST;
   unsigned char information_request[] = INFORMATION_REQUEST;
+  unsigned char fault_log_request[] = FAULT_LOG_REQUEST;
 
   String request = "";
 
@@ -289,6 +290,12 @@ void configurationRequest()
     append_request(byte_array, &offset, information_request, sizeof(information_request));
     spaInformationData.lastRequest = getTime();
     request += "Information ";
+  }
+  if (staleData(spaFaultLogData) && retryRequest(spaFaultLogData))
+  {
+    append_request(byte_array, &offset, fault_log_request, sizeof(fault_log_request));
+    spaFaultLogData.lastRequest = getTime();
+    request += "FaultLog ";
   }
 
   if (offset)
@@ -630,6 +637,14 @@ void parseFaultResponse(u_int8_t *message, int length)
 
   u_int8_t *hexArray = message + 5;
 
+  spaFaultLogData.totEntry = hexArray[0];
+  spaFaultLogData.currEntry = hexArray[1];
+  spaFaultLogData.faultCode = hexArray[2];
+  spaFaultLogData.daysAgo = hexArray[3];
+  spaFaultLogData.hour = hexArray[4];
+  spaFaultLogData.minutes = hexArray[5];
+  spaFaultLogData.faultMessage = spaFaultMessageForCode(spaFaultLogData.faultCode, spaFaultLogData.totEntry);
+
   Log.verbose(F("[Mess]: Fault Log Response: %s" CR), msgToString(hexArray, length - 7).c_str());
   publishSpaFaultLogData();
 }
@@ -739,7 +754,33 @@ String getMapDescription(uint8_t element, const std::map<uint8_t, const char *> 
   {
     return String(it->second);
   }
-  return String("Unknown - " + String(element));
+  char buf[24];
+  snprintf(buf, sizeof(buf), "Unknown (0x%02X)", element);
+  return String(buf);
+}
+
+String spaFaultMessageForCode(uint8_t code, uint8_t totEntry)
+{
+  if (code == 0 && totEntry == 0)
+  {
+    return String("None");
+  }
+  return getMapDescription(code, faultCodeMap);
+}
+
+String spaFormatFaultLogTime(const SpaFaultLogData &data)
+{
+  if (data.lastUpdate == 0)
+  {
+    return String("");
+  }
+  if (data.faultCode == 0 && data.totEntry == 0)
+  {
+    return String("None");
+  }
+  char buf[48];
+  snprintf(buf, sizeof(buf), "%u days ago %02u:%02u", data.daysAgo, data.hour, data.minutes);
+  return String(buf);
 }
 
 void updateTemperatureHistory()

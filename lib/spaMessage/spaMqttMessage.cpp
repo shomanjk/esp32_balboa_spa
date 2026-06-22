@@ -73,6 +73,7 @@ void publishSpaStatusData()
   PUBLISH_STATE_MAP(heatingState, heatingStateMap);
 
   PUBLISH_STATUS_ELEMENT(reminderType, "%u");
+  publishElement("reminderText", "status", getMapDescription(spaStatusData.reminderType, reminderTypeMap).c_str());
   PUBLISH_STATUS_ELEMENT(sensorA, "%u");
   PUBLISH_STATUS_ELEMENT(sensorB, "%u");
   PUBLISH_STATUS_ELEMENT(tempScale, "%u");
@@ -217,6 +218,7 @@ void publishSpaFaultLogData()
   PUBLISH_FAULT_LOG_ELEMENT(daysAgo, "%u");
   PUBLISH_FAULT_LOG_ELEMENT(hour, "%u");
   PUBLISH_FAULT_LOG_ELEMENT(minutes, "%u");
+  publishElement("faultLogTime", "faultLog", spaFormatFaultLogTime(spaFaultLogData).c_str());
 }
 
 #define PUBLISH_PREFERENCES_ELEMENT(element, format)                      \
