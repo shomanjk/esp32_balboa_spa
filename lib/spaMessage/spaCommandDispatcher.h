@@ -2,6 +2,7 @@
 #define SPA_COMMAND_DISPATCHER_H
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 struct SpaFilterSettingsData;
 
@@ -67,6 +68,18 @@ void spaNormalizeFilter2Cache(SpaFilterSettingsData &cached);
 bool spaValidateFilterCycleSettings(const SpaFilterCycleSettings &settings, const char **outReason = nullptr);
 bool spaParseFilterCyclePayload(const uint8_t *eightBytes, SpaFilterCycleSettings &out);
 bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilterSettingsData &cached);
+/** Map live filter cache into dispatcher settings. Returns false if filter read not ready. */
+bool spaFilterSettingsFromCache(SpaFilterCycleSettings &out);
+/** Parse `H:MM` / `HH:MM` (minutes always two digits). */
+bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute);
+/** Parse filter JSON; merge omitted fields from cache when `mergeFromCache` is true. */
+bool spaParseFilterCycleJson(JsonObjectConst doc, SpaFilterCycleSettings &out, bool mergeFromCache, const char **errReason);
+/** Granular MQTT path under `filter/…` (e.g. `filter/filter1/start`). */
+bool spaApplyFilterGranularMqtt(const String &subPath, const String &payload, SpaFilterCycleSettings &out, const char **errReason);
+/** True when live status `filterMode` reports filter cycle 1 active. */
+bool spaFilter1Running();
+/** True when live status `filterMode` reports filter cycle 2 active. */
+bool spaFilter2Running();
 SpaCommandResult spaSendToggleDiagnostic(
     uint8_t itemCode,
     bool useWifiDestination,

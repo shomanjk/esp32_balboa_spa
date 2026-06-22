@@ -5,6 +5,7 @@
 #include <TickTwo.h>
 #include <ArduinoLog.h>
 #include <ctype.h>
+#include <string.h>
 
 // Local Libraries
 
@@ -290,6 +291,55 @@ void mqttMessage(char *p_topic, byte *p_payload, unsigned int p_length)
       {
         result = spaSendButtonForBinaryState((uint8_t)itemCode, desiredOn, SPA_COMMAND_SOURCE_MQTT);
       }
+    }
+  }
+  else if (suffix == "filter")
+  {
+    if (payload.length() == 0)
+    {
+      result = {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid_filter_payload"};
+    }
+    else
+    {
+      DynamicJsonDocument doc(512);
+      const DeserializationError jsonErr = deserializeJson(doc, payload);
+      if (jsonErr)
+      {
+        result = {false, SPA_COMMAND_INVALID_ARGUMENT, "bad_json"};
+      }
+      else
+      {
+        SpaFilterCycleSettings settings{};
+        const char *err = nullptr;
+        if (!spaParseFilterCycleJson(doc.as<JsonObjectConst>(), settings, true, &err))
+        {
+          result = {false, SPA_COMMAND_INVALID_ARGUMENT, err ? err : "invalid_filter_payload"};
+        }
+        else
+        {
+          result = spaSetFilterCycles(settings, SPA_COMMAND_SOURCE_MQTT);
+        }
+      }
+    }
+  }
+  else if (suffix.startsWith("filter/"))
+  {
+    SpaFilterCycleSettings settings{};
+    const char *err = nullptr;
+    if (!spaApplyFilterGranularMqtt(suffix, payload, settings, &err))
+    {
+      if (err && strcmp(err, "unsupported_command") == 0)
+      {
+        result = {false, SPA_COMMAND_INVALID_ARGUMENT, "unsupported_command"};
+      }
+      else
+      {
+        result = {false, SPA_COMMAND_INVALID_ARGUMENT, err ? err : "invalid_filter_payload"};
+      }
+    }
+    else
+    {
+      result = spaSetFilterCycles(settings, SPA_COMMAND_SOURCE_MQTT);
     }
   }
 

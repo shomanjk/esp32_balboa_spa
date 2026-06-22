@@ -6,6 +6,7 @@
 #include <ArduinoLog.h>
 #include <mqttModule.h>
 #include <spaUtilities.h>
+#include <spaCommandDispatcher.h>
 
 #define BUFFER_SIZE BALBOA_MESSAGE_SIZE * 3 + 1
 // Macro to simplify publishing data
@@ -77,6 +78,8 @@ void publishSpaStatusData()
   PUBLISH_STATUS_ELEMENT(tempScale, "%u");
   PUBLISH_STATUS_ELEMENT(clockMode, "%u");
   PUBLISH_STATE_MAP(filterMode, filterModeMap);
+  publishElement("filter1_running", "status", spaFilter1Running() ? "On" : "Off");
+  publishElement("filter2_running", "status", spaFilter2Running() ? "On" : "Off");
 
   PUBLISH_STATE_MAP(panelLocked, lockedMap);
   PUBLISH_STATE_MAP(tempRange, tempRangeMap);

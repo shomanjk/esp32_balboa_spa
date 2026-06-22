@@ -601,6 +601,8 @@ namespace
                       HEATING_MODE_OPTIONS, sizeof(HEATING_MODE_OPTIONS) / sizeof(HEATING_MODE_OPTIONS[0]));
     publishEnumSensor(macSlugStr, "filter_mode", "Spa filter mode", "status", "filterMode",
                       FILTER_MODE_OPTIONS, sizeof(FILTER_MODE_OPTIONS) / sizeof(FILTER_MODE_OPTIONS[0]), nullptr, "mdi:sync");
+    publishBinarySensor(macSlugStr, "filter1_running", "Spa filter 1 running", "status", "filter1_running", "mdi:sync");
+    publishBinarySensor(macSlugStr, "filter2_running", "Spa filter 2 running", "status", "filter2_running", "mdi:sync");
     publishEnumSensor(macSlugStr, "temp_range", "Spa temperature range", "status", "tempRange",
                       TEMP_RANGE_OPTIONS, sizeof(TEMP_RANGE_OPTIONS) / sizeof(TEMP_RANGE_OPTIONS[0]), nullptr,
                       "mdi:thermometer-lines");

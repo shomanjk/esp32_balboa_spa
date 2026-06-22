@@ -184,7 +184,7 @@ To keep protocol risk low, command-write implementation is intentionally staged:
   - **Set temperature units** (`TempUnits`, Balboa `0x27`) via `C`/`F`.
 - **Also in scope (v1):**
   - **Set panel clock** (`SystemTime`, Balboa `0x21`) via `HH:MM` or gateway sync.
-  - **Filter cycle schedules** (Balboa `0x23`) via **`/config`**, **`GET/POST /api/config/filter`**, and SCI **`Filters`** (balboa-spa).
+  - **Filter cycle schedules** (Balboa `0x23`) via **`/config`**, **`GET/POST /api/config/filter`**, SCI **`Filters`**, and **MQTT** **`cmd/filter`** (+ granular **`cmd/filter/filter{1,2}/…`** sub-topics).
   - **Config backup/restore** — **`GET /api/config/export`**, **`POST /api/config/import`** (writable settings only; identity snapshots for warnings).
 - **Deferred (post-v1):**
   - `TimeFormat`
@@ -198,6 +198,12 @@ To keep protocol risk low, command-write implementation is intentionally staged:
 - `Spa/<gateway>/cmd/mode` -> `heat` or `off` (Ready/Rest)
 - `Spa/<gateway>/cmd/preset` -> `Low Range` or `High Range`
 - `Spa/<gateway>/cmd/tempUnits` -> `C`/`Celsius` or `F`/`Fahrenheit`
+- `Spa/<gateway>/cmd/filter` -> JSON (`filter1` / `filter2` objects; same fields as **`POST /api/config/filter`**). Omitted fields merge from the live spa cache.
+- `Spa/<gateway>/cmd/filter/filter1/start` -> `HH:MM` or `H:MM` (e.g. `08:00`)
+- `Spa/<gateway>/cmd/filter/filter1/duration` -> `HH:MM` duration (e.g. `04:30`)
+- `Spa/<gateway>/cmd/filter/filter2/start` -> `HH:MM` (enables Filter 2)
+- `Spa/<gateway>/cmd/filter/filter2/duration` -> `HH:MM` (enables Filter 2)
+- `Spa/<gateway>/cmd/filter/filter2/enabled` -> `true`/`false`/`on`/`off`/`1`/`0`
 - `Spa/<gateway>/cmd/button/<code>` ->
   - non-pump: `on`, `off`, `toggle`
   - pumps: `Off`, `Low`, `High` (single-speed pumps accept `Off`/`Low`)
@@ -214,6 +220,7 @@ To avoid repeating dead-end experiments while command-write behavior is being de
 - **Temperature values:** `current_temp`, `set_temp`, `low_set_temp`, `high_set_temp`, `sensor_a`, `sensor_b` are numeric temperature sensors.
 - **Writable controls:** `climate` (`spa_controls`), load `switch` entities (`light1`, `light2`, `blower`, `mister`), pump controls by capability (**1-speed pumps as `switch`**, **2-speed pumps as `select`**), a `button` for panel-time sync, and diagnostic `sensor` for last command result.
 - **Enum/categorical values:** `heating_state`, `spa_state`, `init_mode`, `heating_mode`, `filter_mode`, `temp_range` publish human-readable strings and are discovered as enum sensors (not numeric measurements).
+- **Filter running:** `filter1_running` and `filter2_running` publish `On`/`Off` from live controller **`filterMode`** (discovered as **`binary_sensor`**).
 - **Binary values:** `panel_locked`, `settings_lock`, `circ`, `blower`, `light1`, `light2`, `mister` are binary sensors with explicit on/off payloads.
 - **Clock entity:** `spa_time` is intentionally **not** discovered in HA to avoid noisy, non-actionable history churn.
 - **Device web link:** Discovery sets `device.configuration_url` to `http://<gatewayName>.local/status` so the HA device page can open the ESP web status page directly.

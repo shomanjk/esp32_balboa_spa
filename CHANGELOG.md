@@ -8,6 +8,21 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-06-22
+
+### Added
+
+- **MQTT filter schedule writes** ([`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp), [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): **`Spa/<gateway>/cmd/filter`** JSON (same schema as **`POST /api/config/filter`**, merges omitted fields from live cache); granular **`cmd/filter/filter{1,2}/{start,duration}`** with **`HH:MM`** payloads; **`cmd/filter/filter2/enabled`** (`true`/`false`/`on`/`off`/`1`/`0`). Outcomes on **`cmd/result`**.
+- **Filter running telemetry** ([`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp), [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): **`status/filter1_running`** and **`status/filter2_running`** (`On`/`Off`) derived from live controller **`filterMode`**; HA **`binary_sensor`** discovery; **`GET /api/status/controls`** includes **`filter1_running`** / **`filter2_running`**.
+
+### Changed
+
+- **Shared filter JSON parsing** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): Web **`POST /api/config/filter`**, config import, and MQTT filter commands share **`spaParseFilterCycleJson`** / **`spaApplyFilterGranularMqtt`**.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.13.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.12.4] - 2026-06-10
 
 ### Fixed

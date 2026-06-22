@@ -96,36 +96,6 @@ void appendFailed(JsonObject report, const char *section, const char *reason)
   row["reason"] = reason;
 }
 
-bool parseFilterFromJson(JsonObjectConst writable, SpaFilterCycleSettings &out, const char **errReason)
-{
-  if (!writable.containsKey("filter"))
-  {
-    return false;
-  }
-  JsonObjectConst filter = writable["filter"];
-  JsonObjectConst f1 = filter["filter1"];
-  JsonObjectConst f2 = filter["filter2"];
-  if (f1.isNull() || f2.isNull())
-  {
-    if (errReason)
-    {
-      *errReason = "invalid_filter_payload";
-    }
-    return false;
-  }
-  out.filt1Hour = f1["startHour"] | 0;
-  out.filt1Minute = f1["startMinute"] | 0;
-  out.filt1DurHour = f1["durationHour"] | 0;
-  out.filt1DurMinute = f1["durationMinute"] | 0;
-  out.filt2Enable = f2["enabled"] | false;
-  out.filt2Hour = f2["startHour"] | 0;
-  out.filt2Minute = f2["startMinute"] | 0;
-  out.filt2DurHour = f2["durationHour"] | 0;
-  out.filt2DurMinute = f2["durationMinute"] | 0;
-  spaNormalizeFilter2Schedule(out);
-  return spaValidateFilterCycleSettings(out, errReason);
-}
-
 } // namespace
 
 void spaConfigAppendFilterGetJson(JsonObject root)
@@ -407,7 +377,7 @@ bool spaConfigImportFromJson(const JsonDocument &doc, JsonObject report, bool dr
   {
     SpaFilterCycleSettings settings{};
     const char *err = nullptr;
-    if (!parseFilterFromJson(writable, settings, &err))
+    if (!spaParseFilterCycleJson(writable["filter"], settings, false, &err))
     {
       appendFailed(report, "filter", err ? err : "invalid_filter_payload");
     }

@@ -2502,6 +2502,8 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["clockFormat"] = statusPanelClockFormatLabel(spaStatusData.clockMode);
   doc["clockModeRaw"] = spaStatusData.clockMode;
   doc["filterModeText"] = String(getMapDescription(spaStatusData.filterMode, filterModeMap));
+  doc["filter1_running"] = spaFilter1Running() ? 1 : 0;
+  doc["filter2_running"] = spaFilter2Running() ? 1 : 0;
   doc["gatewayTimeHHMM"] = statusGatewayLocalTimeHHMM();
 }
 
@@ -3210,42 +3212,6 @@ static bool decodeSciFilterBlob(const String &b64, uint8_t outEight[8], String *
   return true;
 }
 
-static bool parseFilterPostJson(const DynamicJsonDocument &doc, SpaFilterCycleSettings &out, const char **errReason)
-{
-  JsonObjectConst f1;
-  JsonObjectConst f2;
-  if (doc.containsKey("filter"))
-  {
-    JsonObjectConst filter = doc["filter"];
-    f1 = filter["filter1"];
-    f2 = filter["filter2"];
-  }
-  else
-  {
-    f1 = doc["filter1"];
-    f2 = doc["filter2"];
-  }
-  if (f1.isNull() || f2.isNull())
-  {
-    if (errReason)
-    {
-      *errReason = "invalid_filter_payload";
-    }
-    return false;
-  }
-  out.filt1Hour = f1["startHour"] | 0;
-  out.filt1Minute = f1["startMinute"] | 0;
-  out.filt1DurHour = f1["durationHour"] | 0;
-  out.filt1DurMinute = f1["durationMinute"] | 0;
-  out.filt2Enable = f2["enabled"] | false;
-  out.filt2Hour = f2["startHour"] | 0;
-  out.filt2Minute = f2["startMinute"] | 0;
-  out.filt2DurHour = f2["durationHour"] | 0;
-  out.filt2DurMinute = f2["durationMinute"] | 0;
-  spaNormalizeFilter2Schedule(out);
-  return spaValidateFilterCycleSettings(out, errReason);
-}
-
 void handleConfigFilterGet(AsyncWebServerRequest *request)
 {
   DynamicJsonDocument doc(768);
@@ -3276,7 +3242,7 @@ void handleConfigFilterPost(AsyncWebServerRequest *request)
 
   SpaFilterCycleSettings settings{};
   const char *err = nullptr;
-  if (!parseFilterPostJson(doc, settings, &err))
+  if (!spaParseFilterCycleJson(doc.as<JsonObjectConst>(), settings, false, &err))
   {
     DynamicJsonDocument out(256);
     out["accepted"] = false;

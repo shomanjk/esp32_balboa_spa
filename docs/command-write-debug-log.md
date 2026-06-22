@@ -2,6 +2,24 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+## 2026-06-22 - MQTT filter schedule writes + running telemetry
+
+- **Implementation:** [`mqttModule.cpp`](../lib/mqttModule/mqttModule.cpp) dispatches **`Spa/<gateway>/cmd/filter`** (JSON, merge from cache) and granular **`cmd/filter/filter{1,2}/{start,duration,enabled}`** via shared helpers in [`spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) → **`spaSetFilterCycles(..., SPA_COMMAND_SOURCE_MQTT)`**. Read telemetry: **`status/filter1_running`**, **`status/filter2_running`** from live **`filterMode`** ([`spaMqttMessage.cpp`](../lib/spaMessage/spaMqttMessage.cpp)); HA **`binary_sensor`** discovery in [`haMqttDiscovery.cpp`](../lib/mqttModule/haMqttDiscovery.cpp).
+- **Firmware build:** `pio run -e M5AtomLite-tub` succeeds (compile-only verification).
+- **Outcome:** *Pending tub-side / MQTT confirmation* — run matrix below.
+
+### MQTT validation matrix (pending)
+
+Pre-flight: subscribe to **`Spa/<gateway>/filterSettings/#`** and **`Spa/<gateway>/status/filter1_running`**; confirm filter cache ready (`filterSettings/lastUpdate` non-zero).
+
+| Step | Action | Pass criteria | Result |
+|------|--------|---------------|--------|
+| M1 | **`cmd/filter/filter1/start`** → `09:00` | `cmd/result` accepted; `filterSettings/filt1Hour`/`filt1Minute` update | *pending* |
+| M2 | **`cmd/filter/filter1/duration`** → `04:00` | Duration fields update; Filter 1 unchanged start if M1 ran first | *pending* |
+| M3 | **`cmd/filter`** partial JSON (only `filter2`) | Omitted Filter 1 fields unchanged on tub | *pending* |
+| M4 | **`cmd/filter/filter2/enabled`** → `false` | Filter 2 disabled; byte +4 = `0x00` in raw hex | *pending* |
+| M5 | During active cycle 1 | **`status/filter1_running`** = `On`; cycle 2 off unless mode 3 | *pending* |
+
 ## 2026-06-10 - Filter cycle writes (`0x23`) + config export/import
 
 - **Implementation:** [`spaSetFilterCycles`](../lib/spaMessage/spaCommandDispatcher.cpp) queues **`0a bf 23`** + 8 payload bytes (Filter 2 disabled → byte +4 = **`0x00`**; enabled → **`(hour & 0x7F) | 0x80`**), then calls [`spaRequestFilterSettings()`](../lib/spaMessage/spaMessage.cpp). SCI routing in [`spaWebServer.cpp`](../lib/spaWebServer/spaWebServer.cpp): read **`Request`/`Filters`**, write **`Filters`** + base64 → **`decodeSciFilterBlob`** bytes `[4..11]` (matches [balboa-spa `balboa.js`](https://github.com/jozefnad/balboa-spa/blob/master/src/assets/balboa.js) `parseFilterCycles` / `generateFilterCyclesArray`). JSON: **`GET/POST /api/config/filter`**, **`GET /api/config/export`**, **`POST /api/config/import`** ([`spaConfigExport.cpp`](../lib/spaWebServer/spaConfigExport.cpp)).

@@ -460,6 +460,291 @@ bool spaParseFilterCyclePayload(const uint8_t *eightBytes, SpaFilterCycleSetting
   return spaValidateFilterCycleSettings(out, &reason);
 }
 
+namespace
+{
+
+bool parseBoolPayload(const String &payload, bool &out)
+{
+  String t = payload;
+  t.trim();
+  if (t.equalsIgnoreCase("true") || t.equalsIgnoreCase("on") || t == "1")
+  {
+    out = true;
+    return true;
+  }
+  if (t.equalsIgnoreCase("false") || t.equalsIgnoreCase("off") || t == "0")
+  {
+    out = false;
+    return true;
+  }
+  return false;
+}
+
+void overlayFilter1Json(JsonObjectConst f1, SpaFilterCycleSettings &out)
+{
+  if (f1.containsKey("startHour"))
+  {
+    out.filt1Hour = f1["startHour"] | 0;
+  }
+  if (f1.containsKey("startMinute"))
+  {
+    out.filt1Minute = f1["startMinute"] | 0;
+  }
+  if (f1.containsKey("durationHour"))
+  {
+    out.filt1DurHour = f1["durationHour"] | 0;
+  }
+  if (f1.containsKey("durationMinute"))
+  {
+    out.filt1DurMinute = f1["durationMinute"] | 0;
+  }
+}
+
+void overlayFilter2Json(JsonObjectConst f2, SpaFilterCycleSettings &out)
+{
+  if (f2.containsKey("enabled"))
+  {
+    out.filt2Enable = f2["enabled"] | false;
+  }
+  if (f2.containsKey("startHour"))
+  {
+    out.filt2Hour = f2["startHour"] | 0;
+  }
+  if (f2.containsKey("startMinute"))
+  {
+    out.filt2Minute = f2["startMinute"] | 0;
+  }
+  if (f2.containsKey("durationHour"))
+  {
+    out.filt2DurHour = f2["durationHour"] | 0;
+  }
+  if (f2.containsKey("durationMinute"))
+  {
+    out.filt2DurMinute = f2["durationMinute"] | 0;
+  }
+}
+
+} // namespace
+
+bool spaFilterSettingsFromCache(SpaFilterCycleSettings &out)
+{
+  if (spaFilterSettingsData.lastUpdate == 0)
+  {
+    return false;
+  }
+  out.filt1Hour = spaFilterSettingsData.filt1Hour;
+  out.filt1Minute = spaFilterSettingsData.filt1Minute;
+  out.filt1DurHour = spaFilterSettingsData.filt1DurationHour;
+  out.filt1DurMinute = spaFilterSettingsData.filt1DurationMinute;
+  out.filt2Enable = spaFilterSettingsData.filt2Enable;
+  out.filt2Hour = spaFilterSettingsData.filt2Hour;
+  out.filt2Minute = spaFilterSettingsData.filt2Minute;
+  out.filt2DurHour = spaFilterSettingsData.filt2DurationHour;
+  out.filt2DurMinute = spaFilterSettingsData.filt2DurationMinute;
+  return true;
+}
+
+bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute)
+{
+  String t = payload;
+  t.trim();
+  if (t.length() < 4 || t.length() > 5)
+  {
+    return false;
+  }
+  const int colon = t.indexOf(':');
+  if (colon <= 0 || colon >= t.length() - 2)
+  {
+    return false;
+  }
+  const String hourStr = t.substring(0, colon);
+  const String minStr = t.substring(colon + 1);
+  if (minStr.length() != 2)
+  {
+    return false;
+  }
+  for (unsigned int i = 0; i < hourStr.length(); ++i)
+  {
+    if (hourStr[i] < '0' || hourStr[i] > '9')
+    {
+      return false;
+    }
+  }
+  for (unsigned int i = 0; i < minStr.length(); ++i)
+  {
+    if (minStr[i] < '0' || minStr[i] > '9')
+    {
+      return false;
+    }
+  }
+  const int h = hourStr.toInt();
+  const int m = minStr.toInt();
+  if (h < 0 || h > 23 || m < 0 || m > 59)
+  {
+    return false;
+  }
+  hour = static_cast<uint8_t>(h);
+  minute = static_cast<uint8_t>(m);
+  return true;
+}
+
+bool spaParseFilterCycleJson(JsonObjectConst doc, SpaFilterCycleSettings &out, bool mergeFromCache, const char **errReason)
+{
+  if (mergeFromCache)
+  {
+    if (!spaFilterSettingsFromCache(out))
+    {
+      if (errReason)
+      {
+        *errReason = "filter_settings_not_ready";
+      }
+      return false;
+    }
+  }
+  else
+  {
+    memset(&out, 0, sizeof(out));
+  }
+
+  JsonObjectConst f1;
+  JsonObjectConst f2;
+  if (doc.containsKey("filter"))
+  {
+    JsonObjectConst filter = doc["filter"];
+    f1 = filter["filter1"];
+    f2 = filter["filter2"];
+  }
+  else
+  {
+    f1 = doc["filter1"];
+    f2 = doc["filter2"];
+  }
+
+  if (!mergeFromCache && (f1.isNull() || f2.isNull()))
+  {
+    if (errReason)
+    {
+      *errReason = "invalid_filter_payload";
+    }
+    return false;
+  }
+
+  if (!f1.isNull())
+  {
+    overlayFilter1Json(f1, out);
+  }
+  if (!f2.isNull())
+  {
+    overlayFilter2Json(f2, out);
+  }
+
+  spaNormalizeFilter2Schedule(out);
+  return spaValidateFilterCycleSettings(out, errReason);
+}
+
+bool spaApplyFilterGranularMqtt(const String &subPath, const String &payload, SpaFilterCycleSettings &out, const char **errReason)
+{
+  if (!spaFilterSettingsFromCache(out))
+  {
+    if (errReason)
+    {
+      *errReason = "filter_settings_not_ready";
+    }
+    return false;
+  }
+
+  if (subPath == "filter/filter1/start")
+  {
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    if (!spaParseFilterTimeHm(payload, hour, minute))
+    {
+      if (errReason)
+      {
+        *errReason = "invalid_time_payload";
+      }
+      return false;
+    }
+    out.filt1Hour = hour;
+    out.filt1Minute = minute;
+  }
+  else if (subPath == "filter/filter1/duration")
+  {
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    if (!spaParseFilterTimeHm(payload, hour, minute))
+    {
+      if (errReason)
+      {
+        *errReason = "invalid_time_payload";
+      }
+      return false;
+    }
+    out.filt1DurHour = hour;
+    out.filt1DurMinute = minute;
+  }
+  else if (subPath == "filter/filter2/start")
+  {
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    if (!spaParseFilterTimeHm(payload, hour, minute))
+    {
+      if (errReason)
+      {
+        *errReason = "invalid_time_payload";
+      }
+      return false;
+    }
+    out.filt2Hour = hour;
+    out.filt2Minute = minute;
+    out.filt2Enable = true;
+  }
+  else if (subPath == "filter/filter2/duration")
+  {
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    if (!spaParseFilterTimeHm(payload, hour, minute))
+    {
+      if (errReason)
+      {
+        *errReason = "invalid_time_payload";
+      }
+      return false;
+    }
+    out.filt2DurHour = hour;
+    out.filt2DurMinute = minute;
+    out.filt2Enable = true;
+  }
+  else if (subPath == "filter/filter2/enabled")
+  {
+    bool enabled = false;
+    if (!parseBoolPayload(payload, enabled))
+    {
+      if (errReason)
+      {
+        *errReason = "invalid_filter2_enabled_payload";
+      }
+      return false;
+    }
+    out.filt2Enable = enabled;
+    if (!enabled)
+    {
+      spaNormalizeFilter2Schedule(out);
+    }
+  }
+  else
+  {
+    if (errReason)
+    {
+      *errReason = "unsupported_command";
+    }
+    return false;
+  }
+
+  spaNormalizeFilter2Schedule(out);
+  return spaValidateFilterCycleSettings(out, errReason);
+}
+
 bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilterSettingsData &cached)
 {
   if (a.filt1Hour != cached.filt1Hour || a.filt1Minute != cached.filt1Minute ||
@@ -477,6 +762,16 @@ bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilte
   }
   return a.filt2Hour == cached.filt2Hour && a.filt2Minute == cached.filt2Minute &&
          a.filt2DurHour == cached.filt2DurationHour && a.filt2DurMinute == cached.filt2DurationMinute;
+}
+
+bool spaFilter1Running()
+{
+  return spaStatusData.filterMode == 1 || spaStatusData.filterMode == 3;
+}
+
+bool spaFilter2Running()
+{
+  return spaStatusData.filterMode == 2 || spaStatusData.filterMode == 3;
 }
 
 SpaCommandResult spaSetFilterCycles(const SpaFilterCycleSettings &settings, SpaCommandSource source)
