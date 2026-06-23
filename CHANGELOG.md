@@ -16,7 +16,7 @@ where version numbers are used.
 
 ### Version bump
 
-- Firmware **`VERSION`** is **`2.18.3`** ([`src/main.h`](src/main.h)).
+- Firmware **`VERSION`** is **`2.18.3`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.18.2] - 2026-06-23
 
