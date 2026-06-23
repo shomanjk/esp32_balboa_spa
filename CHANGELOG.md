@@ -8,6 +8,58 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.18.3] - 2026-06-23
+
+### Changed
+
+- **Fault log history table** ([`lib/spaWebServer/spaConfigExport.cpp`](lib/spaWebServer/spaConfigExport.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **`GET /api/config/fault-log/history`** includes partial **`entries`** while a scan is **`loading`**; **`/config`** poll re-renders the table every ~2s so rows appear as slots are read.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.3`** ([`src/main.h`](src/main.h)).
+
+## [2.18.2] - 2026-06-23
+
+### Fixed
+
+- **Fault log history RS485 reliability** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Pause all **`configurationRequest()`** / filter readback traffic during a history scan so queued fault-log reads are not starved; ignore fault-log responses for the wrong entry index; retry each entry up to 3 times (30s apart) before skipping to the next slot; seed **`targetCount`** from the known latest log size at scan start. History API adds **`pendingEntry`** for accurate progress.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.2`** ([`src/main.h`](src/main.h)).
+
+## [2.18.1] - 2026-06-23
+
+### Fixed
+
+- **Fault log history load stuck on “Starting history load…”** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Register **`/api/config/fault-log/history`** before **`/api/config/fault-log`** so ESPAsyncWebServer does not serve latest-event JSON for history polls; portal JS validates the history response shape and keeps polling.
+
+- **Fault log history scan** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Skip automatic fault-log refresh in **`configurationRequest()`** while a history scan is active; allow restarting a scan after per-entry timeout if the previous run stalled.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.1`** ([`src/main.h`](src/main.h)).
+
+## [2.18.0] - 2026-06-23
+
+### Added
+
+- **Fault log full history** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaWebServer/spaConfigExport.cpp`](lib/spaWebServer/spaConfigExport.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): On-demand RS485 scan of all spa fault-log slots (up to 24 entries) via **`POST /api/config/fault-log/history`** and poll **`GET /api/config/fault-log/history`**; expandable **View full event history** table on **`/config`**. Latest event stays stable during scan; **`0xFF`** refresh when complete.
+
+- **Fault log API** ([`lib/spaWebServer/spaConfigExport.cpp`](lib/spaWebServer/spaConfigExport.cpp)): **`GET /api/config/fault-log`** returns latest event JSON with **`eventText`**, **`severity`**, and panel-clock **`occurredText`**.
+
+### Changed
+
+- **`/config` spa controller history** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Renamed from **Other spa datasets**; **Latest event** card with decoded headline, severity badge, and intro distinguishing spa log vs live **`/status`** vs ESP **`GET /api/version` → `faultLog`**. Settings **`0x04`** moved under **Developer: undecoded settings (0x04)**.
+
+### Fixed
+
+- **Blank fault log message after reboot** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Recompute **`faultMessage`** at boot when RTC retains code but not the string; portal and export use **`spaFaultMessageForCode()`** at render time instead of stale persisted text.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.0`** ([`src/main.h`](src/main.h)).
+
 ## [2.17.1] - 2026-06-23
 
 ### Changed
@@ -862,7 +914,11 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.17.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.3...HEAD
+[2.18.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.2...v2.18.3
+[2.18.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.1...v2.18.2
+[2.18.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.0...v2.18.1
+[2.18.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.17.1...v2.18.0
 [2.17.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.17.0...v2.17.1
 [2.17.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.16.0...v2.17.0
 [2.8.6]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.8.5...v2.8.6

@@ -138,6 +138,84 @@ void spaConfigAppendPreferencesGetJson(JsonObject root)
   }
 }
 
+namespace
+{
+int faultLogHistorySortKey(const SpaFaultLogHistoryEntry &entry)
+{
+  return static_cast<int>(entry.daysAgo) * 10000 + (23 - static_cast<int>(entry.hour)) * 100 +
+         (59 - static_cast<int>(entry.minutes));
+}
+
+void appendFaultLogHistoryEntriesJson(JsonObject root)
+{
+  JsonArray entries = root.createNestedArray("entries");
+  SpaFaultLogHistoryEntry sorted[24];
+  uint8_t count = 0;
+  const SpaFaultLogHistoryEntry *source = spaFaultLogHistoryEntries();
+  for (unsigned i = 0; i < 24; i++)
+  {
+    if (source[i].valid)
+    {
+      sorted[count++] = source[i];
+    }
+  }
+  for (uint8_t i = 0; i < count; i++)
+  {
+    for (uint8_t j = static_cast<uint8_t>(i + 1); j < count; j++)
+    {
+      if (faultLogHistorySortKey(sorted[j]) < faultLogHistorySortKey(sorted[i]))
+      {
+        const SpaFaultLogHistoryEntry tmp = sorted[i];
+        sorted[i] = sorted[j];
+        sorted[j] = tmp;
+      }
+    }
+  }
+  for (uint8_t i = 0; i < count; i++)
+  {
+    const SpaFaultLogHistoryEntry &e = sorted[i];
+    JsonObject row = entries.createNestedObject();
+    row["entry"] = e.entry;
+    row["faultCode"] = e.code;
+    row["eventText"] = spaFaultMessageForCode(e.code, spaFaultLogHistoryTargetCount());
+    row["severity"] = spaFaultLogSeverityText(e.code);
+    row["occurredText"] = spaFormatFaultLogEntryTime(e.daysAgo, e.hour, e.minutes, e.code, spaFaultLogHistoryTargetCount());
+  }
+}
+} // namespace
+
+void spaConfigAppendFaultLogGetJson(JsonObject root)
+{
+  const bool ready = spaFaultLogData.lastUpdate != 0;
+  root["ready"] = ready;
+  root["lastUpdate"] = static_cast<long>(spaFaultLogData.lastUpdate);
+  if (!ready)
+  {
+    return;
+  }
+  root["faultCode"] = spaFaultLogData.faultCode;
+  root["eventText"] = spaFaultMessageForCode(spaFaultLogData.faultCode, spaFaultLogData.totEntry);
+  root["severity"] = spaFaultLogSeverityText(spaFaultLogData.faultCode);
+  root["entry"] = spaFaultLogData.currEntry;
+  root["totEntry"] = spaFaultLogData.totEntry;
+  root["occurredText"] = spaFormatFaultLogTime(spaFaultLogData);
+  root["crc"] = spaFaultLogData.crc;
+}
+
+void spaConfigAppendFaultLogHistoryGetJson(JsonObject root)
+{
+  root["loading"] = spaFaultLogHistoryIsActive();
+  root["complete"] = spaFaultLogHistoryIsComplete();
+  root["error"] = spaFaultLogHistoryHasError();
+  root["progress"] = spaFaultLogHistoryProgress();
+  root["pendingEntry"] = spaFaultLogHistoryPendingEntry();
+  root["total"] = spaFaultLogHistoryTargetCount();
+  if (spaFaultLogHistoryIsActive() || spaFaultLogHistoryIsComplete() || spaFaultLogHistoryHasError())
+  {
+    appendFaultLogHistoryEntriesJson(root);
+  }
+}
+
 void spaConfigAppendExportJson(JsonObject root)
 {
   root["schemaVersion"] = 1;
@@ -232,7 +310,7 @@ void spaConfigAppendExportJson(JsonObject root)
   {
     JsonObject fault = snapshot.createNestedObject("faultLog");
     fault["faultCode"] = spaFaultLogData.faultCode;
-    fault["faultMessage"] = spaFaultLogData.faultMessage;
+    fault["faultMessage"] = spaFaultMessageForCode(spaFaultLogData.faultCode, spaFaultLogData.totEntry);
     fault["totEntry"] = spaFaultLogData.totEntry;
     fault["currEntry"] = spaFaultLogData.currEntry;
     fault["daysAgo"] = spaFaultLogData.daysAgo;

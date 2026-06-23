@@ -19,6 +19,19 @@
 #include <faultCapture.h>
 #include <diagBridgeLog.h>
 
+struct SpaFaultLogHistoryScan
+{
+  bool active;
+  bool complete;
+  bool error;
+  uint8_t targetCount;
+  uint8_t receivedCount;
+  uint8_t pendingEntry;
+  uint8_t pendingRetries;
+  unsigned long lastSendMs;
+  SpaFaultLogHistoryEntry entries[24];
+};
+
 #define TwoBit(value, bit) (((value) >> (bit)) & 0x03)
 
 #define MAGIC_NUMBER 0x12345678
@@ -121,6 +134,10 @@ void spaMessageSetup()
     spaFaultLogData = {};
     spaFaultLogData.magicNumber = MAGIC_NUMBER;
   }
+  else if (spaFaultLogData.faultCode != 0 && spaFaultLogData.faultMessage.length() == 0)
+  {
+    spaFaultLogData.faultMessage = spaFaultMessageForCode(spaFaultLogData.faultCode, spaFaultLogData.totEntry);
+  }
 
   if (staleData(spaFilterSettingsData))
   {
@@ -151,6 +168,98 @@ void spaMessageSetup()
   spaStatusData.filterOn = new Analytics(&filterOnData, "FilterOn");
   tempHistorySetup(&tempHistoryData);
   temperatureHistory.start();
+}
+
+static SpaFaultLogHistoryScan faultLogHistoryScan;
+
+constexpr unsigned long kFaultLogHistoryEntryTimeoutMs = 30000;
+constexpr uint8_t kFaultLogHistoryMaxEntryRetries = 3;
+
+static void spaFaultLogHistoryQueueNextEntry(uint8_t entryIndex);
+
+static void spaFaultLogHistoryAdvanceOrComplete(uint8_t nextEntry)
+{
+  if (nextEntry < faultLogHistoryScan.targetCount)
+  {
+    faultLogHistoryScan.pendingRetries = 0;
+    spaFaultLogHistoryQueueNextEntry(nextEntry);
+    return;
+  }
+
+  faultLogHistoryScan.complete = true;
+  faultLogHistoryScan.active = false;
+  spaRequestFaultLogEntry(0xFF);
+}
+
+static void spaFaultLogHistoryClearEntries()
+{
+  for (unsigned i = 0; i < 24; i++)
+  {
+    faultLogHistoryScan.entries[i] = {};
+  }
+}
+
+static void spaFaultLogHistoryQueueNextEntry(uint8_t entryIndex)
+{
+  faultLogHistoryScan.pendingEntry = entryIndex;
+  faultLogHistoryScan.lastSendMs = millis();
+  spaRequestFaultLogEntry(entryIndex);
+}
+
+static void spaFaultLogHistoryHandleResponse(uint8_t totEntry, uint8_t currEntry, uint8_t code, uint8_t daysAgo, uint8_t hour,
+                                             uint8_t minutes)
+{
+  if (currEntry != faultLogHistoryScan.pendingEntry)
+  {
+    Log.verbose(F("[Mess]: Fault log history ignored entry %u (waiting for %u)" CR), currEntry,
+                faultLogHistoryScan.pendingEntry);
+    return;
+  }
+
+  if (faultLogHistoryScan.targetCount == 0)
+  {
+    faultLogHistoryScan.targetCount = totEntry > 24 ? 24 : totEntry;
+    if (faultLogHistoryScan.targetCount == 0)
+    {
+      faultLogHistoryScan.targetCount = 1;
+    }
+  }
+
+  if (currEntry < 24)
+  {
+    SpaFaultLogHistoryEntry &slot = faultLogHistoryScan.entries[currEntry];
+    slot.entry = currEntry;
+    slot.code = code;
+    slot.daysAgo = daysAgo;
+    slot.hour = hour;
+    slot.minutes = minutes;
+    slot.valid = true;
+  }
+
+  faultLogHistoryScan.receivedCount++;
+  faultLogHistoryScan.pendingRetries = 0;
+
+  spaFaultLogHistoryAdvanceOrComplete(static_cast<uint8_t>(currEntry + 1));
+}
+
+static void spaFaultLogHistoryApplyLatest(u_int8_t *message, int length, uint8_t totEntry, uint8_t currEntry, uint8_t code,
+                                          uint8_t daysAgo, uint8_t hour, uint8_t minutes)
+{
+  spaFaultLogData.crc = message[message[1]];
+  spaFaultLogData.lastUpdate = getTime();
+  for (int i = 0; i < length && i < BALBOA_MESSAGE_SIZE; i++)
+  {
+    spaFaultLogData.rawData[i] = message[i];
+  }
+  spaFaultLogData.rawDataLength = length;
+  spaFaultLogData.totEntry = totEntry;
+  spaFaultLogData.currEntry = currEntry;
+  spaFaultLogData.faultCode = code;
+  spaFaultLogData.daysAgo = daysAgo;
+  spaFaultLogData.hour = hour;
+  spaFaultLogData.minutes = minutes;
+  spaFaultLogData.faultMessage = spaFaultMessageForCode(code, totEntry);
+  publishSpaFaultLogData();
 }
 
 namespace
@@ -240,23 +349,29 @@ void spaMessageLoop()
   }
   else
   {
-    // (spaInformationData.lastUpdate < getTime() + 60 * 60 && spaInformationData.lastRequest < getTime() + 60 * 60)
-    if (staleData(spaConfigurationData) || staleData(spaSettings0x04Data) || staleData(spaFilterSettingsData) ||
-        staleData(spaInformationData) || staleData(spaPreferencesData))
+    if (!spaFaultLogHistoryIsActive() &&
+        (staleData(spaConfigurationData) || staleData(spaSettings0x04Data) || staleData(spaFilterSettingsData) ||
+         staleData(spaInformationData) || staleData(spaPreferencesData)))
     {
-      // Log.verbose(F("[Mess]: Requesting Inital Configuration" CR));
       configurationRequest();
-      // Log.verbose(F("[Mess]: Requested Inital Configuration" CR));
     }
-    //  Log.verbose(F("[Mess]: No messages in Read Queue" CR));
   }
   temperatureHistory.update();
   tempHistoryMaybePersist(&tempHistoryData);
-  spaFilterSettingsReadbackFollowupTick();
+  if (!spaFaultLogHistoryIsActive())
+  {
+    spaFilterSettingsReadbackFollowupTick();
+  }
+  spaFaultLogHistoryTimeoutTick();
 }
 
 void configurationRequest()
 {
+  if (spaFaultLogHistoryIsActive())
+  {
+    return;
+  }
+
   unsigned char byte_array[100] = {0};
   int offset = 0;
 
@@ -293,7 +408,7 @@ void configurationRequest()
     spaInformationData.lastRequest = getTime();
     request += "Information ";
   }
-  if (staleData(spaFaultLogData) && retryRequest(spaFaultLogData))
+  if (staleData(spaFaultLogData) && retryRequest(spaFaultLogData) && !spaFaultLogHistoryIsActive())
   {
     append_request(byte_array, &offset, fault_log_request, sizeof(fault_log_request));
     spaFaultLogData.lastRequest = getTime();
@@ -635,26 +750,23 @@ bool parseStatusMessage(u_int8_t *message, int length)
 
 void parseFaultResponse(u_int8_t *message, int length)
 {
-  spaFaultLogData.crc = message[message[1]];
-  spaFaultLogData.lastUpdate = getTime();
-  for (int i = 0; i < length && i < BALBOA_MESSAGE_SIZE; i++)
-  {
-    spaFaultLogData.rawData[i] = message[i];
-  }
-  spaFaultLogData.rawDataLength = length;
-
   u_int8_t *hexArray = message + 5;
+  const uint8_t totEntry = hexArray[0];
+  const uint8_t currEntry = hexArray[1];
+  const uint8_t code = hexArray[2];
+  const uint8_t daysAgo = hexArray[3];
+  const uint8_t hour = hexArray[4];
+  const uint8_t minutes = hexArray[5];
 
-  spaFaultLogData.totEntry = hexArray[0];
-  spaFaultLogData.currEntry = hexArray[1];
-  spaFaultLogData.faultCode = hexArray[2];
-  spaFaultLogData.daysAgo = hexArray[3];
-  spaFaultLogData.hour = hexArray[4];
-  spaFaultLogData.minutes = hexArray[5];
-  spaFaultLogData.faultMessage = spaFaultMessageForCode(spaFaultLogData.faultCode, spaFaultLogData.totEntry);
+  if (faultLogHistoryScan.active)
+  {
+    spaFaultLogHistoryHandleResponse(totEntry, currEntry, code, daysAgo, hour, minutes);
+    Log.verbose(F("[Mess]: Fault Log Response (history scan): %s" CR), msgToString(hexArray, length - 7).c_str());
+    return;
+  }
 
+  spaFaultLogHistoryApplyLatest(message, length, totEntry, currEntry, code, daysAgo, hour, minutes);
   Log.verbose(F("[Mess]: Fault Log Response: %s" CR), msgToString(hexArray, length - 7).c_str());
-  publishSpaFaultLogData();
 }
 
 void parseFilterResponse(u_int8_t *message, int length)
@@ -711,6 +823,20 @@ void spaRequestPreferences()
   unsigned char preferences_request[] = PREFERENCES_REQUEST;
   sendMessageToSpa(preferences_request, sizeof(preferences_request));
   spaPreferencesData.lastRequest = getTime();
+}
+
+void spaRequestFaultLogEntry(uint8_t entry)
+{
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(0x0a);
+  frame.push(0xbf);
+  frame.push(0x22);
+  frame.push(0x20);
+  frame.push(entry);
+  frame.push(0x00);
+  addCRC(frame);
+  sendMessageToSpa(frame);
+  spaFaultLogData.lastRequest = getTime();
 }
 
 void sendMessageToSpa(uint8_t *data, int length)
@@ -835,17 +961,154 @@ String spaFaultMessageForCode(uint8_t code, uint8_t totEntry)
 
 String spaFormatFaultLogTime(const SpaFaultLogData &data)
 {
-  if (data.lastUpdate == 0)
-  {
-    return String("");
-  }
-  if (data.faultCode == 0 && data.totEntry == 0)
+  return spaFormatFaultLogEntryTime(data.daysAgo, data.hour, data.minutes, data.faultCode, data.totEntry);
+}
+
+String spaFormatFaultLogEntryTime(uint8_t daysAgo, uint8_t hour, uint8_t minutes, uint8_t code, uint8_t totEntry)
+{
+  if (code == 0 && totEntry == 0)
   {
     return String("None");
   }
   char buf[48];
-  snprintf(buf, sizeof(buf), "%u days ago %02u:%02u", data.daysAgo, data.hour, data.minutes);
+  snprintf(buf, sizeof(buf), "%u days ago %02u:%02u", daysAgo, hour, minutes);
   return String(buf);
+}
+
+const char *spaFaultLogSeverityText(uint8_t code)
+{
+  switch (code)
+  {
+  case 19:
+  case 37:
+  case 18:
+  case 21:
+    return "info";
+  case 15:
+  case 16:
+  case 26:
+  case 28:
+    return "warning";
+  case 17:
+  case 20:
+  case 22:
+  case 27:
+  case 29:
+  case 30:
+  case 31:
+  case 32:
+  case 34:
+  case 35:
+  case 36:
+    return "alert";
+  default:
+    return code == 0 ? "info" : "warning";
+  }
+}
+
+bool spaFaultLogHistoryStart()
+{
+  if (faultLogHistoryScan.active)
+  {
+    if (millis() - faultLogHistoryScan.lastSendMs <= kFaultLogHistoryEntryTimeoutMs)
+    {
+      return false;
+    }
+    faultLogHistoryScan.error = true;
+    faultLogHistoryScan.active = false;
+    spaRequestFaultLogEntry(0xFF);
+  }
+  faultLogHistoryScan = {};
+  faultLogHistoryScan.active = true;
+  faultLogHistoryScan.targetCount = spaFaultLogData.totEntry > 24 ? 24 : spaFaultLogData.totEntry;
+  if (faultLogHistoryScan.targetCount == 0)
+  {
+    faultLogHistoryScan.targetCount = 24;
+  }
+  spaFaultLogHistoryClearEntries();
+  spaFaultLogHistoryQueueNextEntry(0);
+  return true;
+}
+
+bool spaFaultLogHistoryIsActive()
+{
+  return faultLogHistoryScan.active;
+}
+
+bool spaFaultLogHistoryIsComplete()
+{
+  return faultLogHistoryScan.complete;
+}
+
+bool spaFaultLogHistoryHasError()
+{
+  return faultLogHistoryScan.error;
+}
+
+uint8_t spaFaultLogHistoryProgress()
+{
+  return faultLogHistoryScan.receivedCount;
+}
+
+uint8_t spaFaultLogHistoryTargetCount()
+{
+  return faultLogHistoryScan.targetCount;
+}
+
+uint8_t spaFaultLogHistoryPendingEntry()
+{
+  return faultLogHistoryScan.pendingEntry;
+}
+
+const SpaFaultLogHistoryEntry *spaFaultLogHistoryEntries()
+{
+  return faultLogHistoryScan.entries;
+}
+
+uint8_t spaFaultLogHistoryEntryCount()
+{
+  uint8_t count = 0;
+  for (unsigned i = 0; i < 24; i++)
+  {
+    if (faultLogHistoryScan.entries[i].valid)
+    {
+      count++;
+    }
+  }
+  return count;
+}
+
+void spaFaultLogHistoryTimeoutTick()
+{
+  if (!faultLogHistoryScan.active)
+  {
+    return;
+  }
+  if (millis() - faultLogHistoryScan.lastSendMs <= kFaultLogHistoryEntryTimeoutMs)
+  {
+    return;
+  }
+
+  if (faultLogHistoryScan.pendingRetries + 1 >= kFaultLogHistoryMaxEntryRetries)
+  {
+    Log.warning(F("[Mess]: Fault log history entry %u timed out after %u tries — skipping" CR),
+                faultLogHistoryScan.pendingEntry, kFaultLogHistoryMaxEntryRetries);
+    if (faultLogHistoryScan.receivedCount == 0)
+    {
+      faultLogHistoryScan.error = true;
+      faultLogHistoryScan.active = false;
+      spaRequestFaultLogEntry(0xFF);
+      return;
+    }
+    spaFaultLogHistoryAdvanceOrComplete(static_cast<uint8_t>(faultLogHistoryScan.pendingEntry + 1));
+    return;
+  }
+
+  faultLogHistoryScan.pendingRetries++;
+  faultLogHistoryScan.lastSendMs = millis();
+  Log.verbose(F("[Mess]: Fault log history retry entry %u (attempt %u)" CR), faultLogHistoryScan.pendingEntry,
+              faultLogHistoryScan.pendingRetries + 1);
+  spaRequestFaultLogEntry(faultLogHistoryScan.pendingEntry);
 }
 
 void updateTemperatureHistory()

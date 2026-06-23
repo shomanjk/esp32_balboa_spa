@@ -68,6 +68,9 @@ void handleConfigFilterGet(AsyncWebServerRequest *request);
 void handleConfigFilterPost(AsyncWebServerRequest *request);
 void handleConfigPreferencesGet(AsyncWebServerRequest *request);
 void handleConfigPreferencesPost(AsyncWebServerRequest *request);
+void handleConfigFaultLogGet(AsyncWebServerRequest *request);
+void handleConfigFaultLogHistoryGet(AsyncWebServerRequest *request);
+void handleConfigFaultLogHistoryPost(AsyncWebServerRequest *request);
 void handleConfigExport(AsyncWebServerRequest *request);
 void handleConfigImportPost(AsyncWebServerRequest *request);
 String parseBody(String body);
@@ -414,6 +417,9 @@ void spaWebServerLoop()
     server.on("/api/config/filter", HTTP_POST, handleConfigFilterPost, NULL, handleBody);
     server.on("/api/config/preferences", HTTP_GET, handleConfigPreferencesGet);
     server.on("/api/config/preferences", HTTP_POST, handleConfigPreferencesPost, NULL, handleBody);
+    server.on("/api/config/fault-log/history", HTTP_GET, handleConfigFaultLogHistoryGet);
+    server.on("/api/config/fault-log/history", HTTP_POST, handleConfigFaultLogHistoryPost, NULL, handleBody);
+    server.on("/api/config/fault-log", HTTP_GET, handleConfigFaultLogGet);
     server.on("/api/config/export", HTTP_GET, handleConfigExport);
     server.on("/api/config/import", HTTP_POST, handleConfigImportPost, NULL, handleBody);
     server.on("/logs", HTTP_GET, handleLogsPage);
@@ -1843,6 +1849,29 @@ static String configFilterDurationFieldsHtml(const char *hourId, const char *min
          "<span class=\"config-dur-unit\">min</span></span>";
 }
 
+static const char *configFaultSeverityClass(const char *severity)
+{
+  if (severity != nullptr && String(severity) == "alert")
+  {
+    return "config-fault-sev--alert";
+  }
+  if (severity != nullptr && String(severity) == "warning")
+  {
+    return "config-fault-sev--warning";
+  }
+  return "config-fault-sev--info";
+}
+
+static void appendConfigFaultSeverityBadge(String &html, uint8_t faultCode)
+{
+  const char *severity = spaFaultLogSeverityText(faultCode);
+  html += "<span class=\"config-fault-sev ";
+  html += configFaultSeverityClass(severity);
+  html += "\">";
+  html += severity;
+  html += "</span>";
+}
+
 void handleConfig(AsyncWebServerRequest *request)
 {
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
@@ -1871,7 +1900,8 @@ void handleConfig(AsyncWebServerRequest *request)
       "table.config-equip tr.config-equip-absent td:first-child{font-weight:500;}"
       ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch;margin:0 0 var(--space-3) 0;}"
       "@media (max-width:560px){.config-filter-strip{grid-template-columns:1fr;}}"
-      ".config-filter-card{display:flex;flex-direction:column;min-height:100%;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
+      ".config-filter-card{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
+      ".config-filter-strip .config-filter-card{min-height:100%;}"
       ".config-filter-card h2{margin:0 0 8px 0;font-size:0.88rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}"
       ".config-filter-card p{margin:4px 0;font-size:14px;}"
       ".config-filter-card label{display:block;font-size:13px;color:var(--muted);margin:8px 0 4px 0;}"
@@ -1883,6 +1913,17 @@ void handleConfig(AsyncWebServerRequest *request)
       ".config-dur-unit{font-size:14px;color:var(--muted);}"
       ".config-backup-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0;}"
       "#cfgImportPreview{margin:10px 0;font-size:14px;white-space:pre-wrap;}"
+      ".config-fault-latest{margin:0 0 12px 0;padding:12px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;}"
+      ".config-fault-latest h2{margin:0 0 8px 0;font-size:1rem;}"
+      ".config-fault-headline{font-size:18px;font-weight:700;margin:0 0 8px 0;line-height:1.35;}"
+      ".config-fault-meta{margin:4px 0;font-size:14px;color:var(--muted);}"
+      ".config-fault-sev{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;}"
+      ".config-fault-sev--info{color:#0f5132;background:#d1e7dd;}"
+      ".config-fault-sev--warning{color:#664d03;background:#fff3cd;}"
+      ".config-fault-sev--alert{color:#842029;background:#f8d7da;}"
+      "table.config-fault-history{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px;}"
+      "table.config-fault-history th,table.config-fault-history td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}"
+      "table.config-fault-history th{font-size:13px;color:var(--muted);}"
       "pre.config-hex{margin:8px 0 0 0;padding:10px 12px;font-size:12px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;"
       "overflow-x:auto;word-break:break-all;white-space:pre-wrap;background:#f8fafc;border:1px solid var(--border);border-radius:8px;}"
       ".config-layout details{margin-top:10px;}"
@@ -1904,7 +1945,7 @@ void handleConfig(AsyncWebServerRequest *request)
           "<li><a href='#cfg-identity'>Controller identity</a></li>"
           "<li><a href='#cfg-filter'>Filter configuration</a></li>"
           "<li><a href='#cfg-preferences'>Panel preferences</a></li>"
-          "<li><a href='#cfg-other'>Other datasets</a></li>"
+          "<li><a href='#cfg-history'>Spa controller history</a></li>"
           "<li><a href='#cfg-littlefs'>LittleFS</a></li>"
           "</ul></nav>";
 
@@ -2101,40 +2142,68 @@ void handleConfig(AsyncWebServerRequest *request)
     html += "</section>";
   }
 
-  html += "<section class='panel config-span-full' id='cfg-other'><h1>Other spa datasets</h1><ul>";
-  if (spaSettings0x04Data.lastUpdate == 0)
-  {
-    html += "<li><b>Settings 0x04:</b> <em>not received yet</em></li>";
-  }
-  else
-  {
-    html += "<li><p style=\"margin:0 0 6px 0\"><b>Settings 0x04</b> — <span style=\"color:var(--muted)\">lastUpdate:</span> " +
-            statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) +
-            ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaSettings0x04Data.crc) + "</p>";
-    html += "<details><summary><b>Raw settings 0x04 frame (hex)</b></summary><pre class=\"config-hex\">" +
-            spaHexWordsUpper(spaSettings0x04Data.rawData, spaSettings0x04Data.rawDataLength, 48) + "</pre></details></li>";
-  }
+  html += "<section class='panel config-span-full' id='cfg-history'><h1>Spa controller history</h1>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 12px 0\">Historical events stored on the spa pack (Balboa fault log). "
+          "This is not live equipment state on <a href='/status'>Spa Status</a>, and not the ESP gateway diagnostic ring on "
+          "<a href='/state'>ESP State</a> / <code>GET /api/version</code> &rarr; <code>faultLog</code>.</p>";
   if (spaFaultLogData.lastUpdate == 0)
   {
-    html += "<li><b>Fault log:</b> <em>not received yet</em></li>";
+    html += "<p style=\"margin:0\"><em>Latest event not received yet.</em> The gateway requests this after startup.</p>";
   }
   else
   {
-    html += "<li><p style=\"margin:0 0 6px 0\"><b>Fault log</b> — "
-            "<span style=\"color:var(--muted)\">lastUpdate:</span> " +
-            statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate) +
-            ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaFaultLogData.crc) + "</p>";
-    html += "<dl class=\"kv\" style=\"margin:0 0 8px 0\">";
-    appendStatusKvRow(html, "Fault code", String(spaFaultLogData.faultCode));
-    appendStatusKvRow(html, "Fault message", spaFaultLogData.faultMessage);
-    appendStatusKvRow(html, "Total entries", String(spaFaultLogData.totEntry));
-    appendStatusKvRow(html, "Current entry", String(spaFaultLogData.currEntry));
-    appendStatusKvRow(html, "Occurred", spaFormatFaultLogTime(spaFaultLogData));
+    const String eventText = spaFaultMessageForCode(spaFaultLogData.faultCode, spaFaultLogData.totEntry);
+    html += "<div class=\"config-fault-latest\" id=\"cfgFaultLatestCard\">";
+    html += "<h2>Latest event</h2>";
+    html += "<p class=\"config-fault-headline\"><span id=\"cfgFaultLatestEventText\">";
+    html += eventText;
+    html += "</span>";
+    appendConfigFaultSeverityBadge(html, spaFaultLogData.faultCode);
+    html += "</p>";
+    html += "<p class=\"config-fault-meta\">Logged on spa panel clock: <span id=\"cfgFaultLatestOccurred\">";
+    html += spaFormatFaultLogTime(spaFaultLogData);
+    html += "</span></p>";
+    html += "<p class=\"config-fault-meta\">Entry <span id=\"cfgFaultLatestEntry\">";
+    html += String(spaFaultLogData.currEntry);
+    html += "</span> of <span id=\"cfgFaultLatestTotEntry\">";
+    html += String(spaFaultLogData.totEntry);
+    html += "</span> log slots &middot; Code <span id=\"cfgFaultLatestCode\">";
+    html += String(spaFaultLogData.faultCode);
+    html += "</span></p>";
+    html += "<p class=\"config-fault-meta\">Last fetched by gateway: <span id=\"cfgFaultLatestFetched\">";
+    html += statusLastUpdateDisplayHtml(spaFaultLogData.lastUpdate);
+    html += "</span></p>";
+    html += "<details><summary><b>Technical details</b></summary>";
+    html += "<dl class=\"config-kv\">";
+    html += "<div class=\"kv-row\"><dt>CRC byte</dt><dd>" + String(spaFaultLogData.crc) + "</dd></div>";
     html += "</dl>";
-    html += "<details><summary><b>Raw fault-log frame (hex)</b></summary><pre class=\"config-hex\">" +
-            spaHexWordsUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength, 48) + "</pre></details></li>";
+    html += "<pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaFaultLogData.rawData, spaFaultLogData.rawDataLength, 48) + "</pre></details>";
+    html += "</div>";
+    html += "<details id=\"cfgFaultHistoryDetails\"><summary><b>View full event history</b></summary>";
+    html += "<p class=\"chart-caption\" style=\"margin:8px 0\">Loads every stored log entry from the spa controller over RS485 "
+            "(may take up to a minute).</p>";
+    html += "<button class=\"equip-btn\" type=\"button\" id=\"cfgFaultHistoryLoadBtn\">Load history from spa</button>";
+    html += "<p id=\"cfgFaultHistoryStatus\" class=\"chart-caption\" style=\"margin:8px 0 0 0\"></p>";
+    html += "<table class=\"config-fault-history\" id=\"cfgFaultHistoryTable\" style=\"display:none\">";
+    html += "<thead><tr><th>When (panel clock)</th><th>Event</th><th>Code</th><th>Severity</th></tr></thead>";
+    html += "<tbody id=\"cfgFaultHistoryBody\"></tbody></table></details>";
   }
-  html += "</ul></section>";
+  html += "<details style=\"margin-top:12px\"><summary><b>Developer: undecoded settings (0x04)</b></summary>";
+  html += "<p class=\"chart-caption\" style=\"margin:8px 0\">Raw Balboa settings sub-block; not decoded for display yet.</p>";
+  if (spaSettings0x04Data.lastUpdate == 0)
+  {
+    html += "<p style=\"margin:0\"><em>Not received yet.</em></p>";
+  }
+  else
+  {
+    html += "<p style=\"margin:0 0 6px 0\"><span style=\"color:var(--muted)\">lastUpdate:</span> " +
+            statusLastUpdateDisplayHtml(spaSettings0x04Data.lastUpdate) +
+            ", <span style=\"color:var(--muted)\">CRC byte:</span> " + String(spaSettings0x04Data.crc) + "</p>";
+    html += "<pre class=\"config-hex\">" +
+            spaHexWordsUpper(spaSettings0x04Data.rawData, spaSettings0x04Data.rawDataLength, 48) + "</pre>";
+  }
+  html += "</details></section>";
 
   html += "<section class='panel config-span-full' id='cfg-littlefs'><h1>LittleFS configuration</h1>";
   html += "<p class='chart-caption'>Load on demand to avoid large payloads on weak links.</p>";
@@ -2221,6 +2290,40 @@ void handleConfig(AsyncWebServerRequest *request)
           "fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(cfgSyncPrefsUi).catch(function(){});"
           "setInterval(function(){fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
           "if(j&&j.ready)cfgSyncPrefsUi(j);}).catch(function(){});},5000);"
+          "function cfgFaultSevClass(sev){if(sev==='alert')return 'config-fault-sev config-fault-sev--alert';"
+          "if(sev==='warning')return 'config-fault-sev config-fault-sev--warning';return 'config-fault-sev config-fault-sev--info';}"
+          "function cfgRenderFaultHistory(j){var tbody=document.getElementById('cfgFaultHistoryBody');"
+          "var table=document.getElementById('cfgFaultHistoryTable');if(!tbody||!table||!j||!j.entries)return;"
+          "tbody.innerHTML='';j.entries.forEach(function(row){var tr=document.createElement('tr');"
+          "tr.innerHTML='<td>'+(row.occurredText||'')+'</td><td>'+(row.eventText||'')+'</td><td>'+(row.faultCode||'')+'</td>'"
+          "+'<td><span class=\"'+cfgFaultSevClass(row.severity)+'\">'+(row.severity||'')+'</span></td>';tbody.appendChild(tr);});"
+          "table.style.display=j.entries.length?'table':'none';}"
+          "function cfgPollFaultHistory(){fetch('/api/config/fault-log/history',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
+          "var st=document.getElementById('cfgFaultHistoryStatus');var btn=document.getElementById('cfgFaultHistoryLoadBtn');"
+          "if(typeof j.loading!=='boolean'){if(st)st.textContent='Unexpected history API response — reload the page and try again.';"
+          "if(btn)btn.disabled=false;return;}"
+          "if(st){if(j.loading){var total=j.total||'?';var n=(typeof j.pendingEntry==='number'?j.pendingEntry:j.progress||0)+1;"
+          "if(j.total&&n>j.total)n=j.total;st.textContent='Loading entry '+n+' of '+total+'…';"
+          "if(j.entries&&j.entries.length)cfgRenderFaultHistory(j);}"
+          "else if(j.error){if(j.entries&&j.entries.length){cfgRenderFaultHistory(j);"
+          "st.textContent='History load incomplete — showing '+j.entries.length+' events collected so far.';}"
+          "else{st.textContent='History load failed or timed out — try again.';}"
+          "if(btn)btn.disabled=false;}"
+          "else if(j.complete){st.textContent='Loaded '+((j.entries&&j.entries.length)||0)+' events from the spa controller.';"
+          "cfgRenderFaultHistory(j);if(btn){btn.disabled=false;btn.textContent='Reload history from spa';}}}"
+          "if(j.loading){setTimeout(cfgPollFaultHistory,2000);}}).catch(function(){"
+          "var st=document.getElementById('cfgFaultHistoryStatus');if(st)st.textContent='History request failed.';"
+          "var btn=document.getElementById('cfgFaultHistoryLoadBtn');if(btn)btn.disabled=false;});}"
+          "function cfgLoadFaultHistory(){var btn=document.getElementById('cfgFaultHistoryLoadBtn');"
+          "var st=document.getElementById('cfgFaultHistoryStatus');var tbody=document.getElementById('cfgFaultHistoryBody');"
+          "var table=document.getElementById('cfgFaultHistoryTable');if(tbody)tbody.innerHTML='';if(table)table.style.display='none';"
+          "if(btn)btn.disabled=true;"
+          "if(st)st.textContent='Starting history load…';"
+          "fetch('/api/config/fault-log/history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start'})})"
+          ".then(function(r){return r.json();}).then(function(j){if(!j.accepted){if(st)st.textContent='Could not start: '+(j.reason||'unknown');"
+          "if(btn)btn.disabled=false;return;}cfgPollFaultHistory();}).catch(function(){if(st)st.textContent='Failed to start history load.';"
+          "if(btn)btn.disabled=false;});}"
+          "var fBtn=document.getElementById('cfgFaultHistoryLoadBtn');if(fBtn){fBtn.addEventListener('click',cfgLoadFaultHistory);}"
           "})();</script>";
 
   html += "</main></div></body></html>";
@@ -3588,6 +3691,52 @@ void handleConfigPreferencesPost(AsyncWebServerRequest *request)
   String reply;
   serializeJson(out, reply);
   request->send(result.accepted ? 200 : 409, "application/json", reply);
+}
+
+void handleConfigFaultLogGet(AsyncWebServerRequest *request)
+{
+  DynamicJsonDocument doc(512);
+  spaConfigAppendFaultLogGetJson(doc.to<JsonObject>());
+  String body;
+  serializeJson(doc, body);
+  request->send(200, "application/json", body);
+}
+
+void handleConfigFaultLogHistoryGet(AsyncWebServerRequest *request)
+{
+  DynamicJsonDocument doc(4096);
+  spaConfigAppendFaultLogHistoryGetJson(doc.to<JsonObject>());
+  String body;
+  serializeJson(doc, body);
+  request->send(200, "application/json", body);
+}
+
+void handleConfigFaultLogHistoryPost(AsyncWebServerRequest *request)
+{
+  DynamicJsonDocument out(128);
+  if (spaFaultLogHistoryIsActive())
+  {
+    out["accepted"] = false;
+    out["reason"] = "history_scan_active";
+  }
+  else if (spaFaultLogData.lastUpdate == 0)
+  {
+    out["accepted"] = false;
+    out["reason"] = "fault_log_not_ready";
+  }
+  else if (!spaFaultLogHistoryStart())
+  {
+    out["accepted"] = false;
+    out["reason"] = "history_scan_failed";
+  }
+  else
+  {
+    out["accepted"] = true;
+    out["reason"] = "started";
+  }
+  String reply;
+  serializeJson(out, reply);
+  request->send(out["accepted"].as<bool>() ? 200 : 409, "application/json", reply);
 }
 
 void handleConfigExport(AsyncWebServerRequest *request)

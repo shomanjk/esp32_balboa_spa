@@ -42,6 +42,34 @@ bool spaReminderIsActive(uint8_t reminderType, uint8_t spaState, uint8_t initMod
 /** True for reminder byte 6 value 0x1E (fault-class reminder). */
 bool spaReminderIsFault(uint8_t reminderType);
 String spaFaultMessageForCode(uint8_t code, uint8_t totEntry);
+/** Severity label for portal styling: `info`, `warning`, or `alert`. */
+const char *spaFaultLogSeverityText(uint8_t code);
 String spaFormatFaultLogTime(const SpaFaultLogData &data);
+String spaFormatFaultLogEntryTime(uint8_t daysAgo, uint8_t hour, uint8_t minutes, uint8_t code, uint8_t totEntry);
+
+/** Queue a fault-log read for entry `0–23` or `0xFF` (latest). */
+void spaRequestFaultLogEntry(uint8_t entry);
+
+struct SpaFaultLogHistoryEntry
+{
+  uint8_t entry;
+  uint8_t code;
+  uint8_t daysAgo;
+  uint8_t hour;
+  uint8_t minutes;
+  bool valid;
+};
+
+/** Start sequential RS485 fetch of all log slots (returns false if already running). */
+bool spaFaultLogHistoryStart();
+bool spaFaultLogHistoryIsActive();
+bool spaFaultLogHistoryIsComplete();
+bool spaFaultLogHistoryHasError();
+uint8_t spaFaultLogHistoryProgress();
+uint8_t spaFaultLogHistoryTargetCount();
+uint8_t spaFaultLogHistoryPendingEntry();
+const SpaFaultLogHistoryEntry *spaFaultLogHistoryEntries();
+uint8_t spaFaultLogHistoryEntryCount();
+void spaFaultLogHistoryTimeoutTick();
 
 #endif
