@@ -116,25 +116,11 @@ Planned or deferred enhancements (not commitments; order and timing vary).
 
 ---
 
-## ePaper remote display (optional)
-
-![ePaper display example](docs/ePaper-Sept2024.jpeg)
-
-Display builds use the [LilyGo T5 ePaper](https://www.lilygo.cc/en-ca/products/t5-4-7-inch-e-paper-v2-3?srsltid=AfmBOopva5B_jxFAsa86Fn75lR66ZpcsqNLJEqPG4Axu8zeuCEEeqI0D). **Note:** upstream ePaper development has stalled because a reference device [stopped working](https://github.com/Xinyuan-LilyGO/LilyGo-EPD47/issues/137); treat this path as best-effort.
-
----
-
 ## Web interface
-
-Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/balboa-spa) (this repo pins a fork as a submodule — see [Build with PlatformIO](#build-with-platformio)).
-
-![Web UI example](docs/balboa-spa-web.png)
-
-**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, panel-clock, and **12h/24h format** controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** / **`TimeFormat`** to the spa over RS485). **`/config`** supports **filter schedule editing** and **JSON backup/restore**. The **LittleFS** `balboa-spa` bundle uses the same SCI **`Filters`** paths for filter read/write; other control surfaces may still differ from upstream — treat as **read-first** unless you verify them for your build.
 
 **Layout:** Firmware-served pages `/status`, `/config`, and `/state` use a responsive layout (viewport scaling, wrapping nav, fluid charts/images) for phone-sized screens.
 
-### Screenshots
+### Screenshots — firmware portal
 
 #### Spa status (`/status`)
 
@@ -165,6 +151,22 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 | `/api/config/filter` | — | Filter 1/2 schedule (`ready`, `lastUpdate`, start/duration fields). **POST** JSON body applies via **`spaSetFilterCycles`**. |
 | `/api/config/export` | — | Download spa config JSON (`writable` + `snapshot` + `readiness`). |
 | `/api/config/import` | — | **POST** JSON to preview (`dryRun: true`) or apply writable settings; optional **`force`** for identity mismatch. |
+
+### LittleFS SPA bundle (optional)
+
+Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/balboa-spa) (this repo pins a fork as a submodule — see [Build with PlatformIO](#build-with-platformio)).
+
+![Web UI example](docs/balboa-spa-web.png)
+
+**Status:** Firmware-served **`/status`** includes **wired** equipment, temperature, panel-clock, and **12h/24h format** controls (SCI **`Button`** / **`SetTemp`** / **`SystemTime`** / **`TimeFormat`** to the spa over RS485). **`/config`** supports **filter schedule editing** and **JSON backup/restore**. The **LittleFS** `balboa-spa` bundle uses the same SCI **`Filters`** paths for filter read/write; other control surfaces may still differ from upstream — treat as **read-first** unless you verify them for your build.
+
+---
+
+## ePaper remote display (optional)
+
+![ePaper display example](docs/ePaper-Sept2024.jpeg)
+
+Display builds use the [LilyGo T5 ePaper](https://www.lilygo.cc/en-ca/products/t5-4-7-inch-e-paper-v2-3?srsltid=AfmBOopva5B_jxFAsa86Fn75lR66ZpcsqNLJEqPG4Axu8zeuCEEeqI0D). **Note:** upstream ePaper development has stalled because a reference device [stopped working](https://github.com/Xinyuan-LilyGO/LilyGo-EPD47/issues/137); treat this path as best-effort.
 
 ---
 
