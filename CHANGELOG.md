@@ -8,9 +8,19 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.14.1] - 2026-06-23
+
+### Fixed
+
+- **spaMessage parse buffers** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Enlarge WiFi module **`macAddress`** to 18 bytes (fits `aa:bb:cc:dd:ee:ff` + null); use **`snprintf`** for MAC, software ID, model, and dip-switch fields parsed from RS485 information / WiFi-config responses.
+
 ### Changed
 
 - **Documentation sync** ([`README.md`](README.md), [`AGENTS.md`](AGENTS.md), [`esp32_robustness_hardening_revised.plan.md`](esp32_robustness_hardening_revised.plan.md)): Align command-write scope with shipped behavior — MQTT **`cmd/#`** dispatch and web SCI paths are implemented; **`TimeFormat`** is web + config export/import (not deferred); note remaining gap for MQTT **`cmd/timeFormat`**. Robustness plan marks command-path phase complete and updates baseline/gap lists.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.14.1`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.14.0] - 2026-06-22
 
