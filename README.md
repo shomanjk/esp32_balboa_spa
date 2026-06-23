@@ -148,8 +148,8 @@ Credit for the SPA web app: [jozefnad/balboa-spa](https://github.com/jozefnad/ba
 
 ![ESP state page](docs/esp-state.png)
 
-- Operator-first layout: Wi-Fi and system/RS485 health are surfaced at the top.
-- `Show advanced diagnostics` reveals low-level counters and time-debug internals on demand.
+- Operator-first layout: **System Health** hero (uptime, clock, RS485 badge, restart reason) and Wi-Fi (status badge, SSID/hostname, RSSI summary + network/signal grid) at the top.
+- `Show advanced diagnostics` reveals memory/build/RS485-today sub-cards, gateway reboot, RS485 deep counters (today vs yesterday table), and time-debug internals on demand.
 - Advanced mode includes `API Shortcuts` links for `/api/wifi`, `/api/version`, `/api/rs485`, `/api/rs485/raw`, and `/api/rs485/history`.
 
 ### JSON API (`GET`)

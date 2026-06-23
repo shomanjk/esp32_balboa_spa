@@ -225,65 +225,62 @@ static void appendWifiStateSection(String &html)
 {
   wl_status_t st = WiFi.status();
   bool ok = (st == WL_CONNECTED);
+  const char *statusName = wifiStatusName(st);
+  String badgeBg = ok ? String("#04AA6D") : (st == WL_IDLE_STATUS ? String("#4b5563") : String("#c62828"));
+  if (!ok && (st == WL_CONNECT_FAILED || st == WL_CONNECTION_LOST))
+  {
+    badgeBg = "#ef6c00";
+  }
 
-  html += "</ul></section><section class='panel'><h1>WiFi</h1><ul>";
-  html += "<li><b>Status: </b><span id=\"wf-st\">";
-  html += wifiStatusName(st);
-  html += " (";
-  html += String(static_cast<int>(st));
-  html += ")</span></li>";
-
-  html += "<li><b>SSID: </b><span id=\"wf-ssid\">";
+  html += "<section class='panel'><h1>WiFi</h1>";
+  html += "<div class='wifi-hero'><div class='wifi-hero__status'><span id=\"wf-status-badge\" class='diag-badge' style='font-weight:700;color:#fff;background:";
+  html += badgeBg;
+  html += "'>";
+  html += statusName;
+  html += "</span></div><div class='wifi-hero__net'><div class='wifi-hero__ssid' id=\"wf-ssid\">";
   html += ok ? WiFi.SSID() : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>Hostname: </b><span id=\"wf-host\">";
+  html += "</div><div class='wifi-hero__host' id=\"wf-host\">";
   html += WiFi.getHostname() ? String(WiFi.getHostname()) : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>IP: </b><span id=\"wf-ip\">";
-  html += ok ? WiFi.localIP().toString() : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>Gateway: </b><span id=\"wf-gw\">";
-  html += ok ? WiFi.gatewayIP().toString() : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>Subnet: </b><span id=\"wf-sn\">";
-  html += ok ? WiFi.subnetMask().toString() : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>DNS: </b><span id=\"wf-dns\">";
-  html += ok ? WiFi.dnsIP(0).toString() : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>Channel: </b><span id=\"wf-ch\">";
-  html += ok ? String(WiFi.channel()) : String("—");
-  html += "</span></li>";
-
-  html += "<li><b>MAC: </b><span id=\"wf-mac\">";
-  html += WiFi.macAddress();
-  html += "</span></li>";
-
-  html += "<li><b>Signal (RSSI): </b><span id=\"wf-rssi\" style=\"font-weight:600\">";
+  html += "</div></div><div class='wifi-hero__signal'><div class='wifi-hero__rssi'><span id=\"wf-rssi\">";
   html += ok ? String(WiFi.RSSI()) + " dBm" : String("—");
-  html += "</span> <span id=\"wf-quality\" style=\"font-weight:600\"></span></li>";
-  html += "<li><b>5 min Avg RSSI: </b><span id=\"wf-avg\">—</span></li>";
-  html += "</ul>";
-
-  html += "<p class='chart-title'><b>RSSI over time</b> (5s samples, ~5 min window)</p>";
-  html += "<div class='chart-wrap'><canvas id=\"wifiRssiChart\" height=\"160\"></canvas></div>";
+  html += "</span></div><div id=\"wf-quality\" style=\"font-size:12px\"></div></div></div>";
+  html += "<p class='wifi-meta'>Ch <span id=\"wf-ch\">";
+  html += ok ? String(WiFi.channel()) : String("—");
+  html += "</span><span class='wifi-meta__sep'>&middot;</span>MAC <span id=\"wf-mac\">";
+  html += WiFi.macAddress();
+  html += "</span><span class='wifi-meta__sep'>&middot;</span>Status code <span id=\"wf-st\">";
+  html += String(static_cast<int>(st));
+  html += "</span></p>";
+  html += "<div class='wifi-body'><div class='wifi-network'><p class='wifi-block-title'>Network</p><dl class='wifi-kv'>";
+  html += "<dt>IP</dt><dd id=\"wf-ip\">";
+  html += ok ? WiFi.localIP().toString() : String("—");
+  html += "</dd><dt>Gateway</dt><dd id=\"wf-gw\">";
+  html += ok ? WiFi.gatewayIP().toString() : String("—");
+  html += "</dd><dt>Subnet</dt><dd id=\"wf-sn\">";
+  html += ok ? WiFi.subnetMask().toString() : String("—");
+  html += "</dd><dt>DNS</dt><dd id=\"wf-dns\">";
+  html += ok ? WiFi.dnsIP(0).toString() : String("—");
+  html += "</dd></dl></div>";
+  html += "<div class='wifi-signal-card'><p class='wifi-block-title'>Signal</p>";
+  html += "<div class='wifi-signal-row'><span class='wifi-signal-row__label'>Now</span><span class='wifi-signal-row__value' id=\"wf-signal-now\">";
+  html += ok ? String(WiFi.RSSI()) + " dBm" : String("—");
+  html += "</span></div>";
+  html += "<div class='wifi-signal-row'><span class='wifi-signal-row__label'>5 min avg</span><span class='wifi-signal-row__value' id=\"wf-avg\">—</span></div>";
+  html += "<p class='wifi-signal-caption'>RSSI over time (5s samples, ~5 min)</p>";
+  html += "<div class='chart-wrap'><canvas id=\"wifiRssiChart\" height=\"120\"></canvas></div></div></div>";
   html += "<script>";
-  html += "(function(){var pollMs=5000,maxPts=60,warnRssi=-75,badRssi=-80;var c=document.getElementById('wifiRssiChart');";
+  html += "(function(){var pollMs=5000,maxPts=60,warnRssi=-75,badRssi=-80,chartH=120;var c=document.getElementById('wifiRssiChart');";
   html += "if(!c)return;var x=c.getContext('2d'),d=[];";
   html += "function set(t,v){var e=document.getElementById(t);if(e)e.textContent=v;}";
   html += "function colorOf(v){if(v<=badRssi)return '#c62828';if(v<=warnRssi)return '#ef6c00';return '#04AA6D';}";
   html += "function qualityOf(v){if(v<=badRssi)return 'Weak';if(v<=warnRssi)return 'Fair';if(v<=-67)return 'Good';return 'Excellent';}";
+  html += "function badgeBg(connected,status){if(connected)return '#04AA6D';if(status===0)return '#4b5563';if(status===4||status===5)return '#ef6c00';return '#c62828';}";
+  html += "function setBadge(connected,statusName,status){var b=document.getElementById('wf-status-badge');if(!b)return;b.textContent=statusName;b.style.background=badgeBg(connected,status);}";
   html += "function yOf(v,lo,hi,h){return h-8-(v-lo)/(hi-lo)*(h-16);}";
-  html += "function resizeCanvas(){var p=c.parentElement;var cssW=p?Math.max(280,p.clientWidth-2):320;var cssH=160;var dpr=window.devicePixelRatio||1;c.width=Math.round(cssW*dpr);c.height=Math.round(cssH*dpr);c.style.width=cssW+'px';c.style.height=cssH+'px';x.setTransform(1,0,0,1,0,0);x.scale(dpr,dpr);draw();}";
-  html += "function draw(){var w=parseFloat(c.style.width)||320,h=parseFloat(c.style.height)||160;x.fillStyle='#fff';x.fillRect(0,0,w,h);";
+  html += "function resizeCanvas(){var p=c.parentElement;var cssW=p?Math.max(280,p.clientWidth-2):320;var cssH=chartH;var dpr=window.devicePixelRatio||1;c.width=Math.round(cssW*dpr);c.height=Math.round(cssH*dpr);c.style.width=cssW+'px';c.style.height=cssH+'px';x.setTransform(1,0,0,1,0,0);x.scale(dpr,dpr);draw();}";
+  html += "function draw(){var w=parseFloat(c.style.width)||320,h=parseFloat(c.style.height)||chartH;x.fillStyle='#fff';x.fillRect(0,0,w,h);";
   html += "x.strokeStyle='#ccc';x.strokeRect(0.5,0.5,w-1,h-1);x.fillStyle='#333';x.font='12px sans-serif';";
-  html += "if(d.length<1){x.fillText('Collecting samples…',10,80);return;}";
+  html += "if(d.length<1){x.fillText('Collecting samples…',10,h/2);return;}";
   html += "var lo=-100,hi=-30,i,m;";
   html += "for(i=0;i<d.length;i++){m=d[i];if(m<lo)lo=m;if(m>hi)hi=m;}";
   html += "if(warnRssi<lo)lo=warnRssi-2;if(warnRssi>hi)hi=warnRssi+2;if(badRssi<lo)lo=badRssi-2;if(badRssi>hi)hi=badRssi+2;";
@@ -296,15 +293,15 @@ static void appendWifiStateSection(String &html)
   html += "var py=yOf(d[i],lo,hi,h);if(i===0)x.moveTo(px,py);else x.lineTo(px,py);}";
   html += "x.stroke();}";
   html += "function poll(){fetch('/api/wifi').then(function(r){return r.json();}).then(function(j){";
-  html += "set('wf-st',j.statusName+' ('+j.status+')');";
+  html += "setBadge(j.connected,j.statusName,j.status);set('wf-st',String(j.status));";
   html += "set('wf-ssid',j.connected?j.ssid:'—');set('wf-host',j.hostname||'—');";
   html += "set('wf-ip',j.connected?j.ip:'—');set('wf-gw',j.connected?j.gateway:'—');";
   html += "set('wf-sn',j.connected?j.subnet:'—');set('wf-dns',j.connected?j.dns:'—');";
   html += "set('wf-ch',j.connected?String(j.channel):'—');set('wf-mac',j.mac||'—');";
-  html += "if(j.connected&&typeof j.rssi==='number'){set('wf-rssi',j.rssi+' dBm');set('wf-quality','('+qualityOf(j.rssi)+')');";
-  html += "var rc=document.getElementById('wf-rssi'),qc=document.getElementById('wf-quality');if(rc)rc.style.color=colorOf(j.rssi);if(qc)qc.style.color=colorOf(j.rssi);";
+  html += "if(j.connected&&typeof j.rssi==='number'){var q=qualityOf(j.rssi);set('wf-rssi',j.rssi+' dBm');set('wf-quality',q);set('wf-signal-now',j.rssi+' dBm '+q);";
+  html += "var rc=document.getElementById('wf-rssi'),qc=document.getElementById('wf-quality'),sc=document.getElementById('wf-signal-now');var col=colorOf(j.rssi);if(rc)rc.style.color=col;if(qc)qc.style.color=col;if(sc)sc.style.color=col;";
   html += "d.push(j.rssi);if(d.length>maxPts)d.shift();var sum=0;for(var k=0;k<d.length;k++)sum+=d[k];set('wf-avg',(sum/d.length).toFixed(1)+' dBm');draw();}";
-  html += "else{set('wf-rssi','—');set('wf-quality','');set('wf-avg','—');var rc=document.getElementById('wf-rssi');if(rc)rc.style.color='';d=[];draw();}}).catch(function(){});}";
+  html += "else{set('wf-rssi','—');set('wf-quality','');set('wf-signal-now','—');set('wf-avg','—');var rc=document.getElementById('wf-rssi'),sc=document.getElementById('wf-signal-now');if(rc)rc.style.color='';if(sc)sc.style.color='';d=[];draw();}}).catch(function(){});}";
   html += "window.addEventListener('resize',resizeCanvas);window.addEventListener('orientationchange',resizeCanvas);resizeCanvas();poll();setInterval(poll,pollMs);})();";
   html += "</script>";
 
@@ -424,6 +421,7 @@ void spaWebServerLoop()
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
               {
       Log.notice(F("[Web]: Restart requested by %p" CR), request->client()->remoteIP());
+      setLastRestartReason("Web restart");
       AsyncWebServerResponse *response = request->beginResponse(302);
       response->addHeader("Location", "/");
       request->send(response);
@@ -2018,23 +2016,38 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced .advanced-only{display:list-item;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:420px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:#f3f4f6;color:#374151;}.fw-pill-current{background:#edf7ff;color:#0f4a87;border-color:#b7d6f2;}.fw-pill-latest{background:#f7f7f7;color:#4b5563;}.sub-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}</style>";
+  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:420px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:#f3f4f6;color:#374151;}.fw-pill-current{background:#edf7ff;color:#0f4a87;border-color:#b7d6f2;}.fw-pill-latest{background:#f7f7f7;color:#4b5563;}.sub-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
   String html;
   html.reserve(32000);
   html = "<html>" + headState + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
   html += "<section class='panel'><div class='state-toolbar'><h1 style='margin:0'>ESP State</h1><label style='font-size:14px'><input id='toggleAdvanced' type='checkbox'/> Show advanced diagnostics</label></div>";
   html += "<p style='margin:0 0 10px 0;font-size:14px;color:var(--muted)'>Signal-first layout keeps daily health visible. Data/API shortcuts are available below for direct endpoint access.</p></section>";
-  html += "<div class='state-grid'><section class='panel'><h1>System Health</h1><ul>";
-  html += "<li><b>Uptime: </b>" + formatNumberWithCommas(millis() / 1000) + " s</li>";
-  html += "<li><b>Current Time: </b>" + webWallClockDisplayHtml(getTime()) + "</li>";
-  html += "<li><b>Restart Reason: </b>" + getLastRestartReason() + "</li>";
+  html += "<div class='state-grid'><section class='panel'><h1>System Health</h1>";
+#ifdef LOCAL_CLIENT
+  String rsHealth = String(rs485HealthCode());
+  unsigned long rs485LastValidAgeMs = 0;
+  if (rs485Stats.lastValidFrameMs > 0)
+  {
+    rs485LastValidAgeMs = (millis() >= rs485Stats.lastValidFrameMs) ? (millis() - rs485Stats.lastValidFrameMs) : 0;
+  }
+#endif
+  html += "<div class='sys-hero'><div class='sys-hero__uptime'><span class='fw-compare-label'>Uptime</span>"
+          "<div class='sys-hero__uptime-val'>" + formatNumberWithCommas(millis() / 1000) + " s</div></div>";
+  html += "<div class='sys-hero__time'><span class='fw-compare-label'>Current time</span>"
+          "<div class='sys-hero__time-val'>" + webWallClockDisplayHtml(getTime()) + "</div></div>";
+#ifdef LOCAL_CLIENT
+  html += "<div class='sys-hero__rs485'><span class='fw-compare-label'>RS485</span>"
+          "<div style='margin-top:4px'><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></div></div>";
+#endif
+  html += "</div>";
+  html += "<p class='sys-meta'><span class='sys-meta__label'>Restart reason</span>" + getLastRestartReason() + "</p>";
   {
     String fwPillDisplay = String(VERSION);
     if (fwPillDisplay.length() > 0 && fwPillDisplay.charAt(0) != 'v' && fwPillDisplay.charAt(0) != 'V')
     {
       fwPillDisplay = String("v") + fwPillDisplay;
     }
-    html += "<li class='sub-card'><p class='sub-card-title'>Firmware Update</p>"
+    html += "<div class='sub-card'><p class='sub-card-title'>Firmware Update</p>"
             "<div class='fw-compare'>"
             "<div class='fw-compare-cols'>"
             "<div class='fw-compare-item'><span class='fw-compare-label'>This gateway</span>"
@@ -2050,35 +2063,39 @@ void handleState(AsyncWebServerRequest *request)
             "<span id=\"fwUpdateResult\" class=\"fw-update-msg\" aria-live=\"polite\"></span></div>"
             "<div class='sub-card-row' style='margin-top:8px'><b>Firmware Build: </b><span>" + String(BUILD) + "</span></div>"
             "<div class='sub-card-row' style='margin-top:8px'><b>Firmware repo: </b><a href=\"" + String(FIRMWARE_REPO_README_URL) + "\" target=\"_blank\" rel=\"noopener\">README</a>"
-            " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></div></li>";
+            " &middot; <a href=\"" + String(FIRMWARE_REPO_RELEASES_URL) + "\" target=\"_blank\" rel=\"noopener\">Releases</a></div></div>";
   }
-  html += "<li><b>Free Heap: </b>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</li>";
-  html += "<li class='advanced-only'><b>Free PSRAM: </b>" + formatNumberWithCommas(ESP.getFreePsram()) + "</li>";
-  html += "<li class='advanced-only'><b>Free Stack: </b>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</li>";
   String release = String(__DATE__) + " - " + String(__TIME__);
-  html += "<li class='advanced-only'><b>Release: </b>" + release + "</li>";
-  html += "<li class='advanced-only'><b>Build Definition: </b>" + buildDefinitionString + "</li>";
-
+  html += "<div class='sys-advanced-block advanced-only'>";
+  html += "<div class='sub-card'><p class='sub-card-title'>Memory</p><div class='sys-stat-tiles'>"
+          "<div class='sys-stat-tile'><span class='fw-compare-label'>Free Heap</span><span class='sys-stat-val'>" + formatNumberWithCommas(ESP.getFreeHeap()) + "</span></div>"
+          "<div class='sys-stat-tile'><span class='fw-compare-label'>Free PSRAM</span><span class='sys-stat-val'>" + formatNumberWithCommas(ESP.getFreePsram()) + "</span></div>"
+          "<div class='sys-stat-tile'><span class='fw-compare-label'>Free Stack</span><span class='sys-stat-val'>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</span></div>"
+          "</div></div>";
 #ifdef LOCAL_CLIENT
-  String rsHealth = String(rs485HealthCode());
-  unsigned long rs485LastValidAgeMs = 0;
+  html += "<div class='sub-card'><p class='sub-card-title'>RS485 today</p>"
+          "<div style='margin-bottom:8px'><span class='diag-badge' style='font-weight:700;color:#fff;background:" + String(rs485Stats.polarityInverted ? "#0f4a87" : "#4b5563") + "'>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</span></div>"
+          "<dl class='wifi-kv'><dt>Valid frames</dt><dd>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</dd>"
+          "<dt>CRC errors</dt><dd>" + formatNumberWithCommas(rs485Stats.crcToday) + "</dd>"
+          "<dt>Last frame age</dt><dd>";
   if (rs485Stats.lastValidFrameMs > 0)
   {
-    rs485LastValidAgeMs = (millis() >= rs485Stats.lastValidFrameMs) ? (millis() - rs485Stats.lastValidFrameMs) : 0;
-  }
-  html += "<li class='spacer'></li><li><b>RS485 Health: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></li>";
-  html += "<li><b>RS485 Mode: </b><span class='diag-badge' style='font-weight:700;color:#fff;background:" + String(rs485Stats.polarityInverted ? "#0f4a87" : "#4b5563") + "'>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</span></li>";
-  html += "<li><b>Valid Frames (today): </b>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</li>";
-  html += "<li><b>CRC Errors (today): </b>" + formatNumberWithCommas(rs485Stats.crcToday) + "</li>";
-  if (rs485Stats.lastValidFrameMs > 0)
-  {
-    html += "<li><b>Last Valid Frame Age: </b>" + formatNumberWithCommas(rs485LastValidAgeMs) + " ms</li>";
+    html += formatNumberWithCommas(rs485LastValidAgeMs) + " ms";
   }
   else
   {
-    html += "<li><b>Last Valid Frame Age: </b>n/a</li>";
+    html += "n/a";
   }
+  html += "</dd></dl></div>";
 #endif
+  html += "<div class='sub-card'><p class='sub-card-title'>Build</p>"
+          "<div class='sub-card-row'><b>Release: </b><span>" + release + "</span></div>"
+          "<p class='sys-build-def'>" + buildDefinitionString + "</p></div>";
+  html += "<div class='sub-card'><p class='sub-card-title'>Gateway Actions</p>"
+          "<p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>Restart the ESP32 gateway. Spa control and telemetry pause briefly during reboot.</p>"
+          "<button type=\"button\" id=\"gwRebootBtn\" class=\"fw-check-btn fw-danger-btn\">Reboot gateway</button>"
+          "<span id=\"gwRebootResult\" class=\"fw-update-msg\" aria-live=\"polite\"></span></div>";
+  html += "</div></section>";
 
   appendWifiStateSection(html);
   html += "<section class='panel'><h1>MQTT</h1><ul>";
@@ -2125,41 +2142,40 @@ void handleState(AsyncWebServerRequest *request)
   html += "<section class='panel advanced-panel'><h1>Advanced Diagnostics</h1>";
 
 #ifdef LOCAL_CLIENT
-  html += "<details><summary>RS485 deep counters</summary><ul>";
-  html += "<li><b>Hint: </b>" + rs485HealthHint(rsHealth) + "</li>";
-  html += "<li><b>Mode Hint: </b>" + rs485ModeHint(rs485Stats.polarityInverted) + "</li>";
-  html += "<li><b>Detect Phase: </b>" + String(rs485Stats.polarityLocked ? "2 (locked)" : (rs485Stats.polarityInverted ? "1 (testing inverted_rx_tx)" : "0 (testing normal)")) + "</li>";
-  html += "<li><b>Polarity Locked: </b>" + String(rs485Stats.polarityLocked ? "yes" : "no") + "</li>";
-  html += "<li class='spacer'></li><li><b>Raw Bytes (today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesToday) + "</li>";
-  html += "<li><b>Raw Bytes (normal today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</li>";
-  html += "<li><b>Raw Bytes (inverted today): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</li>";
-  html += "<li><b>Frame Attempts (today): </b>" + formatNumberWithCommas(rs485Stats.framesToday) + "</li>";
-  html += "<li><b>0x7E Markers (today): </b>" + formatNumberWithCommas(rs485Stats.frameMarkersToday) + "</li>";
-  html += "<li><b>Format Errors (today): </b>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</li>";
-  html += "<li><b>Mode Switches (today): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesToday) + "</li>";
-  html += "<li><b>Max UART Backlog (today): </b>" + formatNumberWithCommas(rs485Stats.maxUartAvailableToday) + "</li>";
-  html += "<li class='spacer'></li><li><b>Raw Bytes (yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</li>";
-  html += "<li><b>Raw Bytes (normal yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</li>";
-  html += "<li><b>Raw Bytes (inverted yesterday): </b>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</li>";
-  html += "<li><b>Frame Attempts (yesterday): </b>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</li>";
-  html += "<li><b>0x7E Markers (yesterday): </b>" + formatNumberWithCommas(rs485Stats.frameMarkersYesterday) + "</li>";
-  html += "<li><b>Valid Frames (yesterday): </b>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</li>";
-  html += "<li><b>CRC Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</li>";
-  html += "<li><b>Format Errors (yesterday): </b>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</li>";
-  html += "<li><b>Mode Switches (yesterday): </b>" + formatNumberWithCommas(rs485Stats.polaritySwitchesYesterday) + "</li>";
-  html += "<li><b>Max UART Backlog (yesterday): </b>" + formatNumberWithCommas(rs485Stats.maxUartAvailableYesterday) + "</li>";
-  html += "<li><b>UART Pins: </b>RX GPIO " + String(rs485RxGpio()) + ", TX GPIO " + String(rs485TxGpio()) + ", " + String(rs485Baud()) + " baud</li>";
-  html += "<li><b>AUTO_TX: </b>" + String(rs485AutoTxEnabled() ? "true" : "false") + "</li>";
-  html += "<li><b>Polarity Inverted (raw): </b>" + String(rs485Stats.polarityInverted) + "</li>";
-  html += "<li><b>Health Code (raw): </b>" + rsHealth + "</li>";
-  html += "</ul></details>";
+  html += "<p class='rs485-hint'>" + rs485HealthHint(rsHealth) + "</p>";
+  html += "<p class='rs485-hint'>" + rs485ModeHint(rs485Stats.polarityInverted) + "</p>";
+  html += "<p class='rs485-deep-meta'>Detect phase " + String(rs485Stats.polarityLocked ? "2 (locked)" : (rs485Stats.polarityInverted ? "1 (testing inverted_rx_tx)" : "0 (testing normal)"));
+  html += "<span class='wifi-meta__sep'>&middot;</span>Polarity locked " + String(rs485Stats.polarityLocked ? "yes" : "no");
+  html += "<span class='wifi-meta__sep'>&middot;</span>AUTO_TX " + String(rs485AutoTxEnabled() ? "true" : "false");
+  html += "<span class='wifi-meta__sep'>&middot;</span>Health code " + rsHealth + "</p>";
+  html += "<table class='state-freshness'><thead><tr><th>Metric</th><th>Today</th><th>Yesterday</th></tr></thead><tbody>";
+  html += "<tr><td>Raw bytes</td><td>" + formatNumberWithCommas(rs485Stats.rawBytesToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.rawBytesYesterday) + "</td></tr>";
+  html += "<tr><td>Raw bytes (normal)</td><td>" + formatNumberWithCommas(rs485Stats.rawBytesNormalToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.rawBytesNormalYesterday) + "</td></tr>";
+  html += "<tr><td>Raw bytes (inverted)</td><td>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.rawBytesInvertedYesterday) + "</td></tr>";
+  html += "<tr><td>Frame attempts</td><td>" + formatNumberWithCommas(rs485Stats.framesToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.framesYesterday) + "</td></tr>";
+  html += "<tr><td>0x7E markers</td><td>" + formatNumberWithCommas(rs485Stats.frameMarkersToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.frameMarkersYesterday) + "</td></tr>";
+  html += "<tr><td>Valid frames</td><td>" + formatNumberWithCommas(rs485Stats.messagesToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.messagesYesterday) + "</td></tr>";
+  html += "<tr><td>CRC errors</td><td>" + formatNumberWithCommas(rs485Stats.crcToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.crcYesterday) + "</td></tr>";
+  html += "<tr><td>Format errors</td><td>" + formatNumberWithCommas(rs485Stats.badFormatToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.badFormatYesterday) + "</td></tr>";
+  html += "<tr><td>Mode switches</td><td>" + formatNumberWithCommas(rs485Stats.polaritySwitchesToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.polaritySwitchesYesterday) + "</td></tr>";
+  html += "<tr><td>Max UART backlog</td><td>" + formatNumberWithCommas(rs485Stats.maxUartAvailableToday) + "</td><td>" + formatNumberWithCommas(rs485Stats.maxUartAvailableYesterday) + "</td></tr>";
+  html += "</tbody></table>";
+  html += "<dl class='wifi-kv' style='margin-top:10px'><dt>UART</dt><dd>RX GPIO " + String(rs485RxGpio()) + ", TX GPIO " + String(rs485TxGpio()) + ", " + String(rs485Baud()) + " baud</dd>";
+  html += "<dt>Polarity inverted</dt><dd>" + String(rs485Stats.polarityInverted ? "true" : "false") + "</dd></dl>";
 #endif
   html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script>";
   html += "<script>(function(){var btn=document.getElementById('stateLoadLittleFs');var box=document.getElementById('stateLittleFsBox');if(!btn||!box)return;"
           "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
           "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
           "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
-  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var cur=document.getElementById('fwCurrentBadge');var latest=document.getElementById('fwLatestBadge');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function dispTag(s){s=String(s||'').trim();if(!s)return'\u2014';return/^v/i.test(s)?s:('v'+s);}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}function setMsg(state,text){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent=text;}if(cur)cur.textContent=dispTag(fw);btn.addEventListener('click',function(){setMsg('checking','Checking GitHub releases...');fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';if(latest)latest.textContent=dispTag(tag);var c=cmpSemver(fw,tag);if(c>=0){setMsg('ok','Up to date.');}else{setMsg('warn','Update available — open Releases to download.');}}).catch(function(){if(latest)latest.textContent='\u2014';el.style.color='var(--muted)';el.textContent='Could not reach GitHub. ';var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script></main></div></body></html>";
+  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var cur=document.getElementById('fwCurrentBadge');var latest=document.getElementById('fwLatestBadge');var apiLatest=btn.getAttribute('data-api-latest');var releases=btn.getAttribute('data-releases');var fw=btn.getAttribute('data-fw-version');function norm(s){return String(s||'').trim().replace(/^v/i,'');}function dispTag(s){s=String(s||'').trim();if(!s)return'\u2014';return/^v/i.test(s)?s:('v'+s);}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}function setMsg(state,text){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent=text;}if(cur)cur.textContent=dispTag(fw);btn.addEventListener('click',function(){setMsg('checking','Checking GitHub releases...');fetch(apiLatest,{headers:{'Accept':'application/vnd.github+json'}}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){var tag=j.tag_name||'';if(latest)latest.textContent=dispTag(tag);var c=cmpSemver(fw,tag);if(c>=0){setMsg('ok','Up to date.');}else{setMsg('warn','Update available — open Releases to download.');}}).catch(function(){if(latest)latest.textContent='\u2014';el.style.color='var(--muted)';el.textContent='Could not reach GitHub. ';var a=document.createElement('a');a.href=releases;a.textContent='Open Releases';a.target='_blank';a.rel='noopener';el.appendChild(a);el.appendChild(document.createTextNode(' to compare manually.'));});});})();</script>";
+  html += "<script>(function(){var btn=document.getElementById('gwRebootBtn');var el=document.getElementById('gwRebootResult');if(!btn||!el)return;"
+          "btn.addEventListener('click',function(){"
+          "if(!confirm('Reboot this gateway? Spa control and telemetry will be unavailable briefly.'))return;"
+          "btn.disabled=true;el.style.color='#b26a00';el.textContent='Rebooting...';"
+          "fetch('/restart',{cache:'no-store'}).catch(function(){});"
+          "setTimeout(function(){el.style.color='var(--muted)';el.textContent='Gateway is rebooting. Reload this page in ~30 seconds.';},500);"
+          "});})();</script></main></div></body></html>";
 
   String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
   sendHtmlWithEtag(request, html, etag);

@@ -8,6 +8,22 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-06-23
+
+### Added
+
+- **Web gateway reboot** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **ESP State** (`/state`) advanced **Gateway Actions** card with a confirmed **Reboot gateway** button (`GET /restart`); manual restarts record **`Web restart`** in restart reason.
+
+### Changed
+
+- **ESP State layout** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **Free Heap** and RS485 counters (**mode**, **valid frames**, **CRC errors**, **last frame age**) move behind **Show advanced diagnostics**; **RS485 Health** stays in the default view.
+- **ESP State WiFi panel** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Compact summary strip (status badge, SSID/hostname, RSSI), meta line (channel/MAC/status code), and two-column **Network** + **Signal** layout with live RSSI chart (same fields and `GET /api/wifi` polling as before).
+- **ESP State System Health** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Hero strip (uptime, clock, RS485 badge), restart-reason meta line, and advanced **Memory** / **RS485 today** / **Build** / **Gateway Actions** sub-card grid; **Advanced Diagnostics** RS485 counters use a today-vs-yesterday comparison table.
+
+### Version bump
+
+- Firmware **`VERSION`** and **`ANALYTICS_VERSION`** are **`2.15.0`** ([`src/main.h`](src/main.h), [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.14.1] - 2026-06-23
 
 ### Fixed
