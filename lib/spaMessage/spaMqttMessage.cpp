@@ -73,7 +73,8 @@ void publishSpaStatusData()
   PUBLISH_STATE_MAP(heatingState, heatingStateMap);
 
   PUBLISH_STATUS_ELEMENT(reminderType, "%u");
-  publishElement("reminderText", "status", getMapDescription(spaStatusData.reminderType, reminderTypeMap).c_str());
+  publishElement("reminderText", "status",
+                 spaReminderText(spaStatusData.reminderType, spaStatusData.spaState).c_str());
   PUBLISH_STATUS_ELEMENT(sensorA, "%u");
   PUBLISH_STATUS_ELEMENT(sensorB, "%u");
   PUBLISH_STATUS_ELEMENT(tempScale, "%u");

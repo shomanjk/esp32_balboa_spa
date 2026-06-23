@@ -241,7 +241,8 @@ void spaMessageLoop()
   else
   {
     // (spaInformationData.lastUpdate < getTime() + 60 * 60 && spaInformationData.lastRequest < getTime() + 60 * 60)
-    if (staleData(spaConfigurationData) || staleData(spaSettings0x04Data) || staleData(spaFilterSettingsData) || staleData(spaInformationData))
+    if (staleData(spaConfigurationData) || staleData(spaSettings0x04Data) || staleData(spaFilterSettingsData) ||
+        staleData(spaInformationData) || staleData(spaPreferencesData))
     {
       // Log.verbose(F("[Mess]: Requesting Inital Configuration" CR));
       configurationRequest();
@@ -264,6 +265,7 @@ void configurationRequest()
   unsigned char filter_settings_request[] = FILTER_SETTINGS_REQUEST;
   unsigned char information_request[] = INFORMATION_REQUEST;
   unsigned char fault_log_request[] = FAULT_LOG_REQUEST;
+  unsigned char preferences_request[] = PREFERENCES_REQUEST;
 
   String request = "";
 
@@ -296,6 +298,12 @@ void configurationRequest()
     append_request(byte_array, &offset, fault_log_request, sizeof(fault_log_request));
     spaFaultLogData.lastRequest = getTime();
     request += "FaultLog ";
+  }
+  if (staleData(spaPreferencesData) && retryRequest(spaPreferencesData))
+  {
+    append_request(byte_array, &offset, preferences_request, sizeof(preferences_request));
+    spaPreferencesData.lastRequest = getTime();
+    request += "Preferences ";
   }
 
   if (offset)
@@ -520,7 +528,7 @@ Byte	Name	Description/Values
 3	Time: Hour	0-23
 4	Time: Minute	0-59
 5	Heating Mode	0=Ready, 1=Rest, 3=Ready-in-Rest
-6	Reminder Type	0x00=None, 0x04=Clean filter, 0x0A=Check the pH, 0x09=Check the sanitizer, 0x1E=?Fault?
+6	Reminder Type	0x00=None, 0x03/0x04=Clean filter, 0x0A=Check the pH, 0x09=Check the sanitizer, 0x1E=Fault (others model-specific; byte unreliable while spaState=Initializing)
 7	Sensor A Temperature / Hold Timer	Minutes if Hold Mode else Temperature (scaled by Temperature Scale) if A/B Temps else 0x01 if Test Mode else 0x00
 8	Sensor B Temperature	Temperature (scaled by Temperature Scale) if A/B Temps else 0x00
 9	Flags Byte 9	Temperature Scale, Clock Mode, Filter Mode (see below)
@@ -698,6 +706,13 @@ void spaRequestFilterSettings()
   spaFilterSettingsData.lastRequest = getTime();
 }
 
+void spaRequestPreferences()
+{
+  unsigned char preferences_request[] = PREFERENCES_REQUEST;
+  sendMessageToSpa(preferences_request, sizeof(preferences_request));
+  spaPreferencesData.lastRequest = getTime();
+}
+
 void sendMessageToSpa(uint8_t *data, int length)
 {
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
@@ -757,6 +772,56 @@ String getMapDescription(uint8_t element, const std::map<uint8_t, const char *> 
   char buf[24];
   snprintf(buf, sizeof(buf), "Unknown (0x%02X)", element);
   return String(buf);
+}
+
+String spaReminderText(uint8_t reminderType, uint8_t spaState)
+{
+  if (reminderType == 0x00)
+  {
+    return String("None");
+  }
+  // Byte 6 is not a reliable reminder id while the pack is still booting (often 0x13 = hour 19
+  // or other transient values; 0x13 is also the status *message* type, not a reminder label).
+  if (spaState == 0x01)
+  {
+    return String("None");
+  }
+  auto it = reminderTypeMap.find(reminderType);
+  if (it != reminderTypeMap.end())
+  {
+    return String(it->second);
+  }
+  // Panel sent a reminder id we do not have in reminderTypeMap yet (model/firmware-specific).
+  return String("Maintenance reminder");
+}
+
+bool spaReminderIsActive(uint8_t reminderType, uint8_t spaState, uint8_t initMode)
+{
+  if (reminderType == 0x00)
+  {
+    return false;
+  }
+  // Byte 6 is unreliable while the pack is booting or in priming mode.
+  if (spaState == 0x01 || initMode == 0x01)
+  {
+    return false;
+  }
+  return true;
+}
+
+bool spaReminderIsFault(uint8_t reminderType)
+{
+  return reminderType == 0x1E;
+}
+
+bool spaPreferencesRemindersEnabled(uint8_t reminders)
+{
+  return (reminders & 0x01u) != 0;
+}
+
+String spaPreferencesRemindersText(uint8_t reminders)
+{
+  return spaPreferencesRemindersEnabled(reminders) ? String("On") : String("Off");
 }
 
 String spaFaultMessageForCode(uint8_t code, uint8_t totEntry)

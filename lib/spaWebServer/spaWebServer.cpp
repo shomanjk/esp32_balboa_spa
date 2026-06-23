@@ -66,6 +66,8 @@ void handleLogsConfigGet(AsyncWebServerRequest *request);
 void handleLogsConfigPost(AsyncWebServerRequest *request);
 void handleConfigFilterGet(AsyncWebServerRequest *request);
 void handleConfigFilterPost(AsyncWebServerRequest *request);
+void handleConfigPreferencesGet(AsyncWebServerRequest *request);
+void handleConfigPreferencesPost(AsyncWebServerRequest *request);
 void handleConfigExport(AsyncWebServerRequest *request);
 void handleConfigImportPost(AsyncWebServerRequest *request);
 String parseBody(String body);
@@ -410,6 +412,8 @@ void spaWebServerLoop()
     server.on("/api/logs/config", HTTP_POST, handleLogsConfigPost, NULL, handleBody);
     server.on("/api/config/filter", HTTP_GET, handleConfigFilterGet);
     server.on("/api/config/filter", HTTP_POST, handleConfigFilterPost, NULL, handleBody);
+    server.on("/api/config/preferences", HTTP_GET, handleConfigPreferencesGet);
+    server.on("/api/config/preferences", HTTP_POST, handleConfigPreferencesPost, NULL, handleBody);
     server.on("/api/config/export", HTTP_GET, handleConfigExport);
     server.on("/api/config/import", HTTP_POST, handleConfigImportPost, NULL, handleBody);
     server.on("/logs", HTTP_GET, handleLogsPage);
@@ -467,30 +471,60 @@ void handleepdpanel(AsyncWebServerRequest *request)
 }
 #endif
 
-#define style String("<style>:root{--bg:#f4f7f8;--panel:#fff;--text:#1f2933;--muted:#5f6c7b;--brand:#037e52;--brandActive:#4b5563;--border:#d4dbe1;--focus:#0f4a87;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;}*{box-sizing:border-box;}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}html,body{max-width:100%;overflow-x:hidden;}img,canvas{display:block;max-width:100%;height:auto;}.skip-link{position:absolute;left:10px;top:-48px;z-index:999;background:#0f4a87;color:#fff;padding:10px 12px;border-radius:6px;text-decoration:none;}.skip-link:focus{top:10px;outline:3px solid #fff;outline-offset:2px;}.page{max-width:980px;margin:0 auto;padding:var(--space-3);}h1{color:#0f4a87;font-size:1.05rem;margin:0 0 var(--space-2) 0;line-height:1.3;}.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:var(--space-3);margin-bottom:var(--space-3);box-shadow:0 1px 2px rgba(0,0,0,.04);}ul{list-style:none;margin:0;padding:0;}li{padding:var(--space-1) 0;border-bottom:1px dashed #e5eaef;overflow-wrap:anywhere;word-break:break-word;}li:last-child{border-bottom:none;}.spacer{height:8px;border-bottom:none;padding:0;}.top-nav{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-bottom:var(--space-3);}.top-nav a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease}.top-nav a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav a:hover{background-color:var(--brandActive)}}.top-nav a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav a:active{transform:translateY(1px)}@media (prefers-reduced-motion:reduce){.top-nav a{transition:none}}.top-nav-mobile{display:none}.top-nav-mobile__summary{display:block;cursor:pointer;list-style:none;padding:0;margin:0}.top-nav-mobile__summary::-webkit-details-marker{display:none}.top-nav-mobile__summary::marker{content:''}.top-nav-mobile__summary-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:15px;line-height:1.2;box-shadow:0 1px 3px rgba(0,0,0,.06)}.top-nav-mobile__context{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.top-nav-mobile__menu{display:flex;align-items:center;gap:6px;color:var(--brand);font-weight:700;flex-shrink:0}.top-nav-mobile__chev{border:solid currentColor;border-width:0 2px 2px 0;display:inline-block;padding:3px;transform:rotate(45deg);transition:transform .15s ease;margin-top:-2px}.top-nav-mobile[open] .top-nav-mobile__chev{transform:rotate(225deg);margin-top:2px}.top-nav-mobile__panel{display:flex;flex-direction:column;gap:var(--space-1);margin-top:var(--space-2);padding:var(--space-2);background:var(--panel);border:1px solid var(--border);border-radius:8px}.top-nav-mobile__panel a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;font-weight:600;width:100%;box-sizing:border-box;transition:background-color .15s ease,transform .15s ease}.top-nav-mobile__panel a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav-mobile__panel a:hover{background-color:var(--brandActive)}}.top-nav-mobile__panel a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav-mobile__panel a:active{transform:translateY(1px)}.portal-nav-scroll-sentinel{height:1px;width:100%;margin:0;padding:0;border:0;pointer-events:none;opacity:0;position:relative}@media (prefers-reduced-motion:reduce){.top-nav-mobile__chev{transition:none}.top-nav-mobile__panel a{transition:none}}button{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease;}.active{background-color:var(--brandActive);color:#fff;}@media (hover:hover){button:hover{background-color:var(--brandActive);}}button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}button:active{transform:translateY(1px);}.panel-image{width:100%;max-width:600px;margin:0 auto var(--space-3) auto;border-radius:8px;}.chart-title{margin:12px 0 6px 0;color:var(--muted);}.chart-wrap{width:100%;max-width:100%;overflow:hidden;border:1px solid #ccc;background:#fff;border-radius:6px;}#wf-rssi,#wf-quality{font-weight:700;}@media (max-width:640px){.top-nav{display:none !important}.top-nav-mobile{display:block;margin-bottom:var(--space-3)}.top-nav-mobile__summary{position:sticky;top:0;z-index:50}.top-nav-mobile__summary .top-nav-mobile__summary-inner{background:var(--panel)}body.portal-nav-compact .top-nav-mobile__summary-inner{padding:6px 10px;font-size:0.88rem}body.portal-nav-compact .top-nav-mobile__menu-text{display:none}.page{padding:var(--space-2);}button{flex:1 1 100%;width:100%;}.log-controls button,.range-toggle button,.status-temp-units-toggle button,.equip-btn{width:auto!important;flex:0 1 auto!important;min-width:0}.panel{padding:var(--space-2);}h1{font-size:1rem;}}@media (prefers-reduced-motion:reduce){button{transition:none;}}</style>")
+#define portalBaseStyle "<style>:root{--bg:#f4f7f8;--panel:#fff;--text:#1f2933;--muted:#5f6c7b;--brand:#037e52;--brandActive:#4b5563;--border:#d4dbe1;--focus:#0f4a87;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;}*{box-sizing:border-box;}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}html,body{max-width:100%;overflow-x:hidden;}img,canvas{display:block;max-width:100%;height:auto;}.skip-link{position:absolute;left:10px;top:-48px;z-index:999;background:#0f4a87;color:#fff;padding:10px 12px;border-radius:6px;text-decoration:none;}.skip-link:focus{top:10px;outline:3px solid #fff;outline-offset:2px;}.page{max-width:980px;margin:0 auto;padding:var(--space-3);}h1{color:#0f4a87;font-size:1.05rem;margin:0 0 var(--space-2) 0;line-height:1.3;}.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:var(--space-3);margin-bottom:var(--space-3);box-shadow:0 1px 2px rgba(0,0,0,.04);}ul{list-style:none;margin:0;padding:0;}li{padding:var(--space-1) 0;border-bottom:1px dashed #e5eaef;overflow-wrap:anywhere;word-break:break-word;}li:last-child{border-bottom:none;}.spacer{height:8px;border-bottom:none;padding:0;}.top-nav{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-bottom:var(--space-3);}.top-nav a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease}.top-nav a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav a:hover{background-color:var(--brandActive)}}.top-nav a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav a:active{transform:translateY(1px)}@media (prefers-reduced-motion:reduce){.top-nav a{transition:none}}.top-nav-mobile{display:none}.top-nav-mobile__summary{display:block;cursor:pointer;list-style:none;padding:0;margin:0}.top-nav-mobile__summary::-webkit-details-marker{display:none}.top-nav-mobile__summary::marker{content:''}.top-nav-mobile__summary-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:15px;line-height:1.2;box-shadow:0 1px 3px rgba(0,0,0,.06)}.top-nav-mobile__context{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.top-nav-mobile__menu{display:flex;align-items:center;gap:6px;color:var(--brand);font-weight:700;flex-shrink:0}.top-nav-mobile__chev{border:solid currentColor;border-width:0 2px 2px 0;display:inline-block;padding:3px;transform:rotate(45deg);transition:transform .15s ease;margin-top:-2px}.top-nav-mobile[open] .top-nav-mobile__chev{transform:rotate(225deg);margin-top:2px}.top-nav-mobile__panel{display:flex;flex-direction:column;gap:var(--space-1);margin-top:var(--space-2);padding:var(--space-2);background:var(--panel);border:1px solid var(--border);border-radius:8px}.top-nav-mobile__panel a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;font-weight:600;width:100%;box-sizing:border-box;transition:background-color .15s ease,transform .15s ease}.top-nav-mobile__panel a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav-mobile__panel a:hover{background-color:var(--brandActive)}}.top-nav-mobile__panel a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav-mobile__panel a:active{transform:translateY(1px)}.portal-nav-scroll-sentinel{height:1px;width:100%;margin:0;padding:0;border:0;pointer-events:none;opacity:0;position:relative}@media (prefers-reduced-motion:reduce){.top-nav-mobile__chev{transition:none}.top-nav-mobile__panel a{transition:none}}button{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease;}.active{background-color:var(--brandActive);color:#fff;}@media (hover:hover){button:hover{background-color:var(--brandActive);}}button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}button:active{transform:translateY(1px);}.panel-image{width:100%;max-width:600px;margin:0 auto var(--space-3) auto;border-radius:8px;}.chart-title{margin:12px 0 6px 0;color:var(--muted);}.chart-wrap{width:100%;max-width:100%;overflow:hidden;border:1px solid #ccc;background:#fff;border-radius:6px;}#wf-rssi,#wf-quality{font-weight:700;}@media (max-width:640px){.top-nav{display:none !important}.top-nav-mobile{display:block;margin-bottom:var(--space-3)}.top-nav-mobile__summary{position:sticky;top:0;z-index:50}.top-nav-mobile__summary .top-nav-mobile__summary-inner{background:var(--panel)}body.portal-nav-compact .top-nav-mobile__summary-inner{padding:6px 10px;font-size:0.88rem}body.portal-nav-compact .top-nav-mobile__menu-text{display:none}.page{padding:var(--space-2);}button{flex:1 1 100%;width:100%;}.log-controls button,.range-toggle button,.status-temp-units-toggle button,.equip-btn{width:auto!important;flex:0 1 auto!important;min-width:0}.panel{padding:var(--space-2);}h1{font-size:1rem;}}@media (prefers-reduced-motion:reduce){button{transition:none;}}</style>"
 
-#define icon String("<link rel='icon' href='/assets/style/hottubbing.webp' type='image/x-icon' />")
+#define portalHeadIcon "<link rel='icon' href='/assets/style/hottubbing.webp' type='image/x-icon' />"
 
-#define portalNavScrollScript String("<script>(function(){var m=window.matchMedia('(max-width:640px)');var io=null;function setup(){document.body.classList.remove('portal-nav-compact');if(io){io.disconnect();io=null;}if(!m.matches)return;var s=document.querySelector('.portal-nav-scroll-sentinel');if(!s)return;io=new IntersectionObserver(function(e){e.forEach(function(x){document.body.classList.toggle('portal-nav-compact',!x.isIntersecting);});},{threshold:0});io.observe(s);}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();m.addEventListener('change',setup);})();</script>")
+#define portalHeadNavScript "<script>(function(){var m=window.matchMedia('(max-width:640px)');var io=null;function setup(){document.body.classList.remove('portal-nav-compact');if(io){io.disconnect();io=null;}if(!m.matches)return;var s=document.querySelector('.portal-nav-scroll-sentinel');if(!s)return;io=new IntersectionObserver(function(e){e.forEach(function(x){document.body.classList.toggle('portal-nav-compact',!x.isIntersecting);});},{threshold:0});io.observe(s);}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();m.addEventListener('change',setup);})();</script>"
 
-#define headStatus String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Status</title>") + icon + style + portalNavScrollScript + String("</head>")
-#define headConfig String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spa Config</title>") + icon + style + portalNavScrollScript + String("</head>")
-#define headState String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP State</title>") + icon + style + portalNavScrollScript + String("</head>")
+#define portalLogsHeadExtraStyle "<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}</style>"
 
-#define webMenuStatus String("<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Spa Status</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>")
+/** Append shared portal `<head>` with sequential writes (no chained `String` temporaries). */
+static void appendPortalHead(String &html, const char *title, const char *viewportExtra = "",
+                             const char *extraHeadStyle = nullptr)
+{
+  const size_t want = html.length() + 7000u;
+  html.reserve(want);
+  html += F("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1");
+  if (viewportExtra != nullptr && viewportExtra[0] != '\0')
+  {
+    html += viewportExtra;
+  }
+  html += F("'><title>");
+  html += title;
+  html += F("</title>");
+  html += portalHeadIcon;
+  html += portalBaseStyle;
+  html += portalHeadNavScript;
+  if (extraHeadStyle != nullptr && extraHeadStyle[0] != '\0')
+  {
+    html += extraHeadStyle;
+  }
+  html += F("</head>");
+}
 
-#define webMenuConfig String("<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a class='active' aria-current='page' href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Spa Config</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a class='active' aria-current='page' href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>")
+static void logPortalHtmlMissingGlobalCss(const String &html, const char *pageTag)
+{
+  if (html.indexOf(F(":root{--bg:#f4f7f8")) >= 0)
+  {
+    return;
+  }
+  Log.error("[Web]: %s missing portal global CSS len=%u — sending without repair" CR, pageTag,
+            static_cast<unsigned>(html.length()));
+}
 
-#define webMenuState String("<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a class='active' aria-current='page' href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>ESP State</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a class='active' aria-current='page' href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>")
+#define webMenuStatus "<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Spa Status</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>"
 
-#define webMenuLogs String("<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Logs</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>")
+#define webMenuConfig "<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a class='active' aria-current='page' href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Spa Config</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a class='active' aria-current='page' href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>"
 
-#define headLogs String("<head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1,viewport-fit=cover'><title>Spa Logs</title>") + icon + style + portalNavScrollScript + String("<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}</style></head>")
+#define webMenuState "<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a class='active' aria-current='page' href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>ESP State</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a class='active' aria-current='page' href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>"
+
+#define webMenuLogs "<nav aria-label='Portal navigation' class='portal-nav'><div class='top-nav'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Logs</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a class='active' aria-current='page' href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>"
 
 #ifdef spaEpaper
-#define ePaper String("<img class='panel-image' src='panel.jpg' alt='Spa Panel'>")
+#define ePaper "<img class='panel-image' src='panel.jpg' alt='Spa Panel'>"
 #else
-#define ePaper String("")
+#define ePaper ""
 #endif
 
 /** Local wall time for /status; invalid or epoch 0 → "Time not synced". */
@@ -763,6 +797,130 @@ static bool statusMisterConfiguredAbsent()
   return statusSpaConfigReady() && !spaConfigurationData.mister;
 }
 
+/** Configuration 0x2E pump two-bit: 0=None, 1=1-speed, 2=2-speed. */
+static String spaConfigPumpInstallLabel(uint8_t cfg)
+{
+  switch (cfg)
+  {
+  case 0:
+    return String("Not installed");
+  case 1:
+    return String("1-speed");
+  case 2:
+    return String("2-speed");
+  default:
+  {
+    char buf[24];
+    snprintf(buf, sizeof(buf), "Unknown (%u)", cfg);
+    return String(buf);
+  }
+  }
+}
+
+static String spaConfigLightInstallLabel(uint8_t cfg)
+{
+  if (cfg == 0)
+  {
+    return String("Not installed");
+  }
+  if (cfg == 1)
+  {
+    return String("Installed");
+  }
+  char buf[24];
+  snprintf(buf, sizeof(buf), "Unknown (%u)", cfg);
+  return String(buf);
+}
+
+static String spaConfigLoadInstallLabel(bool present)
+{
+  return present ? String("Installed") : String("Not installed");
+}
+
+static void appendConfigEquipRow(String &html, const char *load, const String &status, bool absent)
+{
+  html += "<tr";
+  if (absent)
+  {
+    html += " class=\"config-equip-absent\" title=\"Not installed on this spa pack\"";
+  }
+  html += "><td>";
+  html += load;
+  html += "</td><td>";
+  html += status;
+  html += "</td></tr>";
+}
+
+static void spaConfigAppendSummaryPart(String &parts, const char *label)
+{
+  if (parts.length() > 0)
+  {
+    parts += ", ";
+  }
+  parts += label;
+}
+
+static String spaConfigEquipmentSummaryText()
+{
+  String parts;
+  const uint8_t pumps[] = {spaConfigurationData.pump1, spaConfigurationData.pump2, spaConfigurationData.pump3,
+                           spaConfigurationData.pump4, spaConfigurationData.pump5, spaConfigurationData.pump6};
+  for (unsigned i = 0; i < 6; i++)
+  {
+    if (pumps[i] == 0)
+    {
+      continue;
+    }
+    char label[28];
+    if (pumps[i] == 1)
+    {
+      snprintf(label, sizeof(label), "Pump %u (1-speed)", i + 1);
+    }
+    else if (pumps[i] == 2)
+    {
+      snprintf(label, sizeof(label), "Pump %u (2-speed)", i + 1);
+    }
+    else
+    {
+      snprintf(label, sizeof(label), "Pump %u (code %u)", i + 1, pumps[i]);
+    }
+    spaConfigAppendSummaryPart(parts, label);
+  }
+  if (spaConfigurationData.light1 != 0)
+  {
+    spaConfigAppendSummaryPart(parts, "Light 1");
+  }
+  if (spaConfigurationData.light2 != 0)
+  {
+    spaConfigAppendSummaryPart(parts, "Light 2");
+  }
+  if (spaConfigurationData.circulationPump)
+  {
+    spaConfigAppendSummaryPart(parts, "Circulation pump");
+  }
+  if (spaConfigurationData.blower)
+  {
+    spaConfigAppendSummaryPart(parts, "Blower");
+  }
+  if (spaConfigurationData.mister)
+  {
+    spaConfigAppendSummaryPart(parts, "Mister");
+  }
+  if (spaConfigurationData.aux1)
+  {
+    spaConfigAppendSummaryPart(parts, "Aux 1");
+  }
+  if (spaConfigurationData.aux2)
+  {
+    spaConfigAppendSummaryPart(parts, "Aux 2");
+  }
+  if (parts.length() == 0)
+  {
+    return String("No loads reported as installed (unusual — check raw frame below).");
+  }
+  return parts;
+}
+
 static void appendStatusEquipCell(String &html, const char *label, const String &value, bool configuredAbsent)
 {
   if (configuredAbsent)
@@ -963,7 +1121,7 @@ void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
   String html;
-  html.reserve(64000);
+  html.reserve(70000);
   const char *statusStyle =
       "<style>"
       "html{scroll-behavior:smooth;}"
@@ -1007,6 +1165,19 @@ void handleStatus(AsyncWebServerRequest *request)
       ".heat-hero--init{border-color:#e6c200;background:#fffbeb;}.heat-hero--init .heat-hero-icon{color:#b8860b;}"
       ".heat-hero--alert{border-color:#e57373;background:#fff5f5;}.heat-hero--alert .heat-hero-icon{color:#c62828;}"
       ".kv-row--alert dt,.kv-row--alert dd{color:#c62828;font-weight:600;}"
+      ".kv-row--alert-warn dt,.kv-row--alert-warn dd{color:#8d6e00;font-weight:600;}"
+      ".status-reminder-banner{display:none;align-items:flex-start;gap:12px;margin:0 0 var(--space-3) 0;"
+      "padding:14px 16px;border-radius:10px;border:1px solid;}"
+      ".status-reminder-banner.is-active{display:flex;}"
+      ".status-reminder-banner--warn{border-color:#e6c200;background:#fffbeb;color:#5c4a00;}"
+      ".status-reminder-banner--fault{border-color:#e57373;background:#fff5f5;color:#b71c1c;}"
+      ".status-reminder-banner-icon{flex-shrink:0;line-height:0;margin-top:1px;}"
+      ".status-reminder-banner--warn .status-reminder-banner-icon{color:#b8860b;}"
+      ".status-reminder-banner--fault .status-reminder-banner-icon{color:#c62828;}"
+      ".status-reminder-banner-label{font-size:0.78rem;font-weight:600;text-transform:uppercase;"
+      "letter-spacing:0.03em;opacity:0.9;margin:0 0 4px 0;}"
+      ".status-reminder-banner-val{font-size:1.15rem;font-weight:700;line-height:1.3;margin:0;}"
+      ".status-reminder-banner-hint{font-size:0.82rem;line-height:1.4;margin:6px 0 0 0;opacity:0.92;}"
       ".heat-hero--heat-idle{border-color:#dde2e8;background:#eef1f4;}.heat-hero--heat-idle .heat-hero-icon{color:#5f6c7b;}"
       ".heat-hero--heat-on{border-color:#ffab91;background:#ffe8e0;}.heat-hero--heat-on .heat-hero-icon{color:#bf360c;}"
       ".heat-hero--heat-alt{border-color:#ffe082;background:#fff8e1;}.heat-hero--heat-alt .heat-hero-icon{color:#8d6e00;}"
@@ -1073,13 +1244,10 @@ void handleStatus(AsyncWebServerRequest *request)
       ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
       "</style>";
 
-  // Materialize `headStatus` into its own `String` before chaining more appends. A single
-  // giant `a + b + c + …` expression creates many short-lived temporaries; on embedded
-  // targets that has been associated with rare truncated `/status` HTML (missing `<head>` / CSS).
-  const String statusHeadClosed = headStatus;
+  // Build `<head>` with sequential appends (see `appendPortalHead`).
   html = F("<html>");
-  html += statusHeadClosed;
-  html += String(statusStyle);
+  appendPortalHead(html, "Spa Status");
+  html += statusStyle;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuStatus;
   html += F("<main id='mainContent'>");
@@ -1087,7 +1255,32 @@ void handleStatus(AsyncWebServerRequest *request)
   html += F("<div class=\"status-page-head\"><h1 class=\"status-page-title\">Spa Status</h1>"
             "<p class=\"status-snapshot-meta\" id=\"statusSnapshotMeta\" title=\"Last spa status frame applied (gateway local time)\">");
   html += statusSnapshotSubtitle();
-  html += F("</p></div><div class=\"status-layout\">");
+  html += F("</p></div>");
+  {
+    const String reminderTxt =
+        spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
+    const bool reminderActive = spaReminderIsActive(
+        spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
+    const bool reminderFault = spaReminderIsFault(spaStatusData.reminderType);
+    html += "<div id=\"statusReminderBanner\" class=\"status-reminder-banner";
+    if (reminderActive)
+    {
+      html += " is-active ";
+      html += reminderFault ? "status-reminder-banner--fault" : "status-reminder-banner--warn";
+    }
+    html += "\" role=\"alert\" aria-live=\"polite\">";
+    html += "<span class=\"status-reminder-banner-icon\" aria-hidden=\"true\">";
+    html += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" "
+            "stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\">";
+    html += "<path d=\"M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/>";
+    html += "<line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg></span>";
+    html += "<div><p class=\"status-reminder-banner-label\">Panel reminder</p>";
+    html += "<p id=\"statusReminderBannerVal\" class=\"status-reminder-banner-val\">";
+    html += reminderActive ? reminderTxt : "";
+    html += "</p><p class=\"status-reminder-banner-hint\">Stays until cleared on the spa panel; "
+            "often repeats on a manufacturer schedule (commonly about every 7 days).</p></div></div>";
+    html += F("<div class=\"status-layout\">");
+  }
 
   {
     float setMin = 50.0f;
@@ -1267,11 +1460,14 @@ void handleStatus(AsyncWebServerRequest *request)
   appendStatusKvRow(html, "Panel Locked", getMapDescription(spaStatusData.panelLocked, lockedMap));
   appendStatusKvRow(html, "Settings Lock", getMapDescription(spaStatusData.settingsLock, lockedMap));
   {
-    const String reminderTxt = getMapDescription(spaStatusData.reminderType, reminderTypeMap);
+    const String reminderTxt =
+        spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
     html += "<div class=\"kv-row";
-    if (spaStatusData.reminderType != 0)
+    if (spaReminderIsActive(
+            spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode))
     {
-      html += " kv-row--alert";
+      html += spaReminderIsFault(spaStatusData.reminderType) ? " kv-row--alert"
+                                                             : " kv-row--alert-warn";
     }
     html += "\" id=\"statusReminderRow\"><dt>Reminder</dt><dd id=\"statusReminderVal\">";
     html += reminderTxt;
@@ -1448,8 +1644,19 @@ void handleStatus(AsyncWebServerRequest *request)
           "var f12=document.getElementById('statusClockFormat12Btn');var f24=document.getElementById('statusClockFormat24Btn');var is24=String(snap.clockFormat||'').toLowerCase().indexOf('24')>=0;"
           "if(f12)f12.disabled=!is24;if(f24)f24.disabled=is24;"
           "var fm=document.getElementById('statusFilterModeVal');if(fm&&typeof snap.filterModeText==='string')fm.textContent=snap.filterModeText;"
+          "function statusApplyReminderSnap(snap){"
+          "var txt=typeof snap.reminderText==='string'?snap.reminderText:'';"
+          "var active=!!(snap.reminderActive||(txt&&txt!=='None'));"
+          "var fault=!!snap.reminderIsFault;"
+          "var banner=document.getElementById('statusReminderBanner');"
+          "if(banner){banner.classList.toggle('is-active',active);"
+          "banner.classList.remove('status-reminder-banner--warn','status-reminder-banner--fault');"
+          "if(active)banner.classList.add(fault?'status-reminder-banner--fault':'status-reminder-banner--warn');"
+          "var bv=document.getElementById('statusReminderBannerVal');if(bv)bv.textContent=active?txt:'';}"
           "var rv=document.getElementById('statusReminderVal');if(rv&&typeof snap.reminderText==='string')rv.textContent=snap.reminderText;"
-          "var rr=document.getElementById('statusReminderRow');if(rr){if(Number(snap.reminderType||0)>0)rr.classList.add('kv-row--alert');else rr.classList.remove('kv-row--alert');}"
+          "var rr=document.getElementById('statusReminderRow');if(rr){rr.classList.remove('kv-row--alert','kv-row--alert-warn');"
+          "if(active)rr.classList.add(fault?'kv-row--alert':'kv-row--alert-warn');}}"
+          "statusApplyReminderSnap(snap);"
           "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
           "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
           "}"
@@ -1586,6 +1793,7 @@ void handleStatus(AsyncWebServerRequest *request)
           "</script>";
   html += "</div></main></div></body></html>";
   String etag = String("W/\"status-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
+  logPortalHtmlMissingGlobalCss(html, "/status");
   const size_t statusOutLen = html.length();
   if (!html.startsWith("<html>"))
   {
@@ -1719,6 +1927,9 @@ void handleConfig(AsyncWebServerRequest *request)
       "table.config-equip{width:100%;border-collapse:collapse;margin-top:8px;}"
       "table.config-equip th,table.config-equip td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}"
       "table.config-equip th{font-size:13px;color:var(--muted);}"
+      "table.config-equip tr.config-equip-absent td{color:var(--muted);opacity:0.78;}"
+      "table.config-equip tr.config-equip-absent td:first-child{font-weight:500;}"
+      ".config-equip-summary{margin:0 0 10px 0;font-size:14px;line-height:1.45;}"
       ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch;margin:0 0 var(--space-3) 0;}"
       "@media (max-width:560px){.config-filter-strip{grid-template-columns:1fr;}}"
       ".config-filter-card{display:flex;flex-direction:column;min-height:100%;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
@@ -1740,9 +1951,13 @@ void handleConfig(AsyncWebServerRequest *request)
 
   String html;
   html.reserve(42000);
-  html = "<html>" + headConfig + String(configEnhancements) +
-         "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuConfig +
-         "<main id='mainContent'>" + ePaper;
+  html = F("<html>");
+  appendPortalHead(html, "Spa Config");
+  html += configEnhancements;
+  html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
+  html += webMenuConfig;
+  html += F("<main id='mainContent'>");
+  html += ePaper;
 
   html += "<nav aria-label='Spa Config sections'><ul class='config-toc'>"
           "<li><a href='#cfg-backup'>Backup &amp; restore</a></li>"
@@ -1883,17 +2098,57 @@ void handleConfig(AsyncWebServerRequest *request)
   html += "</section>";
 
   html += "<section class='panel' id='cfg-preferences'><h1>Panel preferences</h1>";
-  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">From the spa <strong>Preferences</strong> response. Numeric codes follow MQTT topics under "
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">From the spa <strong>Preferences</strong> response "
+          "(Balboa settings request <code>0x22</code> / <code>0x08</code>). MQTT: "
           "<code>Spa/&lt;gateway&gt;/preferences/</code>.</p>";
+  html += "<div class=\"config-filter-card\" style=\"margin:0 0 12px 0\"><h2>Maintenance reminders</h2>";
+  html += "<p style=\"margin:0 0 8px 0;font-size:14px\">Controls whether the topside panel shows scheduled messages "
+          "(Clean Filter, Check pH, etc.). This is the same <strong>Reminders</strong> setting on the spa settings menu.</p>";
+  html += "<dl class=\"config-kv\" style=\"margin:0 0 10px 0\"><div class=\"kv-row\"><dt>Current</dt><dd id=\"cfgPrefsRemindersVal\">";
   if (spaPreferencesData.lastUpdate == 0)
   {
-    html += "<p style=\"margin:0\"><em>Not received yet.</em></p></section>";
+    html += "<em>Not received yet</em>";
+  }
+  else
+  {
+    html += spaPreferencesRemindersText(spaPreferencesData.reminders);
+  }
+  html += "</dd></div></dl>";
+  html += "<div class=\"config-backup-actions\" style=\"margin:0\">";
+  html += "<button class=\"equip-btn\" type=\"button\" id=\"cfgPrefsRemindersOnBtn\"";
+  if (spaPreferencesData.lastUpdate == 0 || spaPreferencesRemindersEnabled(spaPreferencesData.reminders))
+  {
+    html += " disabled";
+  }
+  html += ">Turn reminders on</button>";
+  html += "<button class=\"equip-btn\" type=\"button\" id=\"cfgPrefsRemindersOffBtn\"";
+  if (spaPreferencesData.lastUpdate == 0 || !spaPreferencesRemindersEnabled(spaPreferencesData.reminders))
+  {
+    html += " disabled";
+  }
+  html += ">Turn reminders off</button></div>";
+  html += "<p id=\"cfgPrefsRemindersStatus\" class=\"chart-caption\" style=\"margin:8px 0 0 0\">";
+  if (spaPreferencesData.lastUpdate == 0)
+  {
+    html += "Waiting for preferences from the spa controller (requested automatically after connect).";
+  }
+  html += "</p></div>";
+  if (spaPreferencesData.lastUpdate == 0)
+  {
+    html += "</section>";
   }
   else
   {
     html += "<dl class=\"config-kv\">";
-    html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</dd></div>";
-    html += "<div class=\"kv-row\"><dt>reminders</dt><dd>" + String(spaPreferencesData.reminders) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd id=\"cfgPrefsLastUpdate\">" +
+            statusLastUpdateDisplayHtml(spaPreferencesData.lastUpdate) + "</dd></div>";
+    html += "<div class=\"kv-row\"><dt>remindersRaw</dt><dd>0x";
+    if (spaPreferencesData.reminders < 16)
+    {
+      html += "0";
+    }
+    html += String(spaPreferencesData.reminders, HEX);
+    html += " (" + String(spaPreferencesData.reminders) + ")</dd></div>";
     html += "<div class=\"kv-row\"><dt>tempScale</dt><dd>" + String(spaPreferencesData.tempScale) + "</dd></div>";
     html += "<div class=\"kv-row\"><dt>clockMode</dt><dd>" + String(spaPreferencesData.clockMode) + "</dd></div>";
     html += "<div class=\"kv-row\"><dt>cleanupCycle</dt><dd>" + String(spaPreferencesData.cleanupCycle) + "</dd></div>";
@@ -1997,6 +2252,34 @@ void handleConfig(AsyncWebServerRequest *request)
           "prev.textContent='Invalid JSON file.';}}};reader.readAsText(f.files[0]);}"
           "var pv=document.getElementById('cfgImportPreviewBtn');if(pv){pv.addEventListener('click',function(){cfgImportRun(true);});}"
           "var ap=document.getElementById('cfgImportApplyBtn');if(ap){ap.addEventListener('click',function(){cfgImportRun(false);});}"
+          "function cfgSyncPrefsUi(j){if(!j)return;var val=document.getElementById('cfgPrefsRemindersVal');"
+          "var onBtn=document.getElementById('cfgPrefsRemindersOnBtn');var offBtn=document.getElementById('cfgPrefsRemindersOffBtn');"
+          "var st=document.getElementById('cfgPrefsRemindersStatus');"
+          "function cfgRemindersOn(j){if(!j||!j.ready)return false;return typeof j.remindersEnabled==='boolean'?j.remindersEnabled:((Number(j.reminders||0)&1)!==0);}"
+          "if(val){if(j.ready){val.textContent=j.remindersText||'';}else{val.innerHTML='<em>Not received yet</em>';}}"
+          "if(onBtn)onBtn.disabled=!j.ready||cfgRemindersOn(j);if(offBtn)offBtn.disabled=!j.ready||!cfgRemindersOn(j);"
+          "if(st&&!st.dataset.busy){if(!j.ready)st.textContent='Waiting for preferences from the spa controller (requested automatically after connect).';"
+          "else if(!st.textContent)st.textContent='';}}"
+          "function cfgSetReminders(enabled){var st=document.getElementById('cfgPrefsRemindersStatus');"
+          "var label=enabled?'ON':'OFF';"
+          "if(!confirm('Turn panel maintenance reminders '+label+'?\\n\\nThis changes the spa topside Reminders setting (Clean Filter, Check pH, etc.).')){"
+          "if(st)st.textContent='Reminders change canceled.';return;}"
+          "if(st){st.dataset.busy='1';st.textContent='Sending to spa…';}"
+          "var baseLast=0;fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
+          "baseLast=j.lastUpdate||0;return fetch('/api/config/preferences',{method:'POST',headers:{'Content-Type':'application/json'},"
+          "body:JSON.stringify({reminders:enabled?1:0})});}).then(function(r){return r.json();}).then(function(j){"
+          "if(!j.accepted){if(st){st.dataset.busy='';st.textContent='Save rejected: '+(j.reason||'unknown');}return;}"
+          "if(st)st.textContent='Queued — verifying readback…';var tries=0;var timer=setInterval(function(){tries++;"
+          "fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
+          "if(j.ready&&(cfgRemindersOn(j)===enabled||(j.lastUpdate&&j.lastUpdate>baseLast))){"
+          "clearInterval(timer);cfgSyncPrefsUi(j);if(st){st.dataset.busy='';st.textContent='Saved — verified on controller.';}}"
+          "else if(tries>=12){clearInterval(timer);if(st){st.dataset.busy='';st.textContent='Queued — readback not confirmed yet (reload page in a moment).';}}"
+          "}).catch(function(){});},2000);}).catch(function(){if(st){st.dataset.busy='';st.textContent='Save failed.';}});}"
+          "var pOn=document.getElementById('cfgPrefsRemindersOnBtn');if(pOn){pOn.addEventListener('click',function(){cfgSetReminders(true);});}"
+          "var pOff=document.getElementById('cfgPrefsRemindersOffBtn');if(pOff){pOff.addEventListener('click',function(){cfgSetReminders(false);});}"
+          "fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(cfgSyncPrefsUi).catch(function(){});"
+          "setInterval(function(){fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
+          "if(j&&j.ready)cfgSyncPrefsUi(j);}).catch(function(){});},5000);"
           "})();</script>";
 
   html += "</main></div></body></html>";
@@ -2006,8 +2289,8 @@ void handleConfig(AsyncWebServerRequest *request)
               String(spaInformationData.lastUpdate) + "-" +
               String(spaPreferencesData.lastUpdate) + "-" + String(spaSettings0x04Data.lastUpdate) + "-" +
               String(spaFaultLogData.lastUpdate) + "\"";
+  logPortalHtmlMissingGlobalCss(html, "/config");
   sendHtmlWithEtag(request, html, etag);
-  // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
   Log.verbose("[Web]: handleConfig %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 }
 
@@ -2019,9 +2302,15 @@ void handleState(AsyncWebServerRequest *request)
   String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:420px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:#f3f4f6;color:#374151;}.fw-pill-current{background:#edf7ff;color:#0f4a87;border-color:#b7d6f2;}.fw-pill-latest{background:#f7f7f7;color:#4b5563;}.sub-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:#f8fafc;border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
   String html;
   html.reserve(32000);
-  html = "<html>" + headState + stateEnhancements + "<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>" + webMenuState + "<main id='mainContent'>" + ePaper;
+  html = F("<html>");
+  appendPortalHead(html, "ESP State");
+  html += stateEnhancements;
+  html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
+  html += webMenuState;
+  html += F("<main id='mainContent'>");
+  html += ePaper;
   html += "<section class='panel'><div class='state-toolbar'><h1 style='margin:0'>ESP State</h1><label style='font-size:14px'><input id='toggleAdvanced' type='checkbox'/> Show advanced diagnostics</label></div>";
-  html += "<p style='margin:0 0 10px 0;font-size:14px;color:var(--muted)'>Signal-first layout keeps daily health visible. Data/API shortcuts are available below for direct endpoint access.</p></section>";
+  html += "<p style='margin:0 0 10px 0;font-size:14px;color:var(--muted)'>Signal-first layout keeps daily health visible. <b>Reboot gateway</b> and deeper diagnostics are under <b>Show advanced diagnostics</b>. API shortcuts are below for direct endpoint access.</p></section>";
   html += "<div class='state-grid'><section class='panel'><h1>System Health</h1>";
 #ifdef LOCAL_CLIENT
   String rsHealth = String(rs485HealthCode());
@@ -2178,6 +2467,7 @@ void handleState(AsyncWebServerRequest *request)
           "});})();</script></main></div></body></html>";
 
   String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
+  logPortalHtmlMissingGlobalCss(html, "/state");
   sendHtmlWithEtag(request, html, etag);
   Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 
@@ -2252,7 +2542,11 @@ void handleLogsPage(AsyncWebServerRequest *request)
 {
   String html;
   html.reserve(28000);
-  html = "<html class=\"logs-portal\">" + headLogs + "<body class=\"logs-portal\"><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page logs-page'>" + webMenuLogs + "<main id='mainContent'><section class='panel logs-panel'><div class='logs-stack'><h1>Device logs</h1>";
+  html = F("<html class=\"logs-portal\">");
+  appendPortalHead(html, "Spa Logs", ",viewport-fit=cover", portalLogsHeadExtraStyle);
+  html += F("<body class=\"logs-portal\"><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page logs-page'>");
+  html += webMenuLogs;
+  html += F("<main id='mainContent'><section class='panel logs-panel'><div class='logs-stack'><h1>Device logs</h1>");
   html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. Logs are teed to USB <code>Serial</code> (monitor baud) and this ring. For a live tail without USB, use this page or <code>GET /api/logs</code> (optional WebSocket tail). If the firmware was built with <code>TELNET_LOG</code>, <code>TelnetStream</code> also listens on TCP port 23; the global logger is <em>not</em> switched to Telnet (see Wi‑Fi boot messages).</p>";
   html += R"HTML(<style>
 html.logs-portal,body.logs-portal{min-height:100svh;min-height:100dvh}
@@ -2383,6 +2677,7 @@ if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 })();)JS";
   html += "</script></body></html>";
   String etag = String("W/\"logs-") + String(VERSION) + "-" + String(BUILD) + "\"";
+  logPortalHtmlMissingGlobalCss(html, "/logs");
   sendHtmlWithEtag(request, html, etag);
   Log.verbose("[Web]: handleLogsPage %p" CR, request->client()->remoteIP());
 }
@@ -2542,7 +2837,11 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["filter1_running"] = spaFilter1Running() ? 1 : 0;
   doc["filter2_running"] = spaFilter2Running() ? 1 : 0;
   doc["reminderType"] = spaStatusData.reminderType;
-  doc["reminderText"] = getMapDescription(spaStatusData.reminderType, reminderTypeMap);
+  doc["reminderText"] =
+      spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
+  doc["reminderActive"] = spaReminderIsActive(
+      spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
+  doc["reminderIsFault"] = spaReminderIsFault(spaStatusData.reminderType);
   doc["gatewayTimeHHMM"] = statusGatewayLocalTimeHHMM();
 }
 
@@ -3293,6 +3592,55 @@ void handleConfigFilterPost(AsyncWebServerRequest *request)
   }
 
   SpaCommandResult result = spaSetFilterCycles(settings, SPA_COMMAND_SOURCE_WEB);
+  DynamicJsonDocument out(256);
+  out["accepted"] = result.accepted;
+  out["reason"] = result.reason;
+  String reply;
+  serializeJson(out, reply);
+  request->send(result.accepted ? 200 : 409, "application/json", reply);
+}
+
+void handleConfigPreferencesGet(AsyncWebServerRequest *request)
+{
+  DynamicJsonDocument doc(512);
+  spaConfigAppendPreferencesGetJson(doc.to<JsonObject>());
+  String body;
+  serializeJson(doc, body);
+  request->send(200, "application/json", body);
+}
+
+void handleConfigPreferencesPost(AsyncWebServerRequest *request)
+{
+  if (request->_tempObject == nullptr)
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"reason\":\"no_body\"}");
+    return;
+  }
+  String *bodyPtr = (String *)request->_tempObject;
+  String body = *bodyPtr;
+  delete bodyPtr;
+  request->_tempObject = nullptr;
+
+  DynamicJsonDocument doc(128);
+  if (deserializeJson(doc, body))
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"reason\":\"bad_json\"}");
+    return;
+  }
+
+  if (!doc.containsKey("reminders"))
+  {
+    request->send(400, "application/json", "{\"accepted\":false,\"reason\":\"missing_reminders\"}");
+    return;
+  }
+
+  const bool enabled = doc["reminders"].as<int>() != 0;
+  SpaCommandResult result = spaSetPanelReminders(enabled, SPA_COMMAND_SOURCE_WEB);
+  if (result.accepted)
+  {
+    spaRequestPreferences();
+  }
+
   DynamicJsonDocument out(256);
   out["accepted"] = result.accepted;
   out["reason"] = result.reason;

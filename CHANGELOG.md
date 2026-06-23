@@ -8,6 +8,26 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **Panel preferences fetch and reminders control** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Gateway requests Balboa **Preferences** (`0x22` / `0x08`); **`/config`** → **Panel preferences** shows maintenance **Reminders** on/off with browser confirm; **`GET/POST /api/config/preferences`** (`0x27` write). Polls until preferences arrive when not yet received. Some packs (e.g. **M100** / **CL501X1**) encode reminders as a flag byte (**bit 0** = on); **`0x85`** displays as **On** instead of **Unknown (133)**.
+
+- **`/status` reminder visibility** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Top **Panel reminder** banner when a maintenance reminder is active; amber for routine reminders (Clean Filter, pH, etc.), red for fault-class (`0x1E`). Detail row in **Panel and flags** uses matching amber/red styling. API adds `reminderActive` and `reminderIsFault`. Suppress false reminders during priming (`initMode == 1`) as well as spa initializing.
+
+### Changed
+
+- **Reminder text** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Unmapped non-zero reminder codes show **Maintenance reminder** instead of `Unknown (0xNN)`.
+
+## [2.16.0] - 2026-06-23
+
+### Fixed
+
+- **Portal pages missing global CSS** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Build shared `<head>` with sequential `String` appends (`appendPortalHead`) instead of chained `String` temporaries; portal nav/`ePaper` snippets use string literals. If `:root` portal CSS is absent before send, log an error only (no full-page repair copy that could exhaust heap on `/status`). `/status` HTML reserve raised to **70000**.
+
+### Changed
+
+- **ESP State intro** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Note that **Reboot gateway** and deeper diagnostics live under **Show advanced diagnostics**.
+
 ## [2.15.0] - 2026-06-23
 
 ### Added

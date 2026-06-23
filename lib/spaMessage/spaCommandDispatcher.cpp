@@ -305,6 +305,22 @@ SpaCommandResult spaSetTemperatureScale(bool celsius, SpaCommandSource source)
   return queueFrame(frame, "set_temp_scale", source);
 }
 
+SpaCommandResult spaSetPanelReminders(bool enabled, SpaCommandSource source)
+{
+  if (!spaHasFreshStatus())
+  {
+    return {false, SPA_COMMAND_NOT_READY, "spa status not ready"};
+  }
+
+  CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> frame;
+  frame.push(destinationId());
+  frame.push(kBroadcastChannel);
+  frame.push(Set_Preference_Request_Type);
+  frame.push(0x00);
+  frame.push(enabled ? 0x01 : 0x00);
+  return queueFrame(frame, "set_reminders", source);
+}
+
 SpaCommandResult spaSetSpaPanelClockFormat(bool use24Hour, SpaCommandSource source)
 {
   if (!spaHasFreshStatus())

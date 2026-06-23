@@ -54,6 +54,8 @@ SpaCommandResult spaSetTempRange(bool high, SpaCommandSource source = SPA_COMMAN
 SpaCommandResult spaSetTargetTemperature(float targetTemperature, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 /** Balboa `0x27` set temperature scale (`0x00` Fahrenheit, `0x01` Celsius). */
 SpaCommandResult spaSetTemperatureScale(bool celsius, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
+/** Balboa `0x27` panel maintenance reminders (`0x00` off, `0x01` on). */
+SpaCommandResult spaSetPanelReminders(bool enabled, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 /** Balboa `0x21` set panel 12h/24h display bit while preserving current panel time value. */
 SpaCommandResult spaSetSpaPanelClockFormat(bool use24Hour, SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN);
 /** Balboa `0x21` set panel clock (hour 0–23, minute 0–59). High bit of hour follows current `spaStatusData.clockMode` (24h vs 12h display). */

@@ -45,6 +45,7 @@
 #define FILTER_SETTINGS_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x01, 0x00, 0x00, 0x34, 0x7e}
 #define INFORMATION_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x02, 0x00, 0x00, 0x89, 0x7e}
 #define FAULT_LOG_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x20, 0xff, 0x00, 0xcb, 0x7e}
+#define PREFERENCES_REQUEST {0x7e, 0x08, 0x0a, 0xbf, 0x22, 0x08, 0x00, 0x00, 0x0e, 0x7e}
 
 /*
 Settings Code	Name	Subsequent Arguments	Response
@@ -352,8 +353,11 @@ const std::map<uint8_t, const char *> onOffMap = {
     {0, "Off"},
     {1, "On"}};
 
+// Status byte 6 (see ccutrer/balboa_worldwide_app wiki). Model/firmware may emit other values;
+// correlate unknown codes with the topside panel message before adding labels here.
 const std::map<uint8_t, const char *> reminderTypeMap = {
     {0x00, "None"},
+    {0x03, "Clean Filter"},
     {0x04, "Clean Filter"},
     {0x09, "Check Sanitizer"},
     {0x0A, "Check pH"},

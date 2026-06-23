@@ -120,6 +120,24 @@ void spaConfigAppendFilterGetJson(JsonObject root)
   f2["durationMinute"] = spaFilterSettingsData.filt2DurationMinute;
 }
 
+void spaConfigAppendPreferencesGetJson(JsonObject root)
+{
+  const bool ready = spaPreferencesData.lastUpdate != 0;
+  root["ready"] = ready;
+  root["lastUpdate"] = static_cast<long>(spaPreferencesData.lastUpdate);
+  root["reminders"] = spaPreferencesData.reminders;
+  root["remindersEnabled"] = spaPreferencesRemindersEnabled(spaPreferencesData.reminders);
+  root["remindersText"] = spaPreferencesRemindersText(spaPreferencesData.reminders);
+  if (ready)
+  {
+    root["tempScale"] = spaPreferencesData.tempScale;
+    root["clockMode"] = spaPreferencesData.clockMode;
+    root["cleanupCycle"] = spaPreferencesData.cleanupCycle;
+    root["dolphinAddress"] = spaPreferencesData.dolphinAddress;
+    root["m8AI"] = spaPreferencesData.m8AI;
+  }
+}
+
 void spaConfigAppendExportJson(JsonObject root)
 {
   root["schemaVersion"] = 1;
