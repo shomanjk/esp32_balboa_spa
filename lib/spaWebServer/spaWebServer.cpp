@@ -851,76 +851,6 @@ static void appendConfigEquipRow(String &html, const char *load, const String &s
   html += "</td></tr>";
 }
 
-static void spaConfigAppendSummaryPart(String &parts, const char *label)
-{
-  if (parts.length() > 0)
-  {
-    parts += ", ";
-  }
-  parts += label;
-}
-
-static String spaConfigEquipmentSummaryText()
-{
-  String parts;
-  const uint8_t pumps[] = {spaConfigurationData.pump1, spaConfigurationData.pump2, spaConfigurationData.pump3,
-                           spaConfigurationData.pump4, spaConfigurationData.pump5, spaConfigurationData.pump6};
-  for (unsigned i = 0; i < 6; i++)
-  {
-    if (pumps[i] == 0)
-    {
-      continue;
-    }
-    char label[28];
-    if (pumps[i] == 1)
-    {
-      snprintf(label, sizeof(label), "Pump %u (1-speed)", i + 1);
-    }
-    else if (pumps[i] == 2)
-    {
-      snprintf(label, sizeof(label), "Pump %u (2-speed)", i + 1);
-    }
-    else
-    {
-      snprintf(label, sizeof(label), "Pump %u (code %u)", i + 1, pumps[i]);
-    }
-    spaConfigAppendSummaryPart(parts, label);
-  }
-  if (spaConfigurationData.light1 != 0)
-  {
-    spaConfigAppendSummaryPart(parts, "Light 1");
-  }
-  if (spaConfigurationData.light2 != 0)
-  {
-    spaConfigAppendSummaryPart(parts, "Light 2");
-  }
-  if (spaConfigurationData.circulationPump)
-  {
-    spaConfigAppendSummaryPart(parts, "Circulation pump");
-  }
-  if (spaConfigurationData.blower)
-  {
-    spaConfigAppendSummaryPart(parts, "Blower");
-  }
-  if (spaConfigurationData.mister)
-  {
-    spaConfigAppendSummaryPart(parts, "Mister");
-  }
-  if (spaConfigurationData.aux1)
-  {
-    spaConfigAppendSummaryPart(parts, "Aux 1");
-  }
-  if (spaConfigurationData.aux2)
-  {
-    spaConfigAppendSummaryPart(parts, "Aux 2");
-  }
-  if (parts.length() == 0)
-  {
-    return String("No loads reported as installed (unusual — check raw frame below).");
-  }
-  return parts;
-}
-
 static void appendStatusEquipCell(String &html, const char *label, const String &value, bool configuredAbsent)
 {
   if (configuredAbsent)
@@ -1209,6 +1139,11 @@ void handleStatus(AsyncWebServerRequest *request)
       ".equip-cell.equip-absent{opacity:0.58;background:#eef1f4;color:var(--muted);border-color:#dde2e8;box-shadow:inset 4px 0 0 0 #c5ced6;}"
       ".equip-cell.equip-absent .equip-label{color:#7a8794;}"
       ".equip-cell.equip-absent .equip-val{font-weight:500;color:#5f6c7b;}"
+      ".equip-grid.status-equip-hide-absent .equip-cell.equip-absent{display:none;}"
+      ".status-equip-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;}"
+      ".status-equip-head h2{margin:0;}"
+      ".status-equip-show-absent-lbl{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);cursor:pointer;user-select:none;}"
+      ".status-equip-show-absent-lbl input{margin:0;width:1rem;height:1rem;cursor:pointer;}"
       ".equip-label{font-size:0.82rem;color:var(--muted);font-weight:600;}"
       ".equip-val{font-weight:600;margin-top:2px;line-height:1.35;}"
       ".equip-actions{margin-top:8px;}"
@@ -1409,7 +1344,10 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "</pre></details></section>";
   }
 
-  html += "<section class=\"panel status-span-full\"><h2>Equipment</h2><div class=\"equip-grid\">";
+  html += "<section class=\"panel status-span-full\"><div class=\"status-equip-head\"><h2>Equipment</h2>";
+  html += "<label class=\"status-equip-show-absent-lbl\"><input type=\"checkbox\" id=\"statusEquipShowAbsent\" "
+          "onchange=\"statusToggleEquipAbsent(this.checked)\" /> Show not installed</label></div>";
+  html += "<div class=\"equip-grid status-equip-hide-absent\" id=\"statusEquipGrid\">";
   appendStatusControlCell(html, "Pump 1", "pump1", statusPumpDisplayState(1), statusPumpConfiguredAbsent(1), 4, statusPumpIsOn(1) ? "off" : "on", statusPumpEquipStateClass(1, statusPumpConfiguredAbsent(1)));
   appendStatusControlCell(html, "Pump 2", "pump2", statusPumpDisplayState(2), statusPumpConfiguredAbsent(2), 5, statusPumpIsOn(2) ? "off" : "on", statusPumpEquipStateClass(2, statusPumpConfiguredAbsent(2)));
   appendStatusControlCell(html, "Pump 3", "pump3", statusPumpDisplayState(3), statusPumpConfiguredAbsent(3), 6, statusPumpIsOn(3) ? "off" : "on", statusPumpEquipStateClass(3, statusPumpConfiguredAbsent(3)));
@@ -1572,6 +1510,8 @@ void handleStatus(AsyncWebServerRequest *request)
           "return false;"
           "}finally{statusHistoriesLoading=false;}}"
           "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
+          "function statusToggleEquipAbsent(show){var g=document.getElementById('statusEquipGrid');if(!g)return;"
+          "if(show){g.classList.remove('status-equip-hide-absent');}else{g.classList.add('status-equip-hide-absent');}}"
           "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
           "function statusSetEquipStateClass(key,state){var c=statusEquipCell(key);if(!c||c.classList.contains('equip-absent'))return;"
           "var states=['equip-cell--off','equip-cell--low','equip-cell--high','equip-cell--on'];for(var i=0;i<states.length;i++)c.classList.remove(states[i]);"
@@ -1929,7 +1869,6 @@ void handleConfig(AsyncWebServerRequest *request)
       "table.config-equip th{font-size:13px;color:var(--muted);}"
       "table.config-equip tr.config-equip-absent td{color:var(--muted);opacity:0.78;}"
       "table.config-equip tr.config-equip-absent td:first-child{font-weight:500;}"
-      ".config-equip-summary{margin:0 0 10px 0;font-size:14px;line-height:1.45;}"
       ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch;margin:0 0 var(--space-3) 0;}"
       "@media (max-width:560px){.config-filter-strip{grid-template-columns:1fr;}}"
       ".config-filter-card{display:flex;flex-direction:column;min-height:100%;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fafbfc;}"
@@ -1984,8 +1923,7 @@ void handleConfig(AsyncWebServerRequest *request)
   html += "<pre id='cfgImportPreview' class='config-hex' style='display:none'></pre></section>";
 
   html += "<section class='panel' id='cfg-equipment'><h1>Equipment wiring (configuration)</h1>";
-  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">Which pumps, lights, and loads exist on this spa pack (configuration frame). "
-          "This differs from live runtime state on <a href='/status'>Spa Status</a>.</p>";
+  html += "<p class=\"chart-caption\" style=\"margin:0 0 10px 0\">For live state and controls, see <a href='/status'>Spa Status</a>.</p>";
   if (spaConfigurationData.lastUpdate == 0)
   {
     html += "<p style=\"margin:0\"><em>Configuration frame not available yet.</em></p>";
@@ -1994,26 +1932,29 @@ void handleConfig(AsyncWebServerRequest *request)
   {
     html += "<dl class=\"config-kv\">";
     html += "<div class=\"kv-row\"><dt>lastUpdate</dt><dd>" + statusLastUpdateDisplayHtml(spaConfigurationData.lastUpdate) + "</dd></div>";
+    html += "</dl>";
+    html += "<table class=\"config-equip\"><thead><tr><th>Load</th><th>Configured as</th></tr></thead><tbody>";
+    appendConfigEquipRow(html, "Pump 1", spaConfigPumpInstallLabel(spaConfigurationData.pump1), spaConfigurationData.pump1 == 0);
+    appendConfigEquipRow(html, "Pump 2", spaConfigPumpInstallLabel(spaConfigurationData.pump2), spaConfigurationData.pump2 == 0);
+    appendConfigEquipRow(html, "Pump 3", spaConfigPumpInstallLabel(spaConfigurationData.pump3), spaConfigurationData.pump3 == 0);
+    appendConfigEquipRow(html, "Pump 4", spaConfigPumpInstallLabel(spaConfigurationData.pump4), spaConfigurationData.pump4 == 0);
+    appendConfigEquipRow(html, "Pump 5", spaConfigPumpInstallLabel(spaConfigurationData.pump5), spaConfigurationData.pump5 == 0);
+    appendConfigEquipRow(html, "Pump 6", spaConfigPumpInstallLabel(spaConfigurationData.pump6), spaConfigurationData.pump6 == 0);
+    appendConfigEquipRow(html, "Light 1", spaConfigLightInstallLabel(spaConfigurationData.light1), spaConfigurationData.light1 == 0);
+    appendConfigEquipRow(html, "Light 2", spaConfigLightInstallLabel(spaConfigurationData.light2), spaConfigurationData.light2 == 0);
+    appendConfigEquipRow(html, "Blower", spaConfigLoadInstallLabel(spaConfigurationData.blower), !spaConfigurationData.blower);
+    appendConfigEquipRow(html, "Circulation pump", spaConfigLoadInstallLabel(spaConfigurationData.circulationPump),
+                         !spaConfigurationData.circulationPump);
+    appendConfigEquipRow(html, "Aux 1", spaConfigLoadInstallLabel(spaConfigurationData.aux1), !spaConfigurationData.aux1);
+    appendConfigEquipRow(html, "Aux 2", spaConfigLoadInstallLabel(spaConfigurationData.aux2), !spaConfigurationData.aux2);
+    appendConfigEquipRow(html, "Mister", spaConfigLoadInstallLabel(spaConfigurationData.mister), !spaConfigurationData.mister);
+    html += "</tbody></table>";
+    html += "<details><summary><b>Configuration metadata &amp; raw frame</b></summary>";
+    html += "<dl class=\"config-kv\">";
     html += "<div class=\"kv-row\"><dt>magicNumber</dt><dd>" + String(spaConfigurationData.magicNumber) + "</dd></div>";
     html += "<div class=\"kv-row\"><dt>configuration CRC</dt><dd>" + String(spaConfigurationData.crc) + "</dd></div>";
     html += "</dl>";
-    html += "<table class=\"config-equip\"><thead><tr><th>Load</th><th>Value</th></tr></thead><tbody>";
-    html += "<tr><td>Pump 1</td><td>" + String(spaConfigurationData.pump1) + "</td></tr>";
-    html += "<tr><td>Pump 2</td><td>" + String(spaConfigurationData.pump2) + "</td></tr>";
-    html += "<tr><td>Pump 3</td><td>" + String(spaConfigurationData.pump3) + "</td></tr>";
-    html += "<tr><td>Pump 4</td><td>" + String(spaConfigurationData.pump4) + "</td></tr>";
-    html += "<tr><td>Pump 5</td><td>" + String(spaConfigurationData.pump5) + "</td></tr>";
-    html += "<tr><td>Pump 6</td><td>" + String(spaConfigurationData.pump6) + "</td></tr>";
-    html += "<tr><td>Light 1</td><td>" + String(spaConfigurationData.light1) + "</td></tr>";
-    html += "<tr><td>Light 2</td><td>" + String(spaConfigurationData.light2) + "</td></tr>";
-    html += "<tr><td>Blower</td><td>" + String(spaConfigurationData.blower) + "</td></tr>";
-    html += "<tr><td>Circulation pump</td><td>" + String(spaConfigurationData.circulationPump) + "</td></tr>";
-    html += "<tr><td>Aux 1</td><td>" + String(spaConfigurationData.aux1) + "</td></tr>";
-    html += "<tr><td>Aux 2</td><td>" + String(spaConfigurationData.aux2) + "</td></tr>";
-    html += "<tr><td>Mister</td><td>" + String(spaConfigurationData.mister) + "</td></tr>";
-    html += "<tr><td>temp_scale</td><td>" + String(spaConfigurationData.temp_scale) + "</td></tr>";
-    html += "</tbody></table>";
-    html += "<details><summary><b>Raw configuration frame (hex)</b></summary><pre class=\"config-hex\">" +
+    html += "<pre class=\"config-hex\">" +
             spaHexWordsUpper(spaConfigurationData.rawData, spaConfigurationData.rawDataLength, 48) + "</pre></details>";
   }
   html += "</section>";

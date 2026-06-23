@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.17.1] - 2026-06-23
+
+### Changed
+
+- **`/config` equipment wiring** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Drop redundant “Configured on this pack” summary; shorten intro to link to **Spa Status** only.
+
+- **`/status` equipment** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **Show not installed** checkbox (off by default) hides greyed-out equipment cards; check to show the full grid including absent slots.
+
+## [2.17.0] - 2026-06-23
+
 ### Added
 
 - **Panel preferences fetch and reminders control** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Gateway requests Balboa **Preferences** (`0x22` / `0x08`); **`/config`** → **Panel preferences** shows maintenance **Reminders** on/off with browser confirm; **`GET/POST /api/config/preferences`** (`0x27` write). Polls until preferences arrive when not yet received. Some packs (e.g. **M100** / **CL501X1**) encode reminders as a flag byte (**bit 0** = on); **`0x85`** displays as **On** instead of **Unknown (133)**.
@@ -17,6 +27,8 @@ where version numbers are used.
 ### Changed
 
 - **Reminder text** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Unmapped non-zero reminder codes show **Maintenance reminder** instead of `Unknown (0xNN)`.
+
+- **`/config` equipment wiring** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Human-readable **Configured as** labels (Not installed, 1-speed, 2-speed, Installed), summary line of fitted loads, muted rows for absent slots, clearer intro vs live **Spa Status**. Developer fields (magic number, CRC, raw hex) moved under **Configuration metadata & raw frame**; removed misleading **`temp_scale`** row (not decoded from the configuration frame).
 
 ## [2.16.0] - 2026-06-23
 
@@ -850,7 +862,9 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.8.6...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.17.1...HEAD
+[2.17.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.17.0...v2.17.1
+[2.17.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.16.0...v2.17.0
 [2.8.6]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.8.5...v2.8.6
 [2.4.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.2.3...v2.3.0
