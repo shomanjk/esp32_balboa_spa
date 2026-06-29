@@ -20,7 +20,7 @@ This is **moderate DIY**, not a sealed appliance: you need a safe **RS485 tap**,
 
 ### What you need
 
-- **Required:** Balboa spa with RS485 access ([ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer)); **2.4 GHz Wi‑Fi**; USB for the first firmware upload.
+- **Required:** Balboa spa with RS485 access ([ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer)); **2.4 GHz Wi‑Fi**; USB for the first firmware upload. Not sure if your tub qualifies? See the wiki [Spa controllers and brands](https://github.com/shomanjk/esp32_balboa_spa/wiki/Spa-controllers-and-brands) catalog (identify the pack label first).
 - **Recommended (documented tub-side stack):** [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) + [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) — two boards that stack; the base includes the RS485 transceiver and 12→5 V for the Atom ([M5 tub-side section](#m5-atom-lite--atomic-rs485-base-tub-side)).
 - **Also supported:** Generic ESP32 dev board + RS485 module (default UART **GPIO 16/17** in [`src/config-example.h`](src/config-example.h)).
 - **Optional:** MQTT broker / Home Assistant; a second device only for an [ePaper remote display](#epaper-remote-display-optional) or the legacy [TCP bridge](#optional-homebridge-and-tcp-bridge-bridge) (Homebridge).

@@ -28,6 +28,7 @@ These live in the [main repository](https://github.com/shomanjk/esp32_balboa_spa
 | [Hardware targets](Hardware-targets) | Supported vs planned boards, bring-up checklist (e.g. AtomS3) |
 | [Troubleshooting FAQ](Troubleshooting-FAQ) | Symptom → checks → deeper repo links |
 | [Home Assistant setup](Home-Assistant-setup) | Broker, discovery, temp units, example automation |
+| [Spa controllers and brands](Spa-controllers-and-brands) | Balboa pack catalog, OEM brand index, compatibility status |
 | [Hardware field notes](Hardware-field-notes) | Community-tested tubs and boards |
 
 ---
@@ -41,6 +42,7 @@ These live in the [main repository](https://github.com/shomanjk/esp32_balboa_spa
 
 ## Contributing to this wiki
 
+- **Catalog stubs:** Edit status, RS485 notes, and OEM brands on [Spa controllers and brands](Spa-controllers-and-brands).
 - **Field reports:** Add a row on [Hardware field notes](Hardware-field-notes) (tub model, board, PlatformIO env, outcome).
 - **Corrections:** Edit the wiki page directly, or open an [Issue](https://github.com/shomanjk/esp32_balboa_spa/issues) with tub model + board + what you tried.
 - **Behavior that depends on a firmware release** (new MQTT topics, flags, APIs): update the **main repo README/CHANGELOG** in a PR; link from the wiki, do not duplicate long tables here.
