@@ -900,6 +900,11 @@ String getMapDescription(uint8_t element, const std::map<uint8_t, const char *> 
   return String(buf);
 }
 
+const char *spaBlowerBinaryLabel(uint8_t blower)
+{
+  return spaBlowerIsOn(blower) ? "On" : "Off";
+}
+
 String spaReminderText(uint8_t reminderType, uint8_t spaState)
 {
   if (reminderType == 0x00)

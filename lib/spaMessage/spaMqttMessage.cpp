@@ -94,7 +94,7 @@ void publishSpaStatusData()
   PUBLISH_STATE_MAP(pump5, pumpMap);
   PUBLISH_STATE_MAP(pump6, pumpMap);
   PUBLISH_STATE_MAP(circ, onOffMap);
-  PUBLISH_STATE_MAP(blower, onOffMap);
+  publishElement("blower", "status", spaBlowerBinaryLabel(spaStatusData.blower));
   PUBLISH_STATE_MAP(light1, onOffMap);
   PUBLISH_STATE_MAP(light2, onOffMap);
   PUBLISH_STATE_MAP(mister, onOffMap);

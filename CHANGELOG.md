@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.18.4] - 2026-06-29
+
+### Fixed
+
+- **MQTT/HA blower status** ([`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Publish **`On`/`Off`** when the status blower field is non-zero; fixes **`Unknown (0x03)`** feedback when controllers report values other than `1` ([issue #10](https://github.com/shomanjk/esp32_balboa_spa/issues/10)). Web **`/status`** blower label uses the same rule on first render.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.4`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.18.3] - 2026-06-23
 
 ### Changed

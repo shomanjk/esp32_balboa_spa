@@ -30,6 +30,10 @@ void spaRequestPreferences();
 void spaScheduleFilterSettingsReadbackFollowup(uint8_t extraReads = 2);
 
 String getMapDescription(uint8_t element, const std::map<uint8_t, const char*>& suppliedMap);
+/** True when status byte 13 blower field (TwoBit, 0–3) is non-zero. */
+inline bool spaBlowerIsOn(uint8_t blower) { return blower != 0; }
+/** MQTT/HA and portal binary label for blower status. */
+const char *spaBlowerBinaryLabel(uint8_t blower);
 /** Human-readable maintenance reminder from status byte 6 (handles boot/init edge cases). */
 String spaReminderText(uint8_t reminderType, uint8_t spaState);
 /** Panel reminders master enable (preferences byte 1, bit 0; some packs set extra flag bits). */
