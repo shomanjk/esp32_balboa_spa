@@ -42,13 +42,21 @@ Edit at minimum:
 
 Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pins.
 
+Also copy local upload/monitor ports (gitignored):
+
+```bash
+cp platformio_local.ini.example platformio_local.ini
+```
+
+Edit `upload_port` / `monitor_port` per env (USB `/dev/cu.…` or OTA `spa-XXXXXXXXXXXX.local` / LAN IP). Or pass `--upload-port` on the CLI.
+
 ### 3. Build and flash firmware
 
 ```bash
 pio run -e M5AtomLite-tub -t upload
 ```
 
-Set `upload_port` in [`platformio.ini`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/platformio.ini) or pass `--upload-port /dev/cu.…` if PlatformIO does not auto-detect USB.
+Set `upload_port` / `monitor_port` in **`platformio_local.ini`** (copy from [`platformio_local.ini.example`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/platformio_local.ini.example)) or pass `--upload-port /dev/cu.…` if PlatformIO does not auto-detect USB.
 
 ### 4. Flash filesystem (web UI)
 

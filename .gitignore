@@ -1,6 +1,7 @@
 .pio
 .vscode
 compile_commands.json
+platformio_local.ini
 
 # macOS
 .DS_Store

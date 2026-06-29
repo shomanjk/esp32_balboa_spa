@@ -1,0 +1,22 @@
+; Copy to platformio_local.ini (gitignored) and fill in your device.
+; Alternative: pio run -e <env> -t upload --upload-port <host-or-ip>
+
+[env:ESP32serial]
+upload_port = /dev/cu.usbserial-XXXX
+monitor_port = /dev/cu.usbserial-XXXX
+
+[env:ESP32ota]
+upload_port = spa-XXXXXXXXXXXX.local
+
+[env:ESP32prodOta]
+upload_port = spa-XXXXXXXXXXXX.local
+
+[env:M5AtomLite-tub]
+upload_port = /dev/cu.usbserial-XXXX
+monitor_port = /dev/cu.usbserial-XXXX
+
+[env:M5AtomLite-tub-ota]
+upload_port = spa-XXXXXXXXXXXX.local
+
+[env:ESP32-epd47]
+upload_port = spa-XXXXXXXXXXXX.local

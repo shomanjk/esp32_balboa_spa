@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **PlatformIO local ports:** Device-specific `upload_port` / `monitor_port` values moved out of committed [`platformio.ini`](platformio.ini) into gitignored **`platformio_local.ini`** (template: [`platformio_local.ini.example`](platformio_local.ini.example)).
+
 ## [2.18.4] - 2026-06-29
 
 ### Fixed

@@ -92,9 +92,9 @@ Planned and deferred **product** direction lives in the README so it stays visib
 ## Flashing (PlatformIO CLI)
 
 1. **`PATH`:** If `pio` is not found, use `~/.platformio/penv/bin/pio` or add `export PATH="$HOME/.platformio/penv/bin:$PATH"` to `~/.zshrc`.
-2. **`src/config.h`:** Copy from [`src/config-example.h`](src/config-example.h); set Wi‑Fi/MQTT and RS485 pins for your hardware (see [README](README.md)).
+2. **Local config:** Copy [`src/config-example.h`](src/config-example.h) → `src/config.h` (Wi‑Fi/MQTT/RS485 pins) and [`platformio_local.ini.example`](platformio_local.ini.example) → `platformio_local.ini` (USB/OTA ports; gitignored).
 3. **Build:** `pio run -e M5AtomLite-tub` (first build may fetch toolchains and run the LittleFS `balboa-spa` pre-build — requires Node/npm if the web bundle is built).
-4. **USB upload:** Connect the Atom; then `pio run -e M5AtomLite-tub -t upload` (set `upload_port` in [`platformio.ini`](platformio.ini) or use `pio run ... -t upload --upload-port /dev/cu.…` if needed).
+4. **USB upload:** Connect the Atom; then `pio run -e M5AtomLite-tub -t upload` (ports from `platformio_local.ini` or `pio run ... -t upload --upload-port /dev/cu.…` if needed).
 5. **Filesystem (web UI):** `pio run -e M5AtomLite-tub -t uploadfs` after firmware, if you use the bundled web assets.
 6. **Serial monitor:** `pio device monitor -e M5AtomLite-tub -b 115200`.
 

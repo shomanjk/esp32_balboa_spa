@@ -336,7 +336,7 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
 ## OTA updates (M5 Atom tub-side)
 
 - **ArduinoOTA** is enabled from Wi‑Fi connect ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)); serial logs show hostname/IP.
-- Use environment **`M5AtomLite-tub-ota`** (`upload_protocol = espota`). Set `upload_port` in [`platformio.ini`](platformio.ini) to `spa-XXXXXXXXXXXX.local` or the device IP.
+- Use environment **`M5AtomLite-tub-ota`** (`upload_protocol = espota`). Copy [`platformio_local.ini.example`](platformio_local.ini.example) to **`platformio_local.ini`** (gitignored) and set `upload_port` to `spa-XXXXXXXXXXXX.local` or the device IP — or pass `--upload-port` on the CLI.
 
 ```
 pio run -e M5AtomLite-tub-ota -t upload

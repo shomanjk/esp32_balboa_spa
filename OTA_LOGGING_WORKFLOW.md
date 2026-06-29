@@ -46,7 +46,8 @@ The device reboots after OTA. If you are on **USB serial**, restart the monitor 
 
 ### OTA upload cannot find device
 
-- Set `upload_port` in `platformio.ini` to the current hostname or IP.
+- Copy [`platformio_local.ini.example`](platformio_local.ini.example) to **`platformio_local.ini`** and set `upload_port` to the current hostname or IP.
+- Or pass `--upload-port` on the CLI.
 - Prefer IP if mDNS (`.local`) is unreliable on your network.
 
 ### No serial output in monitor
