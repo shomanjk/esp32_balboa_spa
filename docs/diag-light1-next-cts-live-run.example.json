@@ -1,0 +1,68 @@
+{
+  "_note": "Redacted example of GET /api/diag/light1_next_cts output. Save real captures as docs/diag-*.json locally (gitignored).",
+  "version": {
+    "version": "1.6.1",
+    "build": "Apr 28 2026 - 12:16:38",
+    "hostname": "spa-XXXXXXXXXXXX",
+    "ip": "192.168.x.x",
+    "restartReason": "Software reset via esp_restart - OTA Update"
+  },
+  "baseline": {
+    "lastUpdate": 1777396663,
+    "tempScaleCelsius": false,
+    "setTemp": 76,
+    "light1": 0,
+    "light2": 0,
+    "pump1": 0,
+    "pump2": 0,
+    "pump3": 0,
+    "pump4": 0,
+    "pump5": 0,
+    "pump6": 0,
+    "pump1On": false,
+    "pump2On": false,
+    "pump3On": false,
+    "pump4On": false,
+    "pump5On": false,
+    "pump6On": false,
+    "blower": 0,
+    "mister": 0
+  },
+  "results": [
+    {
+      "label": "next_cts_default",
+      "params": {
+        "observe_ms": 4000
+      },
+      "trials": [
+        {
+          "i": 1,
+          "ts": "2026-04-28T12:18:15.960194",
+          "ok": true,
+          "result": "armed_next_cts",
+          "fired": true,
+          "armedAt": 1,
+          "firedAt": 1,
+          "light1Changed": false,
+          "beforeLight1": 0,
+          "afterLight1": 0,
+          "beforeCts": 1077,
+          "afterCts": 1078,
+          "waitElapsedMs": 19,
+          "beforeBytes": {
+            "hf": 0,
+            "pp": 40,
+            "lf": 4,
+            "stRaw": 0
+          },
+          "afterBytes": {
+            "hf": 0,
+            "pp": 40,
+            "lf": 4,
+            "stRaw": 0
+          }
+        }
+      ]
+    }
+  ]
+}

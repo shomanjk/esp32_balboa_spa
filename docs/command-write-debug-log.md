@@ -2,6 +2,8 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
+Live gateway diagnostic exports (`docs/diag-*.json`, `docs/telnet-*.txt`) are **gitignored** — same policy as generated bridge run outputs. Shape reference: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json).
+
 ## 2026-06-22 - MQTT filter schedule writes + running telemetry
 
 - **Implementation:** [`mqttModule.cpp`](../lib/mqttModule/mqttModule.cpp) dispatches **`Spa/<gateway>/cmd/filter`** (JSON, merge from cache) and granular **`cmd/filter/filter{1,2}/{start,duration,enabled}`** via shared helpers in [`spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) → **`spaSetFilterCycles(..., SPA_COMMAND_SOURCE_MQTT)`**. Read telemetry: **`status/filter1_running`**, **`status/filter2_running`** from live **`filterMode`** ([`spaMqttMessage.cpp`](../lib/spaMessage/spaMqttMessage.cpp)); HA **`binary_sensor`** discovery in [`haMqttDiscovery.cpp`](../lib/mqttModule/haMqttDiscovery.cpp).
@@ -173,11 +175,11 @@ Matrix execution status:
   - `0x11` (toggle): ready to execute via bridge using known frame `7e 07 0a bf 11 04 00 13 7e`
   - `0x20` (set temp): matrix includes `set_temp_100f` frame `7e 06 0a bf 20 64 c1 7e`
 
-### 2026-04-28 live bridge harness run (`spa-142B2FA1127C.local`)
+### 2026-04-28 live bridge harness run (`spa-XXXXXXXXXXXX.local`)
 
 Command:
 
-- `python3 scripts/bridge_raw_tester.py --host spa-142B2FA1127C.local --matrix docs/bridge-raw-command-matrix.example.json --out docs/bridge-raw-live-run.json`
+- `python3 scripts/bridge_raw_tester.py --host spa-XXXXXXXXXXXX.local --matrix docs/bridge-raw-command-matrix.example.json --out docs/bridge-raw-live-run.json`
 
 Results:
 
@@ -199,7 +201,7 @@ Interpretation:
 
 Command:
 
-- `python3 scripts/bridge_raw_tester.py --host spa-142B2FA1127C.local --label set_temp_100f_repeat3 --frame-hex 7e060abf2064c17e --retries 3 --cooldown-ms 2000 --timeout-ms 1800 --out docs/bridge-raw-live-settemp-repeat3.json`
+- `python3 scripts/bridge_raw_tester.py --host spa-XXXXXXXXXXXX.local --label set_temp_100f_repeat3 --frame-hex 7e060abf2064c17e --retries 3 --cooldown-ms 2000 --timeout-ms 1800 --out docs/bridge-raw-live-settemp-repeat3.json`
 
 Results:
 
@@ -308,7 +310,7 @@ Operating notes for Light 1 phase:
 
 Command behavior summary:
 
-- Ran the 4-case Light 1 matrix from `docs/bridge-raw-light1-matrix.example.json` against `spa-142B2FA1127C.local`.
+- Ran the 4-case Light 1 matrix from `docs/bridge-raw-light1-matrix.example.json` against `spa-XXXXXXXXXXXX.local`.
 - All four writes returned immediate status frames (`0x13`) on the bridge socket.
 - No case produced an observed Light 1 state transition in returned status payloads.
 
@@ -559,7 +561,7 @@ Firmware:
 
 Artifact:
 
-- `docs/diag-light1-next-cts-live-run.json`
+- `docs/diag-light1-next-cts-live-run.json` (local, gitignored; shape: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json))
 
 Trial groups and outcomes:
 
@@ -589,7 +591,7 @@ Firmware:
 
 Artifact:
 
-- `docs/diag-light1-next-cts-live-run-decoded.json`
+- `docs/diag-light1-next-cts-live-run-decoded.json` (local, gitignored)
 
 Trial groups:
 
@@ -614,7 +616,7 @@ Firmware behavior exercised:
 
 - Endpoint: `GET /api/diag/light1_next_cts_window`
 - Run params: `observe_ms=7000`, `sample_ms=120`
-- Live artifact: `docs/diag-light1-next-cts-window-live-run.json`
+- Live artifact: `docs/diag-light1-next-cts-window-live-run.json` (local, gitignored)
 
 Observed results:
 
@@ -631,7 +633,7 @@ Interpretation:
 
 Artifact:
 
-- `docs/diag-light1-next-cts-window-ab-live-run.json`
+- `docs/diag-light1-next-cts-window-ab-live-run.json` (local, gitignored)
 
 Matrix:
 

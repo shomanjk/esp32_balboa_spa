@@ -2,7 +2,8 @@
 // import { console } from 'console';
 import * as net from 'net';
 
-const host = "spa-240AC4EC20DC.local.";
+// Set SPA_BRIDGE_HOST or pass hostname as first CLI arg (e.g. spa-XXXXXXXXXXXX.local).
+const host = process.env.SPA_BRIDGE_HOST || process.argv[2] || "127.0.0.1";
 var isCurrentlyConnectedToSpa = false;
 var socket = null;
 var reconnecting = false;

@@ -11,6 +11,8 @@ where version numbers are used.
 ### Changed
 
 - **PlatformIO local ports:** Device-specific `upload_port` / `monitor_port` values moved out of committed [`platformio.ini`](platformio.ini) into gitignored **`platformio_local.ini`** (template: [`platformio_local.ini.example`](platformio_local.ini.example)).
+- **Live diagnostic captures:** Removed maintainer-specific `docs/diag-*.json` and `docs/telnet-*.txt` from the repo (gitignored); redacted hostnames in [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md); added [`docs/diag-light1-next-cts-live-run.example.json`](docs/diag-light1-next-cts-live-run.example.json) as a redacted API shape reference.
+- **Privacy / local-only tooling:** [`emulator/bridgeClient.js`](emulator/bridgeClient.js) no longer hardcodes a tub hostname (use `SPA_BRIDGE_HOST` or CLI arg). Removed tracked [`.clang_complete`](.clang_complete), [`.gcc-flags.json`](.gcc-flags.json) (upstream IDE paths), and [`docs/bridge-raw-last-run.json`](docs/bridge-raw-last-run.json) (already gitignored generated output).
 
 ## [2.18.4] - 2026-06-29
 
