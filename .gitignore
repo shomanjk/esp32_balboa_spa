@@ -1,11 +1,15 @@
 .pio
 .vscode
+compile_commands.json
 
 # macOS
 .DS_Store
 
 # Claude Code / local agent worktrees (never version)
 .claude/
+
+# Cursor IDE local rules and settings (never version)
+.cursor/
 
 # Local PlatformIO installer artifact (if downloaded into repo root)
 get-platformio.py
