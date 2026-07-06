@@ -359,6 +359,7 @@ const std::map<uint8_t, const char *> reminderTypeMap = {
     {0x00, "None"},
     {0x03, "Clean Filter"},
     {0x04, "Clean Filter"},
+    {0x08, "Change Water"},
     {0x09, "Check Sanitizer"},
     {0x0A, "Check pH"},
     {0x1E, "Fault"}};

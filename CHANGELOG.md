@@ -14,6 +14,16 @@ where version numbers are used.
 - **Live diagnostic captures:** Removed maintainer-specific `docs/diag-*.json` and `docs/telnet-*.txt` from the repo (gitignored); redacted hostnames in [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md); added [`docs/diag-light1-next-cts-live-run.example.json`](docs/diag-light1-next-cts-live-run.example.json) as a redacted API shape reference.
 - **Privacy / local-only tooling:** [`emulator/bridgeClient.js`](emulator/bridgeClient.js) no longer hardcodes a tub hostname (use `SPA_BRIDGE_HOST` or CLI arg). Removed tracked [`.clang_complete`](.clang_complete), [`.gcc-flags.json`](.gcc-flags.json) (upstream IDE paths), and [`docs/bridge-raw-last-run.json`](docs/bridge-raw-last-run.json) (already gitignored generated output).
 
+## [2.18.5] - 2026-07-06
+
+### Fixed
+
+- **Reminder text — Change Water** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)): Map status byte 6 value **`0x08`** to **Change Water** (verified on **BP501** / **CL501X1** with topside **CHNG WATR**). **`/status`**, MQTT **`status/reminderText`**, and HA **`reminder`** sensor no longer show the generic **Maintenance reminder** for that code.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.5`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.18.4] - 2026-06-29
 
 ### Fixed

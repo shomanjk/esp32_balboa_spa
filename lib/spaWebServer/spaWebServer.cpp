@@ -2085,7 +2085,7 @@ void handleConfig(AsyncWebServerRequest *request)
           "<code>Spa/&lt;gateway&gt;/preferences/</code>.</p>";
   html += "<div class=\"config-filter-card\" style=\"margin:0 0 12px 0\"><h2>Maintenance reminders</h2>";
   html += "<p style=\"margin:0 0 8px 0;font-size:14px\">Controls whether the topside panel shows scheduled messages "
-          "(Clean Filter, Check pH, etc.). This is the same <strong>Reminders</strong> setting on the spa settings menu.</p>";
+          "(Clean Filter, Check pH, Change Water, etc.). This is the same <strong>Reminders</strong> setting on the spa settings menu.</p>";
   html += "<dl class=\"config-kv\" style=\"margin:0 0 10px 0\"><div class=\"kv-row\"><dt>Current</dt><dd id=\"cfgPrefsRemindersVal\">";
   if (spaPreferencesData.lastUpdate == 0)
   {
@@ -2272,7 +2272,7 @@ void handleConfig(AsyncWebServerRequest *request)
           "else if(!st.textContent)st.textContent='';}}"
           "function cfgSetReminders(enabled){var st=document.getElementById('cfgPrefsRemindersStatus');"
           "var label=enabled?'ON':'OFF';"
-          "if(!confirm('Turn panel maintenance reminders '+label+'?\\n\\nThis changes the spa topside Reminders setting (Clean Filter, Check pH, etc.).')){"
+          "if(!confirm('Turn panel maintenance reminders '+label+'?\\n\\nThis changes the spa topside Reminders setting (Clean Filter, Check pH, Change Water, etc.).')){"
           "if(st)st.textContent='Reminders change canceled.';return;}"
           "if(st){st.dataset.busy='1';st.textContent='Sending to spa…';}"
           "var baseLast=0;fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
