@@ -119,7 +119,7 @@ namespace
   void publishSensor(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
                      const char *group, const char *field, const char *deviceClass,
                      const char *unit, const char *stateClass, const char *entityCategory,
-                     const char *icon = nullptr)
+                     const char *icon = nullptr, bool enabledByDefault = true)
   {
     char objectId[48];
     buildObjectId(objectId, sizeof(objectId), objectSuffix);
@@ -145,6 +145,8 @@ namespace
       root["entity_category"] = entityCategory;
     if (icon && icon[0])
       root["icon"] = icon;
+    if (!enabledByDefault)
+      root["enabled_by_default"] = false;
 
     publishDoc("sensor", objectId, doc);
   }
@@ -615,6 +617,7 @@ namespace
     publishSensor(macSlugStr, "fault_code", "Spa fault code", "faultLog", "faultCode", nullptr, nullptr, nullptr, "diagnostic", "mdi:alert-circle-outline");
     publishSensor(macSlugStr, "fault_message", "Spa fault message", "faultLog", "faultMessage", nullptr, nullptr, nullptr, "diagnostic", "mdi:alert-circle-outline");
     publishSensor(macSlugStr, "fault_log_time", "Spa fault log time", "faultLog", "faultLogTime", nullptr, nullptr, nullptr, "diagnostic", "mdi:clock-alert-outline");
+    publishSensor(macSlugStr, "wifi_rssi", "Gateway WiFi signal", "node", "rssi", "signal_strength", "dBm", nullptr, "diagnostic", "mdi:wifi", false);
   }
 
   uint8_t pumpSpeedConfigForBit(uint32_t bit)

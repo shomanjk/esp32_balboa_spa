@@ -36,6 +36,8 @@ inline bool spaBlowerIsOn(uint8_t blower) { return blower != 0; }
 const char *spaBlowerBinaryLabel(uint8_t blower);
 /** Human-readable maintenance reminder from status byte 6 (handles boot/init edge cases). */
 String spaReminderText(uint8_t reminderType, uint8_t spaState);
+/** Portal banner subtext for an active reminder (schedule hints; empty when none). */
+String spaReminderHintText(uint8_t reminderType, uint8_t spaState);
 /** Panel reminders master enable (preferences byte 1, bit 0; some packs set extra flag bits). */
 bool spaPreferencesRemindersEnabled(uint8_t reminders);
 

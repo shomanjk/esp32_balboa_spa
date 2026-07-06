@@ -926,6 +926,25 @@ String spaReminderText(uint8_t reminderType, uint8_t spaState)
   return String("Maintenance reminder");
 }
 
+String spaReminderHintText(uint8_t reminderType, uint8_t spaState)
+{
+  if (reminderType == 0x00)
+  {
+    return String("");
+  }
+  if (spaState == 0x01)
+  {
+    return String("");
+  }
+  auto it = reminderHintMap.find(reminderType);
+  if (it != reminderHintMap.end())
+  {
+    return String(it->second);
+  }
+  return String("Stays until cleared on the spa panel. Repeat interval varies by reminder "
+                "type and manufacturer.");
+}
+
 bool spaReminderIsActive(uint8_t reminderType, uint8_t spaState, uint8_t initMode)
 {
   if (reminderType == 0x00)

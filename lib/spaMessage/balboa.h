@@ -364,6 +364,15 @@ const std::map<uint8_t, const char *> reminderTypeMap = {
     {0x0A, "Check pH"},
     {0x1E, "Fault"}};
 
+// Portal banner subtext for status byte 6 (typical Balboa topside schedules; manufacturer may differ).
+const std::map<uint8_t, const char *> reminderHintMap = {
+    {0x03, "Stays until cleared on the spa panel. Typical repeat: about every 30 days (manufacturer-dependent)."},
+    {0x04, "Stays until cleared on the spa panel. Typical repeat: about every 30 days (manufacturer-dependent)."},
+    {0x08, "Stays until cleared on the spa panel. Typical repeat: about every 90 days (manufacturer-dependent)."},
+    {0x09, "Stays until cleared on the spa panel. Typical repeat: about every 7 days (manufacturer-dependent)."},
+    {0x0A, "Stays until cleared on the spa panel. Typical repeat: about every 7 days (manufacturer-dependent)."},
+    {0x1E, "Clear on the spa panel after the fault is addressed. See fault log on /config for details."}};
+
 const std::map<uint8_t, const char *> faultCodeMap = {
     {15, "Sensors are out of sync"},
     {16, "The water flow is low"},

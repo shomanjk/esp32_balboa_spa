@@ -226,6 +226,109 @@ static String rs485HealthHint(const String &health)
   return "No bus activity detected at UART RX yet.";
 }
 
+struct GatewayChipTempStatus
+{
+  bool available;
+  float tempC;
+  const char *statusKey;
+  const char *statusLabel;
+  const char *badgeColor;
+};
+
+static bool readGatewayChipTempC(float &outC)
+{
+  const float tempC = temperatureRead();
+  if (std::isnan(tempC))
+  {
+    return false;
+  }
+  outC = tempC;
+  return true;
+}
+
+static GatewayChipTempStatus classifyGatewayChipTemp(float tempC)
+{
+  GatewayChipTempStatus status;
+  status.available = true;
+  status.tempC = tempC;
+  if (tempC >= 100.0f)
+  {
+    status.statusKey = "critical";
+    status.statusLabel = "Critical";
+    status.badgeColor = "#c62828";
+  }
+  else if (tempC >= 85.0f)
+  {
+    status.statusKey = "high";
+    status.statusLabel = "High";
+    status.badgeColor = "#c62828";
+  }
+  else if (tempC >= 75.0f)
+  {
+    status.statusKey = "elevated";
+    status.statusLabel = "Elevated";
+    status.badgeColor = "#ef6c00";
+  }
+  else
+  {
+    status.statusKey = "normal";
+    status.statusLabel = "Normal";
+    status.badgeColor = "#04AA6D";
+  }
+  return status;
+}
+
+static GatewayChipTempStatus gatewayChipTempSnapshot()
+{
+  float tempC = 0.0f;
+  if (!readGatewayChipTempC(tempC))
+  {
+    GatewayChipTempStatus status;
+    status.available = false;
+    status.tempC = 0.0f;
+    status.statusKey = "unavailable";
+    status.statusLabel = "Unavailable";
+    status.badgeColor = "#4b5563";
+    return status;
+  }
+  return classifyGatewayChipTemp(tempC);
+}
+
+static void appendGatewayChipTempJson(JsonDocument &doc)
+{
+  const GatewayChipTempStatus chip = gatewayChipTempSnapshot();
+  doc["chipTempAvailable"] = chip.available;
+  doc["chipTempStatus"] = chip.statusKey;
+  doc["chipTempStatusLabel"] = chip.statusLabel;
+  if (chip.available)
+  {
+    doc["chipTempC"] = roundf(chip.tempC * 10.0f) / 10.0f;
+  }
+}
+
+static void appendGatewayChipTempStateSubCard(String &html)
+{
+  const GatewayChipTempStatus chip = gatewayChipTempSnapshot();
+  html += "<div class='sub-card'><p class='sub-card-title'>Chip temperature</p>";
+  html += "<div style='margin-bottom:8px'><span class='diag-badge' style='font-weight:700;color:#fff;background:";
+  html += chip.badgeColor;
+  html += "'>";
+  html += chip.statusLabel;
+  html += "</span></div><div class='sub-card-row'><b>Die sensor: </b><span>";
+  if (chip.available)
+  {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%.1f °C", chip.tempC);
+    html += buf;
+  }
+  else
+  {
+    html += "—";
+  }
+  html += "</span></div>";
+  html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>ESP32 die sensor — approximate; not cabinet ambient.</p></div>";
+}
+
 static void appendWifiStateSection(String &html)
 {
   wl_status_t st = WiFi.status();
@@ -1218,8 +1321,11 @@ void handleStatus(AsyncWebServerRequest *request)
     html += "<div><p class=\"status-reminder-banner-label\">Panel reminder</p>";
     html += "<p id=\"statusReminderBannerVal\" class=\"status-reminder-banner-val\">";
     html += reminderActive ? reminderTxt : "";
-    html += "</p><p class=\"status-reminder-banner-hint\">Stays until cleared on the spa panel; "
-            "often repeats on a manufacturer schedule (commonly about every 7 days).</p></div></div>";
+    html += "</p><p id=\"statusReminderBannerHint\" class=\"status-reminder-banner-hint\">";
+    html += reminderActive
+                ? spaReminderHintText(spaStatusData.reminderType, spaStatusData.spaState)
+                : "";
+    html += "</p></div></div>";
     html += F("<div class=\"status-layout\">");
   }
 
@@ -1598,7 +1704,9 @@ void handleStatus(AsyncWebServerRequest *request)
           "if(banner){banner.classList.toggle('is-active',active);"
           "banner.classList.remove('status-reminder-banner--warn','status-reminder-banner--fault');"
           "if(active)banner.classList.add(fault?'status-reminder-banner--fault':'status-reminder-banner--warn');"
-          "var bv=document.getElementById('statusReminderBannerVal');if(bv)bv.textContent=active?txt:'';}"
+          "var bv=document.getElementById('statusReminderBannerVal');if(bv)bv.textContent=active?txt:'';"
+          "var bh=document.getElementById('statusReminderBannerHint');"
+          "if(bh)bh.textContent=active&&(typeof snap.reminderHint==='string')?snap.reminderHint:'';}"
           "var rv=document.getElementById('statusReminderVal');if(rv&&typeof snap.reminderText==='string')rv.textContent=snap.reminderText;"
           "var rr=document.getElementById('statusReminderRow');if(rr){rr.classList.remove('kv-row--alert','kv-row--alert-warn');"
           "if(active)rr.classList.add(fault?'kv-row--alert':'kv-row--alert-warn');}}"
@@ -2405,6 +2513,7 @@ void handleState(AsyncWebServerRequest *request)
           "<div class='sys-stat-tile'><span class='fw-compare-label'>Free PSRAM</span><span class='sys-stat-val'>" + formatNumberWithCommas(ESP.getFreePsram()) + "</span></div>"
           "<div class='sys-stat-tile'><span class='fw-compare-label'>Free Stack</span><span class='sys-stat-val'>" + formatNumberWithCommas(uxTaskGetStackHighWaterMark(NULL)) + "</span></div>"
           "</div></div>";
+  appendGatewayChipTempStateSubCard(html);
 #ifdef LOCAL_CLIENT
   html += "<div class='sub-card'><p class='sub-card-title'>RS485 today</p>"
           "<div style='margin-bottom:8px'><span class='diag-badge' style='font-weight:700;color:#fff;background:" + String(rs485Stats.polarityInverted ? "#0f4a87" : "#4b5563") + "'>" + String(rs485Stats.polarityInverted ? "inverted_rx_tx" : "normal") + "</span></div>"
@@ -2745,6 +2854,7 @@ void handleVersion(AsyncWebServerRequest *request)
   doc["repoReadmeUrl"] = FIRMWARE_REPO_README_URL;
   doc["releasesUrl"] = FIRMWARE_REPO_RELEASES_URL;
   doc["releasesLatestApiUrl"] = FIRMWARE_REPO_RELEASES_LATEST_API_URL;
+  appendGatewayChipTempJson(doc);
   serializeJson(doc, *response);
   request->send(response);
 }
@@ -2883,6 +2993,8 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["reminderType"] = spaStatusData.reminderType;
   doc["reminderText"] =
       spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
+  doc["reminderHint"] =
+      spaReminderHintText(spaStatusData.reminderType, spaStatusData.spaState);
   doc["reminderActive"] = spaReminderIsActive(
       spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
   doc["reminderIsFault"] = spaReminderIsFault(spaStatusData.reminderType);

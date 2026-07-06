@@ -408,6 +408,10 @@ void nodeStateReport()
   if (mqtt.connected())
   {
     publishNodeStatus("ip", WiFi.localIP().toString().c_str());
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      publishNodeStatus("rssi", String(WiFi.RSSI()).c_str());
+    }
     publishNodeStatus("mac", WiFi.macAddress().c_str());
     publishNodeStatus("gateway", gatewayName);
     publishNodeStatus("restartReason", getLastRestartReason().c_str());

@@ -8,11 +8,23 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.18.6] - 2026-07-06
+
+### Added
+
+- **Gateway chip temperature (portal only)** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): **`GET /api/version`** exposes ESP32 die **`chipTempC`** with **`chipTempStatus`** / **`chipTempStatusLabel`** (Normal / Elevated / High / Critical). **`/state`** → **Show advanced diagnostics** → **Chip temperature** sub-card below Memory (badge + °C). No MQTT or HA discovery.
+- **Gateway WiFi RSSI (MQTT + HA)** ([`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp), [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): Periodic **`Spa/<gateway>/node/rssi`** telemetry (dBm) when Wi‑Fi is connected; HA MQTT discovery diagnostic **`Gateway WiFi signal`** (`signal_strength`, **`enabled_by_default`: false** — enable on the **Balboa Spa** device page under **Diagnostic** when wanted).
+
 ### Changed
 
+- **`/status` panel reminder hints** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Banner subtext is per reminder type (e.g. **Change Water** ~90 days, **Clean Filter** ~30 days, sanitizer/pH ~7 days) instead of a single “every 7 days” line. **`GET /api/status/controls`** adds **`reminderHint`** for live polling.
 - **PlatformIO local ports:** Device-specific `upload_port` / `monitor_port` values moved out of committed [`platformio.ini`](platformio.ini) into gitignored **`platformio_local.ini`** (template: [`platformio_local.ini.example`](platformio_local.ini.example)).
 - **Live diagnostic captures:** Removed maintainer-specific `docs/diag-*.json` and `docs/telnet-*.txt` from the repo (gitignored); redacted hostnames in [`docs/command-write-debug-log.md`](docs/command-write-debug-log.md); added [`docs/diag-light1-next-cts-live-run.example.json`](docs/diag-light1-next-cts-live-run.example.json) as a redacted API shape reference.
 - **Privacy / local-only tooling:** [`emulator/bridgeClient.js`](emulator/bridgeClient.js) no longer hardcodes a tub hostname (use `SPA_BRIDGE_HOST` or CLI arg). Removed tracked [`.clang_complete`](.clang_complete), [`.gcc-flags.json`](.gcc-flags.json) (upstream IDE paths), and [`docs/bridge-raw-last-run.json`](docs/bridge-raw-last-run.json) (already gitignored generated output).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.18.6`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.18.5] - 2026-07-06
 

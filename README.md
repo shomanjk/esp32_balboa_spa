@@ -142,7 +142,7 @@ Planned or deferred enhancements (not commitments; order and timing vary).
 
 | Path | Query | Purpose |
 | --- | --- | --- |
-| `/api/version` | — | Firmware `version`, `build`, `hostname`, `ip`, `restartReason`. |
+| `/api/version` | — | Firmware `version`, `build`, `hostname`, `ip`, `restartReason`; gateway **`chipTempC`**, **`chipTempAvailable`**, **`chipTempStatus`**, **`chipTempStatusLabel`** (ESP32 die sensor, approximate). |
 | `/api/wifi` | — | Wi‑Fi station: `connected`, `status` / `statusName`, `mac`, `hostname`; when connected: `ssid`, `rssi`, `ip`, `gateway`, `subnet`, `dns`, `channel`. |
 | `/api/rs485` | — | UART pins, baud, `autoTx`, byte/frame/CRC counters, polarity (`normal` / `inverted_rx_tx`), lock state, `health`. |
 | `/api/rs485/raw` | `limit` (default **80**, cap **256**) | Bounded recent RX bytes: `bytesHex`, `items[]` with `tMs`, `gapMs`, `byte`, `mode`, `uartAvailable`. |
@@ -227,6 +227,7 @@ To avoid repeating dead-end experiments while command-write behavior is being de
 - **Filter running:** `filter1_running` and `filter2_running` publish `On`/`Off` from live controller **`filterMode`** (discovered as **`binary_sensor`**).
 - **Binary values:** `panel_locked`, `settings_lock`, `circ`, `blower`, `light1`, `light2`, `mister` are binary sensors with explicit on/off payloads.
 - **Clock entity:** `spa_time` is intentionally **not** discovered in HA to avoid noisy, non-actionable history churn.
+- **Gateway WiFi signal:** MQTT **`node/rssi`** (dBm, ~90s with other **`node/`** telemetry). HA diagnostic sensor **`Gateway WiFi signal`** is **disabled by default** — open the **Balboa Spa** device in HA → enable under **Diagnostic** to chart or automate on RSSI.
 - **Device web link:** Discovery sets `device.configuration_url` to `http://<gatewayName>.local/status` so the HA device page can open the ESP web status page directly.
 
 - **Broker:** Use the Home Assistant [MQTT integration](https://www.home-assistant.io/integrations/mqtt/) on the **same broker** as the ESP32. Default discovery prefix is `homeassistant/` (override with `MQTT_DISCOVERY_PREFIX` in `config.h` / defaults in [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h)).

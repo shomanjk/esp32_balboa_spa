@@ -82,6 +82,8 @@ If pumps/lights are missing, wait for the spa to finish its config exchange, ref
 
 **Not discovered:** `spa_time` (panel clock) — intentionally omitted to avoid noisy history.
 
+**Disabled by default (opt-in):** **Gateway WiFi signal** — MQTT topic `Spa/<gateway>/node/rssi` (dBm, published with other `node/` telemetry ~every 90s). HA registers a diagnostic **`signal_strength`** sensor on device **Balboa Spa** but leaves it **disabled** until you enable it: **Settings → Devices & services → Balboa Spa → Gateway WiFi signal → Enable**.
+
 **Device link:** Discovery sets `configuration_url` to `http://<gatewayName>.local/status`. If mDNS fails, open the gateway by IP instead.
 
 ---
