@@ -38,6 +38,11 @@
 #define GMT_OFFSET -14400
 #define DAYLIGHT_OFFSET 0
 
+// After Wi-Fi/NTP is up, sync spa panel clock once per boot when drift exceeds threshold (Balboa 0x21).
+// Requires correct GMT_OFFSET / DAYLIGHT_OFFSET above. Set to 0 to disable. Omitted in older config.h → off.
+#define AUTO_SYNC_PANEL_CLOCK 1
+// #define AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN 2
+
 #define AUTO_TX true
 
 // Used by LOCAL_CLIENT — UART2 pins for TTL side of RS485 transceiver (see README).

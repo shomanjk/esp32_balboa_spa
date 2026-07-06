@@ -1496,6 +1496,15 @@ void handleStatus(AsyncWebServerRequest *request)
     appendStatusKvRow(html, "Filter cycle (status)", String(getMapDescription(spaStatusData.filterMode, filterModeMap)), "statusFilterModeVal", nullptr);
     html += "</dl>";
     html += "<p class=\"range-hint\" style=\"margin-top:10px\">Set panel clock sends Balboa <code>0x21</code> using the current 12h/24h format flag from status.</p>";
+#ifdef LOCAL_CLIENT
+#if AUTO_SYNC_PANEL_CLOCK
+    html += "<p class=\"range-hint\">Auto-sync on boot: <b>enabled</b>. After Wi-Fi/NTP is up, the gateway may set the panel clock when drift exceeds ";
+    html += String(AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN);
+    html += " minutes. Toggle in <code>config.h</code> (<code>AUTO_SYNC_PANEL_CLOCK</code>, then reflash).</p>";
+#else
+    html += "<p class=\"range-hint\">Auto-sync on boot: <b>disabled</b>. Set <code>AUTO_SYNC_PANEL_CLOCK</code> to <code>1</code> in <code>config.h</code> and reflash to sync the panel from gateway time after power loss (when drift exceeds the configured threshold).</p>";
+#endif
+#endif
     html += "<div class=\"status-control-row\"><label for=\"statusPanelTimeInput\" class=\"equip-label\">Set panel time</label>";
     html += "<input id=\"statusPanelTimeInput\" type=\"time\" step=\"60\" value=\"";
     html += String(spaStatusData.time);
@@ -2839,13 +2848,15 @@ void handleVersion(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
 #if defined(DIAG_FAULT_CAPTURE)
-  // faultLog: up to 16 structured objects; ArduinoJson evicts oldest keys when full — append
-  // fault data first, then firmware metadata, so version/build/hostname are never dropped.
-  DynamicJsonDocument doc(5120);
+  // faultLog first (sacrificial); version/build/hostname appended last so ArduinoJson
+  // eviction under pool pressure never drops firmware metadata (see CHANGELOG 2.10.2 / 2.19.1).
+  DynamicJsonDocument doc(10240);
   faultCaptureAppendToJson(doc.to<JsonObject>());
 #else
   DynamicJsonDocument doc(512);
 #endif
+  appendGatewayChipTempJson(doc);
+  spaPanelClockAutoSyncAppendToJson(doc.to<JsonObject>());
   doc["version"] = VERSION;
   doc["build"] = BUILD;
   doc["hostname"] = WiFi.getHostname();
@@ -2854,7 +2865,6 @@ void handleVersion(AsyncWebServerRequest *request)
   doc["repoReadmeUrl"] = FIRMWARE_REPO_README_URL;
   doc["releasesUrl"] = FIRMWARE_REPO_RELEASES_URL;
   doc["releasesLatestApiUrl"] = FIRMWARE_REPO_RELEASES_LATEST_API_URL;
-  appendGatewayChipTempJson(doc);
   serializeJson(doc, *response);
   request->send(response);
 }

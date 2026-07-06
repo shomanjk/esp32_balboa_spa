@@ -8,6 +8,26 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.19.1] - 2026-07-06
+
+### Fixed
+
+- **`GET /api/version` JSON truncation** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): With **`DIAG_FAULT_CAPTURE`**, a full **`faultLog`** ring plus newer fields (`chipTemp*`, **`panelClockAutoSync`**) could exhaust the **5120**-byte ArduinoJson pool so only the last key survived. Pool raised to **10240**; **`faultLog`** / diagnostics appended first, **`version`** / **`build`** / **`hostname`** and related metadata appended **last** so eviction cannot drop firmware identity fields.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.19.1`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.19.0] - 2026-07-06
+
+### Added
+
+- **Panel clock auto-sync on boot** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Tub builds (`LOCAL_CLIENT`) may set the spa panel clock once per boot via Balboa **`0x21`** when gateway NTP time and panel time differ by more than **`AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN`** (default 2 minutes), after a 45s post-status delay. Compile-time flag **`AUTO_SYNC_PANEL_CLOCK`** defaults to **off** when omitted from existing **`config.h`**; new installs copying [`src/config-example.h`](src/config-example.h) default **on**. **`GET /api/version`** exposes **`panelClockAutoSync`**; **`/status`** panel clock section notes the setting.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.19.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.18.6] - 2026-07-06
 
 ### Added
@@ -952,7 +972,12 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.3...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.1...HEAD
+[2.19.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.0...v2.19.1
+[2.19.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.6...v2.19.0
+[2.18.6]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.5...v2.18.6
+[2.18.5]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.4...v2.18.5
+[2.18.4]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.3...v2.18.4
 [2.18.3]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.2...v2.18.3
 [2.18.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.1...v2.18.2
 [2.18.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.0...v2.18.1

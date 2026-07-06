@@ -363,6 +363,7 @@ void spaMessageLoop()
     spaFilterSettingsReadbackFollowupTick();
   }
   spaFaultLogHistoryTimeoutTick();
+  spaPanelClockAutoSyncTick();
 }
 
 void configurationRequest()

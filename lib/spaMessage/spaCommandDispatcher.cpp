@@ -2,6 +2,7 @@
 
 #include <ArduinoLog.h>
 #include <CircularBuffer.hpp>
+#include <WiFi.h>
 #include <math.h>
 
 #include "spaMessage.h"
@@ -21,6 +22,8 @@ const char *sourceLabel(SpaCommandSource source)
     return "web";
   case SPA_COMMAND_SOURCE_MQTT:
     return "mqtt";
+  case SPA_COMMAND_SOURCE_AUTO:
+    return "auto";
   default:
     return "unknown";
   }
@@ -981,4 +984,182 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
   }
   Log.verbose(F("[Cmd ]: armed next_cts toggle from %s: %s" CR), sourceLabel(source), msgToString(frame).c_str());
   return {true, SPA_COMMAND_ACCEPTED, "armed_next_cts"};
+}
+
+namespace
+{
+bool parsePanelClockHHMM(const char *t, uint8_t &hour24, uint8_t &minute)
+{
+  if (t == nullptr || strlen(t) < 5 || t[2] != ':')
+  {
+    return false;
+  }
+  if (t[0] < '0' || t[0] > '9' || t[1] < '0' || t[1] > '9' ||
+      t[3] < '0' || t[3] > '9' || t[4] < '0' || t[4] > '9')
+  {
+    return false;
+  }
+  hour24 = (uint8_t)((t[0] - '0') * 10 + (t[1] - '0'));
+  minute = (uint8_t)((t[3] - '0') * 10 + (t[4] - '0'));
+  return hour24 <= 23 && minute <= 59;
+}
+
+int circularMinuteDrift(uint8_t h1, uint8_t m1, uint8_t h2, uint8_t m2)
+{
+  const int t1 = (int)h1 * 60 + (int)m1;
+  const int t2 = (int)h2 * 60 + (int)m2;
+  int diff = abs(t1 - t2);
+  if (diff > 720)
+  {
+    diff = 1440 - diff;
+  }
+  return diff;
+}
+
+bool gatewayLocalHHMM(uint8_t &hour24, uint8_t &minute)
+{
+  time_t t = getTime();
+  if (t <= 0)
+  {
+    return false;
+  }
+  struct tm tmStore;
+  struct tm *p = localtime_r(&t, &tmStore);
+  if (p == nullptr)
+  {
+    return false;
+  }
+  hour24 = (uint8_t)p->tm_hour;
+  minute = (uint8_t)p->tm_min;
+  return true;
+}
+
+constexpr unsigned long kPanelClockAutoSyncBootDelayMs = 45000UL;
+
+enum PanelClockAutoSyncPhase
+{
+  kAutoSyncPending = 0,
+  kAutoSyncWaitingDelay = 1,
+  kAutoSyncDone = 2,
+};
+
+struct PanelClockAutoSyncBootRecord
+{
+  bool complete = false;
+  const char *action = nullptr;
+  int driftMin = -1;
+  const char *reason = nullptr;
+  bool commandAccepted = false;
+};
+
+PanelClockAutoSyncPhase autoSyncPhase = kAutoSyncPending;
+unsigned long autoSyncDelayStartMs = 0;
+PanelClockAutoSyncBootRecord autoSyncBootRecord;
+
+void autoSyncRecord(const char *action, int driftMin, const char *reason, bool commandAccepted)
+{
+  autoSyncBootRecord.complete = true;
+  autoSyncBootRecord.action = action;
+  autoSyncBootRecord.driftMin = driftMin;
+  autoSyncBootRecord.reason = reason;
+  autoSyncBootRecord.commandAccepted = commandAccepted;
+}
+
+void autoSyncAttempt()
+{
+  uint8_t panelHour = 0;
+  uint8_t panelMinute = 0;
+  if (!parsePanelClockHHMM(spaStatusData.time, panelHour, panelMinute))
+  {
+    autoSyncRecord("failed", -1, "panel_time_unavailable", false);
+    Log.notice(F("[Cmd ]: panel clock auto-sync skipped: panel time unavailable" CR));
+    return;
+  }
+
+  uint8_t gatewayHour = 0;
+  uint8_t gatewayMinute = 0;
+  if (!gatewayLocalHHMM(gatewayHour, gatewayMinute))
+  {
+    autoSyncRecord("failed", -1, "gateway_clock_unavailable", false);
+    Log.notice(F("[Cmd ]: panel clock auto-sync skipped: gateway clock unavailable" CR));
+    return;
+  }
+
+  const int driftMin = circularMinuteDrift(panelHour, panelMinute, gatewayHour, gatewayMinute);
+  if (driftMin <= AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN)
+  {
+    autoSyncRecord("skipped", driftMin, "within_threshold", false);
+    Log.notice(F("[Cmd ]: panel clock auto-sync skipped: drift %d min (threshold %d); panel %02d:%02d gateway %02d:%02d" CR),
+               driftMin, AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN, panelHour, panelMinute, gatewayHour, gatewayMinute);
+    return;
+  }
+
+  SpaCommandResult result = spaSetSpaPanelClockTime(gatewayHour, gatewayMinute, SPA_COMMAND_SOURCE_AUTO);
+  if (result.accepted)
+  {
+    autoSyncRecord("synced", driftMin, result.reason, true);
+    Log.notice(F("[Cmd ]: panel clock auto-sync sent: drift %d min; panel %02d:%02d -> gateway %02d:%02d" CR),
+               driftMin, panelHour, panelMinute, gatewayHour, gatewayMinute);
+  }
+  else
+  {
+    autoSyncRecord("failed", driftMin, result.reason, false);
+    Log.notice(F("[Cmd ]: panel clock auto-sync failed: drift %d min; %s" CR), driftMin, result.reason);
+  }
+}
+} // namespace
+
+void spaPanelClockAutoSyncTick()
+{
+#if defined(LOCAL_CLIENT) && AUTO_SYNC_PANEL_CLOCK
+  if (autoSyncPhase == kAutoSyncDone)
+  {
+    return;
+  }
+
+  if (WiFi.status() != WL_CONNECTED || getTime() <= 0 || !spaHasFreshStatus())
+  {
+    return;
+  }
+
+  if (autoSyncPhase == kAutoSyncPending)
+  {
+    autoSyncDelayStartMs = millis();
+    autoSyncPhase = kAutoSyncWaitingDelay;
+    return;
+  }
+
+  if (autoSyncPhase == kAutoSyncWaitingDelay)
+  {
+    if (millis() - autoSyncDelayStartMs < kPanelClockAutoSyncBootDelayMs)
+    {
+      return;
+    }
+    autoSyncPhase = kAutoSyncDone;
+    autoSyncAttempt();
+  }
+#endif
+}
+
+void spaPanelClockAutoSyncAppendToJson(JsonObject root)
+{
+#if defined(LOCAL_CLIENT)
+  JsonObject sync = root.createNestedObject("panelClockAutoSync");
+  sync["enabled"] = (AUTO_SYNC_PANEL_CLOCK != 0);
+  sync["thresholdMin"] = AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN;
+  if (autoSyncBootRecord.complete)
+  {
+    JsonObject lastBoot = sync.createNestedObject("lastBoot");
+    lastBoot["action"] = autoSyncBootRecord.action;
+    if (autoSyncBootRecord.driftMin >= 0)
+    {
+      lastBoot["driftMin"] = autoSyncBootRecord.driftMin;
+    }
+    if (autoSyncBootRecord.reason != nullptr)
+    {
+      lastBoot["reason"] = autoSyncBootRecord.reason;
+    }
+    lastBoot["commandAccepted"] = autoSyncBootRecord.commandAccepted;
+  }
+#endif
 }

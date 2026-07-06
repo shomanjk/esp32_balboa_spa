@@ -4,6 +4,17 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+#include "../../src/config.h"
+
+/** Once per boot: set spa panel clock from gateway NTP when drift exceeds threshold. Existing installs default off. */
+#ifndef AUTO_SYNC_PANEL_CLOCK
+#define AUTO_SYNC_PANEL_CLOCK 0
+#endif
+
+#ifndef AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN
+#define AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN 2
+#endif
+
 struct SpaFilterSettingsData;
 
 enum SpaCommandSource
@@ -11,6 +22,7 @@ enum SpaCommandSource
   SPA_COMMAND_SOURCE_UNKNOWN = 0,
   SPA_COMMAND_SOURCE_WEB = 1,
   SPA_COMMAND_SOURCE_MQTT = 2,
+  SPA_COMMAND_SOURCE_AUTO = 3,
 };
 
 enum SpaCommandResultCode
@@ -95,5 +107,10 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
     SpaCommandSource source = SPA_COMMAND_SOURCE_UNKNOWN,
     String *outFrameHex = nullptr,
     uint32_t *outArmCount = nullptr);
+
+/** Non-blocking once-per-boot panel clock sync when `AUTO_SYNC_PANEL_CLOCK` is set (tub builds). */
+void spaPanelClockAutoSyncTick();
+/** `GET /api/version` — `panelClockAutoSync` object (LOCAL_CLIENT builds only). */
+void spaPanelClockAutoSyncAppendToJson(JsonObject root);
 
 #endif
