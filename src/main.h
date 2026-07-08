@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.19.1"
+#define VERSION "2.20.0"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 
@@ -21,14 +21,20 @@
 #ifndef FIRMWARE_REPO_NAME
 #define FIRMWARE_REPO_NAME "esp32_balboa_spa"
 #endif
+#ifndef FIRMWARE_REPO_DEFAULT_BRANCH
+#define FIRMWARE_REPO_DEFAULT_BRANCH "ESP32"
+#endif
 #ifndef FIRMWARE_REPO_README_URL
-#define FIRMWARE_REPO_README_URL "https://github.com/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/blob/main/README.md"
+#define FIRMWARE_REPO_README_URL "https://github.com/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/blob/" FIRMWARE_REPO_DEFAULT_BRANCH "/README.md"
 #endif
 #ifndef FIRMWARE_REPO_RELEASES_URL
 #define FIRMWARE_REPO_RELEASES_URL "https://github.com/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/releases"
 #endif
 #ifndef FIRMWARE_REPO_RELEASES_LATEST_API_URL
 #define FIRMWARE_REPO_RELEASES_LATEST_API_URL "https://api.github.com/repos/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/releases/latest"
+#endif
+#ifndef FIRMWARE_REPO_MAIN_H_CONTENTS_API_URL
+#define FIRMWARE_REPO_MAIN_H_CONTENTS_API_URL "https://api.github.com/repos/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/contents/src/main.h?ref=" FIRMWARE_REPO_DEFAULT_BRANCH
 #endif
 // GitHub Sponsors button iframe src for /state (same owner as repo by default).
 #ifndef FIRMWARE_SPONSOR_BUTTON_SRC

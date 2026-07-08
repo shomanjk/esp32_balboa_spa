@@ -6,6 +6,8 @@
 // #define FIRMWARE_REPO_OWNER "myuser"
 // #undef FIRMWARE_REPO_NAME
 // #define FIRMWARE_REPO_NAME "esp32_balboa_spa"
+// #undef FIRMWARE_REPO_DEFAULT_BRANCH
+// #define FIRMWARE_REPO_DEFAULT_BRANCH "ESP32"
 // Optional: sponsor button on /state points at GitHub login (defaults to FIRMWARE_REPO_OWNER).
 // #undef FIRMWARE_SPONSOR_BUTTON_SRC
 // #define FIRMWARE_SPONSOR_BUTTON_SRC "https://github.com/sponsors/myuser/button"

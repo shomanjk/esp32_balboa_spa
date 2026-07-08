@@ -8,6 +8,20 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.20.0] - 2026-07-06
+
+### Added
+
+- **ESP State dual firmware version check** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/main.h`](src/main.h)): **Check for updates** on `/state` now compares this gateway against both the latest GitHub **release** and the `VERSION` in `src/main.h` on **`FIRMWARE_REPO_DEFAULT_BRANCH`** (default **`ESP32`**). Three-column pills: **This gateway**, **Latest release**, and **branch**; status text distinguishes release vs pre-release (build-from-source) updates. **`GET /api/version`** adds **`defaultBranch`** and **`mainHContentsApiUrl`**.
+
+### Changed
+
+- **`FIRMWARE_REPO_README_URL`** ([`src/main.h`](src/main.h)): README link now uses **`FIRMWARE_REPO_DEFAULT_BRANCH`** instead of hard-coded **`main`**.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.20.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.19.1] - 2026-07-06
 
 ### Fixed
@@ -972,7 +986,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.0...HEAD
+[2.20.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.1...v2.20.0
 [2.19.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.0...v2.19.1
 [2.19.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.6...v2.19.0
 [2.18.6]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.5...v2.18.6
