@@ -8,6 +8,21 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.20.1] - 2026-07-08
+
+### Added
+
+- **ESP State firmware source link** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/main.h`](src/main.h)): Firmware links and update-check messages include **Source (`ESP32`)** via **`FIRMWARE_REPO_BRANCH_URL`** (alongside README / Releases). **`GET /api/version`** exposes **`branchUrl`**.
+
+### Changed
+
+- **Firmware update check wording** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Status text treats GitHub Releases and the default branch as tagged vs tip **source** snapshots (changelog / tag / build from tip), with in-message links instead of download-oriented “open Releases” copy.
+- **ESP State firmware repo links** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Dropped the **Firmware repo:** label so **README · Releases · Source (ESP32)** stay on one row.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.20.1`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.20.0] - 2026-07-06
 
 ### Added
@@ -986,7 +1001,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.0...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.1...HEAD
+[2.20.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.0...v2.20.1
 [2.20.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.1...v2.20.0
 [2.19.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.0...v2.19.1
 [2.19.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.18.6...v2.19.0

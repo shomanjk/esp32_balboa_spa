@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.20.0"
+#define VERSION "2.20.1"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 
@@ -29,6 +29,9 @@
 #endif
 #ifndef FIRMWARE_REPO_RELEASES_URL
 #define FIRMWARE_REPO_RELEASES_URL "https://github.com/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/releases"
+#endif
+#ifndef FIRMWARE_REPO_BRANCH_URL
+#define FIRMWARE_REPO_BRANCH_URL "https://github.com/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/tree/" FIRMWARE_REPO_DEFAULT_BRANCH
 #endif
 #ifndef FIRMWARE_REPO_RELEASES_LATEST_API_URL
 #define FIRMWARE_REPO_RELEASES_LATEST_API_URL "https://api.github.com/repos/" FIRMWARE_REPO_OWNER "/" FIRMWARE_REPO_NAME "/releases/latest"

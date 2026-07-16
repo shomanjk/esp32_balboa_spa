@@ -8,6 +8,9 @@
 // #define FIRMWARE_REPO_NAME "esp32_balboa_spa"
 // #undef FIRMWARE_REPO_DEFAULT_BRANCH
 // #define FIRMWARE_REPO_DEFAULT_BRANCH "ESP32"
+// Optional: branch/source tree URL for /state firmware links (defaults from owner/name/branch).
+// #undef FIRMWARE_REPO_BRANCH_URL
+// #define FIRMWARE_REPO_BRANCH_URL "https://github.com/myuser/esp32_balboa_spa/tree/ESP32"
 // Optional: sponsor button on /state points at GitHub login (defaults to FIRMWARE_REPO_OWNER).
 // #undef FIRMWARE_SPONSOR_BUTTON_SRC
 // #define FIRMWARE_SPONSOR_BUTTON_SRC "https://github.com/sponsors/myuser/button"
