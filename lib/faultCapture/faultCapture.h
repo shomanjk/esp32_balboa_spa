@@ -12,13 +12,15 @@ void faultCaptureAppend(const char *line);
 /** printf-style append into internal buffer (truncated). */
 void faultCaptureAppendf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
-#if defined(DIAG_FAULT_CAPTURE)
 #include <ArduinoJson.h>
 /**
  * Append oldest→newest faults into `root["faultLog"]` as objects:
  * `{ uptimeMs, msg, wallUnix?, wallTime? }`, plus `deviceUptimeMs` for same-boot comparison.
+ * Without DIAG_FAULT_CAPTURE: empty `faultLog`, empty `lastBridgeIngress`, and `deviceUptimeMs`.
  */
 void faultCaptureAppendToJson(JsonObject root);
+
+#if defined(DIAG_FAULT_CAPTURE)
 /**
  * Called from linker-wrapped `esp_system_abort` before the system panics.
  * Uses only RTC writes (no heap); safe for many abort/assert paths.

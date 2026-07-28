@@ -39,6 +39,7 @@ void handleConfig(AsyncWebServerRequest *request);
 void handleStatus(AsyncWebServerRequest *request);
 void handleState(AsyncWebServerRequest *request);
 void handleVersion(AsyncWebServerRequest *request);
+void handleDiagnostics(AsyncWebServerRequest *request);
 void handleWifi(AsyncWebServerRequest *request);
 void handleMqtt(AsyncWebServerRequest *request);
 void handleStatusControlsApi(AsyncWebServerRequest *request);
@@ -500,6 +501,7 @@ void spaWebServerLoop()
     server.on("/config", HTTP_GET, handleConfig);
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/api/version", HTTP_GET, handleVersion);
+    server.on("/api/diagnostics", HTTP_GET, handleDiagnostics);
     server.on("/api/wifi", HTTP_GET, handleWifi);
     server.on("/api/mqtt", HTTP_GET, handleMqtt);
     server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
@@ -2262,7 +2264,7 @@ void handleConfig(AsyncWebServerRequest *request)
   html += "<section class='panel config-span-full' id='cfg-history'><h1>Spa controller history</h1>";
   html += "<p class=\"chart-caption\" style=\"margin:0 0 12px 0\">Historical events stored on the spa pack (Balboa fault log). "
           "This is not live equipment state on <a href='/status'>Spa Status</a>, and not the ESP gateway diagnostic ring on "
-          "<a href='/state'>ESP State</a> / <code>GET /api/version</code> &rarr; <code>faultLog</code>.</p>";
+          "<a href='/state'>ESP State</a> / <code>GET /api/diagnostics</code> &rarr; <code>faultLog</code>.</p>";
   if (spaFaultLogData.lastUpdate == 0)
   {
     html += "<p style=\"margin:0\"><em>Latest event not received yet.</em> The gateway requests this after startup.</p>";
@@ -2490,7 +2492,15 @@ void handleState(AsyncWebServerRequest *request)
           "<div style='margin-top:4px'><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></div></div>";
 #endif
   html += "</div>";
-  html += "<p class='sys-meta'><span class='sys-meta__label'>Restart reason</span>" + getLastRestartReason() + "</p>";
+  {
+    const String restartComposite = getLastRestartReason();
+    const String restartIntent = getLastRestartIntent();
+    html += "<p class='sys-meta'><span class='sys-meta__label'>Restart reason</span>" + restartComposite + "</p>";
+    if (restartIntent.length() > 0 && restartComposite.indexOf(restartIntent) >= 0)
+    {
+      html += "<p class='sys-meta' style='margin-top:4px'><span class='sys-meta__label'>Restart intent</span>" + restartIntent + "</p>";
+    }
+  }
   {
     String fwPillDisplay = String(VERSION);
     if (fwPillDisplay.length() > 0 && fwPillDisplay.charAt(0) != 'v' && fwPillDisplay.charAt(0) != 'V')
@@ -2588,6 +2598,7 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Live Wi-Fi snapshot: </b><a href='/api/wifi' target='_blank' rel='noopener'>GET /api/wifi</a></li>";
   html += "<li><b>Live MQTT snapshot: </b><a href='/api/mqtt' target='_blank' rel='noopener'>GET /api/mqtt</a></li>";
   html += "<li><b>Firmware metadata: </b><a href='/api/version' target='_blank' rel='noopener'>GET /api/version</a></li>";
+  html += "<li><b>Gateway diagnostics: </b><a href='/api/diagnostics' target='_blank' rel='noopener'>GET /api/diagnostics</a></li>";
   html += "<li><b>RS485 summary diagnostics: </b><a href='/api/rs485' target='_blank' rel='noopener'>GET /api/rs485</a></li>";
   html += "<li><b>RS485 raw byte trace: </b><a href='/api/rs485/raw?limit=200' target='_blank' rel='noopener'>GET /api/rs485/raw?limit=200</a></li>";
   html += "<li><b>RS485 history snapshots: </b><a href='/api/rs485/history?limit=200' target='_blank' rel='noopener'>GET /api/rs485/history?limit=200</a></li>";
@@ -2597,6 +2608,10 @@ void handleState(AsyncWebServerRequest *request)
           "<ul id='stateLittleFsBox' style='margin-top:10px'></ul></section>";
 
   html += "<section class='panel advanced-panel'><h1>Advanced Diagnostics</h1>";
+  html += "<div class='sub-card'><p class='sub-card-title'>Gateway fault log</p>"
+          "<p style='margin:0 0 8px 0;font-size:14px;color:var(--muted)'>RTC diagnostic ring from <code>GET /api/diagnostics</code> (survives panic reboot; not the spa pack fault log on <a href='/config#cfg-history'>Config</a>).</p>"
+          "<div class='sub-card-row'><b>Device uptime: </b><span id='gwFaultUptime'>&mdash;</span></div>"
+          "<pre id='gwFaultLogBox' class='config-hex' style='max-height:220px;overflow:auto;margin-top:8px'>Loading&hellip;</pre></div>";
 
 #ifdef LOCAL_CLIENT
   html += "<p class='rs485-hint'>" + rs485HealthHint(rsHealth) + "</p>";
@@ -2621,6 +2636,15 @@ void handleState(AsyncWebServerRequest *request)
   html += "<dt>Polarity inverted</dt><dd>" + String(rs485Stats.polarityInverted ? "true" : "false") + "</dd></dl>";
 #endif
   html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script>";
+  html += "<script>(function(){var up=document.getElementById('gwFaultUptime');var box=document.getElementById('gwFaultLogBox');if(!up||!box)return;"
+          "fetch('/api/diagnostics',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
+          "var ms=j&&typeof j.deviceUptimeMs==='number'?j.deviceUptimeMs:null;"
+          "up.textContent=ms===null?'\\u2014':(Math.floor(ms/1000).toLocaleString()+' s');"
+          "var arr=j&&j.faultLog?j.faultLog:[];if(!arr.length){box.textContent='(empty)';return;}"
+          "var lines=[];for(var i=0;i<arr.length;i++){var e=arr[i]||{};var when=e.wallTime||(typeof e.uptimeMs==='number'?('uptime '+e.uptimeMs+' ms'):'');"
+          "lines.push((when?when+' \\u2014 ':'')+String(e.msg||''));}"
+          "box.textContent=lines.join('\\n');"
+          "}).catch(function(){box.textContent='Failed to load /api/diagnostics';});})();</script>";
   html += "<script>(function(){var btn=document.getElementById('stateLoadLittleFs');var box=document.getElementById('stateLittleFsBox');if(!btn||!box)return;"
           "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
           "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
@@ -2853,27 +2877,35 @@ if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 void handleVersion(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-#if defined(DIAG_FAULT_CAPTURE)
-  // faultLog first (sacrificial); version/build/hostname appended last so ArduinoJson
-  // eviction under pool pressure never drops firmware metadata (see CHANGELOG 2.10.2 / 2.19.1).
-  DynamicJsonDocument doc(10240);
-  faultCaptureAppendToJson(doc.to<JsonObject>());
-#else
-  DynamicJsonDocument doc(512);
-#endif
-  appendGatewayChipTempJson(doc);
-  spaPanelClockAutoSyncAppendToJson(doc.to<JsonObject>());
+  DynamicJsonDocument doc(1024);
   doc["version"] = VERSION;
   doc["build"] = BUILD;
   doc["hostname"] = WiFi.getHostname();
   doc["ip"] = WiFi.localIP().toString();
+  doc["espResetReason"] = getEspResetReasonText();
+  // Composite first: on non-SW boots this clears a stale soft label before lastRestartIntent is read.
   doc["restartReason"] = getLastRestartReason();
+  doc["lastRestartIntent"] = getLastRestartIntent();
   doc["repoReadmeUrl"] = FIRMWARE_REPO_README_URL;
   doc["releasesUrl"] = FIRMWARE_REPO_RELEASES_URL;
   doc["branchUrl"] = FIRMWARE_REPO_BRANCH_URL;
   doc["releasesLatestApiUrl"] = FIRMWARE_REPO_RELEASES_LATEST_API_URL;
   doc["defaultBranch"] = FIRMWARE_REPO_DEFAULT_BRANCH;
   doc["mainHContentsApiUrl"] = FIRMWARE_REPO_MAIN_H_CONTENTS_API_URL;
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleDiagnostics(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(10240);
+  faultCaptureAppendToJson(doc.to<JsonObject>());
+  appendGatewayChipTempJson(doc);
+  spaPanelClockAutoSyncAppendToJson(doc.to<JsonObject>());
+  doc["version"] = VERSION;
+  doc["hostname"] = WiFi.getHostname();
+  doc["ip"] = WiFi.localIP().toString();
   serializeJson(doc, *response);
   request->send(response);
 }

@@ -110,7 +110,7 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
 
 /** Non-blocking once-per-boot panel clock sync when `AUTO_SYNC_PANEL_CLOCK` is set (tub builds). */
 void spaPanelClockAutoSyncTick();
-/** `GET /api/version` — `panelClockAutoSync` object (LOCAL_CLIENT builds only). */
+/** `GET /api/diagnostics` — `panelClockAutoSync` object (LOCAL_CLIENT builds only). */
 void spaPanelClockAutoSyncAppendToJson(JsonObject root);
 
 #endif

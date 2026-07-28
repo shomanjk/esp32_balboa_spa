@@ -60,7 +60,7 @@ This is **moderate DIY**, not a sealed appliance: you need a safe **RS485 tap**,
 
 - **[M5 Atom Lite + Atomic RS485 Base](#m5-atom-lite--atomic-rs485-base-tub-side)** tub-side wiring, **`M5_ATOM_LED`**, and related **PlatformIO** environments in [`platformio.ini`](platformio.ini).
 - **RS485** robustness, diagnostics, and **JSON APIs** (`/api/rs485`, `/api/rs485/raw`, `/api/rs485/history`) — see [CHANGELOG.md](CHANGELOG.md).
-- **Web** portal for `/status`, `/config`, `/state` (responsive layout, Wi‑Fi chart, **live spa + heating polling**, **RS485 command controls** on `/status`, firmware version on `/state`) and **`GET /api/version`**, **`/api/wifi`**, **`/api/status/controls`**, etc.
+- **Web** portal for `/status`, `/config`, `/state` (responsive layout, Wi‑Fi chart, **live spa + heating polling**, **RS485 command controls** on `/status`, firmware version on `/state`) and **`GET /api/version`**, **`/api/diagnostics`**, **`/api/wifi`**, **`/api/status/controls`**, etc.
 - **MQTT** telemetry on `Spa/<gateway>/…` topics and **Home Assistant MQTT Discovery** (retained `homeassistant/…/config`); optional `config.h` overrides — see [MQTT and Home Assistant](#mqtt-and-home-assistant).
 - **OTA** workflow for tub-side Atom builds.
 
@@ -136,13 +136,14 @@ Planned or deferred enhancements (not commitments; order and timing vary).
 
 - Operator-first layout: **System Health** hero (uptime, clock, RS485 badge, restart reason) and Wi-Fi (status badge, SSID/hostname, RSSI summary + network/signal grid) at the top.
 - `Show advanced diagnostics` reveals memory/build/RS485-today sub-cards, gateway reboot, RS485 deep counters (today vs yesterday table), and time-debug internals on demand.
-- Advanced mode includes `API Shortcuts` links for `/api/wifi`, `/api/version`, `/api/rs485`, `/api/rs485/raw`, and `/api/rs485/history`.
+- Advanced mode includes `API Shortcuts` links for `/api/wifi`, `/api/version`, `/api/diagnostics`, `/api/rs485`, `/api/rs485/raw`, and `/api/rs485/history`.
 
 ### JSON API (`GET`)
 
 | Path | Query | Purpose |
 | --- | --- | --- |
-| `/api/version` | — | Firmware `version`, `build`, `hostname`, `ip`, `restartReason`; gateway **`chipTempC`**, **`chipTempAvailable`**, **`chipTempStatus`**, **`chipTempStatusLabel`** (ESP32 die sensor, approximate). |
+| `/api/version` | — | Firmware identity: `version`, `build`, `hostname`, `ip`, `restartReason`, `espResetReason`, `lastRestartIntent`, plus GitHub update-check URLs. |
+| `/api/diagnostics` | — | Gateway post-mortem: `deviceUptimeMs`, RTC `faultLog`, `lastBridgeIngress`, chip temp (`chipTempC` / status fields), `panelClockAutoSync`; also echoes `version` / `hostname` / `ip`. |
 | `/api/wifi` | — | Wi‑Fi station: `connected`, `status` / `statusName`, `mac`, `hostname`; when connected: `ssid`, `rssi`, `ip`, `gateway`, `subnet`, `dns`, `channel`. |
 | `/api/rs485` | — | UART pins, baud, `autoTx`, byte/frame/CRC counters, polarity (`normal` / `inverted_rx_tx`), lock state, `health`. |
 | `/api/rs485/raw` | `limit` (default **80**, cap **256**) | Bounded recent RX bytes: `bytesHex`, `items[]` with `tMs`, `gapMs`, `byte`, `mode`, `uartAvailable`. |

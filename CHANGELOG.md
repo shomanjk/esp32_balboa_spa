@@ -12,6 +12,22 @@ where version numbers are used.
 
 - **PR compile CI** ([`.github/workflows/build.yml`](.github/workflows/build.yml)): PlatformIO builds **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**, using a runner copy of **`src/config-example.h`** (private `config.h` stays gitignored).
 
+## [2.21.0] - 2026-07-28
+
+### Added
+
+- **`GET /api/diagnostics`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/faultCapture/`](lib/faultCapture/)): Gateway post-mortem JSON — **`deviceUptimeMs`**, RTC **`faultLog`**, **`lastBridgeIngress`**, chip temperature fields, and **`panelClockAutoSync`** — sized independently of firmware identity. **`/state`** advanced diagnostics loads the fault ring from this endpoint; API Shortcuts includes the link.
+- **Restart reason components on `GET /api/version`**: **`espResetReason`** and **`lastRestartIntent`** alongside composite **`restartReason`**.
+
+### Changed
+
+- **`GET /api/version` slimmed** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Identity / update-check metadata only (`version`, `build`, `hostname`, `ip`, restart fields, repo URLs). **`faultLog`**, chip temp, and **`panelClockAutoSync`** moved to **`/api/diagnostics`** so ArduinoJson pool pressure can no longer drop diagnostics or firmware identity keys from a shared document.
+- **Restart soft-label attribution** ([`lib/restartReason/`](lib/restartReason/)): Composite **`restartReason`** appends the RTC soft intent (e.g. **OTA Update**) only for **`ESP_RST_SW`**. Panic / WDT / brownout show the ESP reason alone and clear a stale soft label so weeks-old OTA text no longer appears on later crashes.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.21.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.20.1] - 2026-07-08
 
 ### Added
@@ -1005,7 +1021,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.21.0...HEAD
+[2.21.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.1...v2.21.0
 [2.20.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.0...v2.20.1
 [2.20.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.1...v2.20.0
 [2.19.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.19.0...v2.19.1
