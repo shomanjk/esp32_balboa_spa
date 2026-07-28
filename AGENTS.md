@@ -102,7 +102,7 @@ Planned and deferred **product** direction lives in the README so it stays visib
 
 - **Changelog:** [`CHANGELOG.md`](CHANGELOG.md); **`[Unreleased]`** for pending work.
 - **Firmware version:** [`src/main.h`](src/main.h) `VERSION` should align with tagged releases when cutting a release.
-- **Process:** [FORK.md](FORK.md) (prefer feature-branch PRs into **`ESP32`** for substantive work so CI/Codex can review; tags + GitHub Releases for named snapshots).
+- **Process:** [FORK.md](FORK.md) (prefer feature-branch PRs into **`ESP32`** for substantive work so Codex can review; wait for CI only when PR checks are configured; tags + GitHub Releases for named snapshots).
 
 ## Conventions for agents
 
