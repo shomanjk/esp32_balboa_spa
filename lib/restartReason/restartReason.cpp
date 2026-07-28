@@ -113,5 +113,7 @@ void setLastRestartReason(String reason)
   restartReason.magicNumber = RR_MAGIC_NUMBER;
   reason.toCharArray(restartReason.description, RR_MAXIMUM_DESCRIPTION_LENGTH);
   restartReason.description[RR_MAXIMUM_DESCRIPTION_LENGTH - 1] = '\0';
-  s_softIntentConsumed = false;
+  // Do not clear s_softIntentConsumed here. On a non-SW boot, cleanup may already have
+  // run; re-arming would let a concurrent getLastRestartReason() erase a newly recorded
+  // intent (e.g. "Web restart") before ESP.restart() completes.
 }
