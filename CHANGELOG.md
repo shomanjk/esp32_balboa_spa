@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Changed
+
+- **Maintainer workflow** ([`FORK.md`](FORK.md), [`AGENTS.md`](AGENTS.md)): Prefer feature-branch PRs into **`ESP32`** for substantive changes so Codex can review; wait for CI only when PR checks exist (wiki publish workflow is not a PR gate); direct pushes remain OK for tiny docs/typos or an explicit choice.
+
 ## [2.20.1] - 2026-07-08
 
 ### Added
