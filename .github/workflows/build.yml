@@ -1,0 +1,53 @@
+# Compile-check primary PlatformIO envs on PRs and pushes to ESP32.
+# Uses src/config-example.h only (never the gitignored private config.h).
+
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [ESP32]
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    name: pio ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env:
+          - M5AtomLite-tub
+          - ESP32ota
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Provide CI config.h from example
+        run: cp src/config-example.h src/config.h
+
+      - name: Build ${{ matrix.env }}
+        run: pio run -e ${{ matrix.env }}

@@ -36,13 +36,13 @@ Use GitHub’s **compare** view or `git diff` as needed. There is no requirement
 
 ## Git workflow: push, PRs, and tags
 
-Default branch for this fork is **`ESP32`**. Solo maintenance is fine; **prefer pull requests for substantive work** so [Codex](https://developers.openai.com/codex/integrations/github) (and any configured GitHub Actions checks) can review the diff before merge. Direct pushes remain OK for tiny docs/typos or when you explicitly choose them.
+Default branch for this fork is **`ESP32`**. Solo maintenance is fine; **prefer pull requests for substantive work** so [Codex](https://developers.openai.com/codex/integrations/github) and GitHub Actions can review the diff before merge. Direct pushes remain OK for tiny docs/typos or when you explicitly choose them.
 
-Today this repo’s only workflow ([`.github/workflows/publish-wiki.yml`](.github/workflows/publish-wiki.yml)) publishes wiki content and does **not** run on pull requests. Treat **Codex** as the default pre-merge review checkpoint; wait for CI only when PR checks exist. A dedicated `pull_request` build workflow is a separate follow-up if you want compile gates.
+**PR compile CI:** [`.github/workflows/build.yml`](.github/workflows/build.yml) runs `pio run` for **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**. The job copies **`src/config-example.h`** → **`src/config.h`** on the runner only (never commit private `config.h`). Wait for those checks plus Codex (or `@codex review`), triage findings, then merge. Wiki publish ([`publish-wiki.yml`](.github/workflows/publish-wiki.yml)) is separate and is not a PR gate.
 
 | Action | When to use |
 |--------|-------------|
-| **Feature branch + PR** into **`ESP32`** | **Preferred** for firmware, protocol, MQTT, web UI, release-bound, or otherwise risky changes. Open the PR, wait for Codex (or comment `@codex review`) and any configured CI checks, triage findings, then merge. |
+| **Feature branch + PR** into **`ESP32`** | **Preferred** for firmware, protocol, MQTT, web UI, release-bound, or otherwise risky changes. Open the PR, wait for **Build** checks + Codex (or comment `@codex review`), triage findings, then merge. |
 | **`git push`** straight to **`ESP32`** | OK for tiny docs/typos, throwaway experiments, or an explicit direct-push choice. Not the default for behavior changes. |
 | **Pull request to another user’s repo** | Only if you decide to contribute upstream later. **Not** the default plan for this fork. |
 | **Tags + GitHub Releases** | When you want a **named snapshot** others can pin (e.g. `v0.1.0`). Tag **after** the commits you want are on **`ESP32`**. |
@@ -55,7 +55,7 @@ Today this repo’s only workflow ([`.github/workflows/publish-wiki.yml`](.githu
 4. Create an annotated tag: `git tag -a v0.2.0 -m "v0.2.0"` (use the next version) then `git push origin v0.2.0`. The first release from this fork is **`v0.1.0`** (see [CHANGELOG.md](CHANGELOG.md)).
 5. On GitHub: **Releases → Draft a new release**, choose the tag, paste changelog highlights.
 
-**PRs** give you a Codex checkpoint (and CI when configured); **tags** give others reproducible checkouts. You can still tag without a PR for a hotfix, but prefer merging via PR when the change is non-trivial.
+**PRs** give you Build + Codex checkpoints; **tags** give others reproducible checkouts. You can still tag without a PR for a hotfix, but prefer merging via PR when the change is non-trivial.
 
 ## Issues and contributions
 
