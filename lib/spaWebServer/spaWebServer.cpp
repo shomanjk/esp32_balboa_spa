@@ -2900,12 +2900,14 @@ void handleDiagnostics(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   DynamicJsonDocument doc(10240);
-  faultCaptureAppendToJson(doc.to<JsonObject>());
+  // Use to<> once — a second to<JsonObject>() clears the document (ArduinoJson 6).
+  JsonObject root = doc.to<JsonObject>();
+  faultCaptureAppendToJson(root);
   appendGatewayChipTempJson(doc);
-  spaPanelClockAutoSyncAppendToJson(doc.to<JsonObject>());
-  doc["version"] = VERSION;
-  doc["hostname"] = WiFi.getHostname();
-  doc["ip"] = WiFi.localIP().toString();
+  spaPanelClockAutoSyncAppendToJson(root);
+  root["version"] = VERSION;
+  root["hostname"] = WiFi.getHostname();
+  root["ip"] = WiFi.localIP().toString();
   serializeJson(doc, *response);
   request->send(response);
 }

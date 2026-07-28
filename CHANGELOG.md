@@ -16,7 +16,7 @@ where version numbers are used.
 
 ### Added
 
-- **`GET /api/diagnostics`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/faultCapture/`](lib/faultCapture/)): Gateway post-mortem JSON — **`deviceUptimeMs`**, RTC **`faultLog`**, **`lastBridgeIngress`**, chip temperature fields, and **`panelClockAutoSync`** — sized independently of firmware identity. **`/state`** advanced diagnostics loads the fault ring from this endpoint; API Shortcuts includes the link.
+- **`GET /api/diagnostics`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/faultCapture/`](lib/faultCapture/)): Gateway post-mortem JSON — **`deviceUptimeMs`**, RTC **`faultLog`**, **`lastBridgeIngress`**, chip temperature fields, and **`panelClockAutoSync`** — sized independently of firmware identity. Builds the JSON object with a single ArduinoJson **`to<JsonObject>()`** so a second `to<>` cannot clear the fault ring (that was the real cause of “missing `faultLog`” on the old combined `/api/version` path). **`/state`** advanced diagnostics loads the fault ring from this endpoint; API Shortcuts includes the link.
 - **Restart reason components on `GET /api/version`**: **`espResetReason`** and **`lastRestartIntent`** alongside composite **`restartReason`**.
 
 ### Changed
