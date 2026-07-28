@@ -264,7 +264,7 @@ Matrix run:
 python3 scripts/bridge_raw_tester.py \
   --host <spa-ip-or-hostname> \
   --matrix docs/bridge-raw-command-matrix.example.json \
-  --out docs/bridge-raw-last-run.json
+  --out docs/local/bridge-raw-last-run.json
 ```
 
 Guardrails:

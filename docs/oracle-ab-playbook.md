@@ -20,17 +20,17 @@ Keep per-command metadata if available: target, channel byte, payload length, re
 
 Run against the ESP bridge host:
 
-`python3 scripts/bridge_raw_tester.py --host <spa-host> --matrix docs/bridge-raw-oracle-matrix.example.json --out docs/bridge-raw-firmware-run.json`
+`python3 scripts/bridge_raw_tester.py --host <spa-host> --matrix docs/bridge-raw-oracle-matrix.example.json --out docs/local/bridge-raw-firmware-run.json`
 
 If you have the oracle run in bridge_raw_tester format, store it as:
 
-- `docs/bridge-raw-oracle-run.json`
+- `docs/local/bridge-raw-oracle-run.json`
 
 ## 3) Compare oracle vs firmware behavior
 
 Use the comparer:
 
-`python3 scripts/bridge_raw_compare.py --oracle-run docs/bridge-raw-oracle-run.json --firmware-run docs/bridge-raw-firmware-run.json --out docs/bridge-raw-oracle-diff.json`
+`python3 scripts/bridge_raw_compare.py --oracle-run docs/local/bridge-raw-oracle-run.json --firmware-run docs/local/bridge-raw-firmware-run.json --out docs/local/bridge-raw-oracle-diff.json`
 
 Interpretation:
 

@@ -18,7 +18,7 @@ Use this flow when command writes look healthy but spa state does not change.
 
 Save logs to a text file, then run:
 
-`python3 scripts/diag_log_triage.py --in <path-to-log.txt> --out docs/diag-last-triage.json`
+`python3 scripts/diag_log_triage.py --in <path-to-log.txt> --out docs/local/diag-last-triage.json`
 
 What to look at in output:
 
@@ -36,5 +36,5 @@ What to look at in output:
 ## 5) Archive artifacts (30s)
 
 - Save raw log text in your local notes.
-- Keep machine-readable summary in `docs/diag-last-triage.json` (or dated variant).
+- Keep machine-readable summary in `docs/local/diag-last-triage.json` (or dated variant).
 - Add a short outcome line to `docs/command-write-debug-log.md` only if this run changed your hypothesis.

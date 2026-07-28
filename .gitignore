@@ -28,22 +28,10 @@ src/main.ino.cpp
 # Local spa/gateway log exports (web portal JSON, telnet captures, etc.)
 /logs/
 
-# Local-only social / forum post drafts (not part of the firmware project)
-/docs/marketing/
-
 # Local Mosquitto in docker/mosquitto — optional secrets if you add password/TLS later
 docker/mosquitto/config/passwd
 docker/mosquitto/certs/
 
-# Generated bridge diagnostics outputs (keep matrix/example inputs tracked)
-docs/bridge-raw-*-live-run.json
-docs/bridge-raw-live-run.json
-docs/bridge-raw-live-*.json
-docs/bridge-raw-*-dry-run.json
-docs/bridge-raw-*-diff-*.json
-docs/bridge-raw-last-run.json
-
-# Live gateway diagnostic captures (keep *.example.json tracked)
-docs/diag-*.json
-!docs/diag-light1-next-cts-live-run.example.json
-docs/telnet-*.txt
+# Local-only docs: bridge/diag run outputs, telnet captures, marketing drafts, review notes.
+# Keep curated matrices/examples and public docs in docs/ (tracked).
+/docs/local/

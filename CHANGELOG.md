@@ -8,10 +8,6 @@ where version numbers are used.
 
 ## [Unreleased]
 
-### Changed
-
-- **Maintainer workflow** ([`FORK.md`](FORK.md), [`AGENTS.md`](AGENTS.md)): Prefer feature-branch PRs into **`ESP32`** for substantive changes; wait for **Build** CI + automatic Codex (on PR open); `@codex review` only when auto misses or a substantive re-review is needed; direct pushes remain OK for tiny docs/typos or an explicit choice. Branch ruleset requires **`pio M5AtomLite-tub`** / **`pio ESP32ota`** on merge into **`ESP32`**.
-
 ### Added
 
 - **PR compile CI** ([`.github/workflows/build.yml`](.github/workflows/build.yml)): PlatformIO builds **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**, using a runner copy of **`src/config-example.h`** (private `config.h` stays gitignored).

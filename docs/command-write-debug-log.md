@@ -2,7 +2,7 @@
 
 This log tracks attempted command-write solutions and measured outcomes so we do not duplicate experiments.
 
-Live gateway diagnostic exports (`docs/diag-*.json`, `docs/telnet-*.txt`) are **gitignored** — same policy as generated bridge run outputs. Shape reference: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json).
+Write live captures and harness outputs under **`docs/local/`** (entire folder gitignored). Shape reference: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json).
 
 ## 2026-06-22 - MQTT filter schedule writes + running telemetry
 
@@ -169,7 +169,7 @@ Harness I/O contract:
 Matrix execution status:
 
 - Dry-run validation completed:
-  - `python3 scripts/bridge_raw_tester.py --host 127.0.0.1 --matrix docs/bridge-raw-command-matrix.example.json --dry-run --out docs/bridge-raw-last-run.json`
+  - `python3 scripts/bridge_raw_tester.py --host 127.0.0.1 --matrix docs/bridge-raw-command-matrix.example.json --dry-run --out docs/local/bridge-raw-last-run.json`
   - Result: parser/runner/output contract verified (`caseCount=2`, `ok=true` in dry-run mode)
 - Live matrix rows for command families under test:
   - `0x11` (toggle): ready to execute via bridge using known frame `7e 07 0a bf 11 04 00 13 7e`
@@ -179,7 +179,7 @@ Matrix execution status:
 
 Command:
 
-- `python3 scripts/bridge_raw_tester.py --host spa-XXXXXXXXXXXX.local --matrix docs/bridge-raw-command-matrix.example.json --out docs/bridge-raw-live-run.json`
+- `python3 scripts/bridge_raw_tester.py --host spa-XXXXXXXXXXXX.local --matrix docs/bridge-raw-command-matrix.example.json --out docs/local/bridge-raw-live-run.json`
 
 Results:
 
@@ -201,7 +201,7 @@ Interpretation:
 
 Command:
 
-- `python3 scripts/bridge_raw_tester.py --host spa-XXXXXXXXXXXX.local --label set_temp_100f_repeat3 --frame-hex 7e060abf2064c17e --retries 3 --cooldown-ms 2000 --timeout-ms 1800 --out docs/bridge-raw-live-settemp-repeat3.json`
+- `python3 scripts/bridge_raw_tester.py --host spa-XXXXXXXXXXXX.local --label set_temp_100f_repeat3 --frame-hex 7e060abf2064c17e --retries 3 --cooldown-ms 2000 --timeout-ms 1800 --out docs/local/bridge-raw-live-settemp-repeat3.json`
 
 Results:
 
@@ -278,9 +278,9 @@ Current checkpoint before pivoting away from `0x20`:
 Resume package for future `0x20` work:
 
 - Last live artifacts:
-  - `docs/bridge-raw-live-run.json`
-  - `docs/bridge-raw-live-settemp-repeat3.json`
-  - `docs/bridge-raw-live-settemp-80f.json`
+  - `docs/local/bridge-raw-live-run.json`
+  - `docs/local/bridge-raw-live-settemp-repeat3.json`
+  - `docs/local/bridge-raw-live-settemp-80f.json`
 - Harness and matrix:
   - `scripts/bridge_raw_tester.py`
   - `docs/bridge-raw-command-matrix.example.json`
@@ -382,8 +382,8 @@ Inputs pulled from upstream source:
 Artifacts added:
 
 - `docs/bridge-raw-oracle-derived-matrix.json`
-- `docs/bridge-raw-oracle-derived-live-run.json`
-- `docs/bridge-raw-oracle-derived-diff-vs-live-frame.json`
+- `docs/local/bridge-raw-oracle-derived-live-run.json`
+- `docs/local/bridge-raw-oracle-derived-diff-vs-live-frame.json`
 
 Observed from live run against bridge host:
 
@@ -412,22 +412,22 @@ Added matrices:
 
 Suggested execution:
 
-- `python3 scripts/bridge_raw_tester.py --host <spa-host> --matrix docs/bridge-raw-state-precondition-matrix.json --out docs/bridge-raw-state-precondition-live-run.json`
-- `python3 scripts/bridge_raw_tester.py --host <spa-host> --matrix docs/bridge-raw-cts-cadence-matrix.json --out docs/bridge-raw-cts-cadence-live-run.json`
+- `python3 scripts/bridge_raw_tester.py --host <spa-host> --matrix docs/bridge-raw-state-precondition-matrix.json --out docs/local/bridge-raw-state-precondition-live-run.json`
+- `python3 scripts/bridge_raw_tester.py --host <spa-host> --matrix docs/bridge-raw-cts-cadence-matrix.json --out docs/local/bridge-raw-cts-cadence-live-run.json`
 
 Comparison:
 
-- `python3 scripts/bridge_raw_compare.py --match-by frame --oracle-run docs/bridge-raw-state-precondition-live-run.json --firmware-run docs/bridge-raw-live-run.json --out docs/bridge-raw-state-precondition-diff-vs-baseline.json`
-- `python3 scripts/bridge_raw_compare.py --match-by frame --oracle-run docs/bridge-raw-cts-cadence-live-run.json --firmware-run docs/bridge-raw-live-run.json --out docs/bridge-raw-cts-cadence-diff-vs-baseline.json`
+- `python3 scripts/bridge_raw_compare.py --match-by frame --oracle-run docs/local/bridge-raw-state-precondition-live-run.json --firmware-run docs/local/bridge-raw-live-run.json --out docs/local/bridge-raw-state-precondition-diff-vs-baseline.json`
+- `python3 scripts/bridge_raw_compare.py --match-by frame --oracle-run docs/local/bridge-raw-cts-cadence-live-run.json --firmware-run docs/local/bridge-raw-live-run.json --out docs/local/bridge-raw-cts-cadence-diff-vs-baseline.json`
 
 ### 2026-04-28 live execution results (state-precondition + cadence)
 
 Artifacts:
 
-- `docs/bridge-raw-state-precondition-live-run.json`
-- `docs/bridge-raw-state-precondition-diff-vs-baseline.json`
-- `docs/bridge-raw-cts-cadence-live-run.json`
-- `docs/bridge-raw-cts-cadence-diff-vs-baseline.json`
+- `docs/local/bridge-raw-state-precondition-live-run.json`
+- `docs/local/bridge-raw-state-precondition-diff-vs-baseline.json`
+- `docs/local/bridge-raw-cts-cadence-live-run.json`
+- `docs/local/bridge-raw-cts-cadence-diff-vs-baseline.json`
 
 State-precondition matrix (`temp_range` / `heating_mode` sequencing before `0x20`):
 
@@ -456,9 +456,9 @@ Objective:
 Artifacts:
 
 - `docs/bridge-raw-light1-deep-matrix.json`
-- `docs/bridge-raw-light1-deep-dry-run.json`
-- `docs/bridge-raw-light1-deep-live-run.json`
-- `docs/bridge-raw-light1-deep-diff-vs-oracle-derived.json`
+- `docs/local/bridge-raw-light1-deep-dry-run.json`
+- `docs/local/bridge-raw-light1-deep-live-run.json`
+- `docs/local/bridge-raw-light1-deep-diff-vs-oracle-derived.json`
 
 Cases covered:
 
@@ -490,8 +490,8 @@ Objective:
 Artifacts:
 
 - `docs/bridge-raw-light1-session-context-matrix.json`
-- `docs/bridge-raw-light1-session-context-dry-run.json`
-- `docs/bridge-raw-light1-session-context-live-run.json`
+- `docs/local/bridge-raw-light1-session-context-dry-run.json`
+- `docs/local/bridge-raw-light1-session-context-live-run.json`
 
 Frames injected (from firmware RS485 client patterns):
 
@@ -561,7 +561,7 @@ Firmware:
 
 Artifact:
 
-- `docs/diag-light1-next-cts-live-run.json` (local, gitignored; shape: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json))
+- `docs/local/diag-light1-next-cts-live-run.json` (local, gitignored; shape: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json))
 
 Trial groups and outcomes:
 
@@ -591,7 +591,7 @@ Firmware:
 
 Artifact:
 
-- `docs/diag-light1-next-cts-live-run-decoded.json` (local, gitignored)
+- `docs/local/diag-light1-next-cts-live-run-decoded.json` (local, gitignored)
 
 Trial groups:
 
@@ -616,7 +616,7 @@ Firmware behavior exercised:
 
 - Endpoint: `GET /api/diag/light1_next_cts_window`
 - Run params: `observe_ms=7000`, `sample_ms=120`
-- Live artifact: `docs/diag-light1-next-cts-window-live-run.json` (local, gitignored)
+- Live artifact: `docs/local/diag-light1-next-cts-window-live-run.json` (local, gitignored)
 
 Observed results:
 
@@ -633,7 +633,7 @@ Interpretation:
 
 Artifact:
 
-- `docs/diag-light1-next-cts-window-ab-live-run.json` (local, gitignored)
+- `docs/local/diag-light1-next-cts-window-ab-live-run.json` (local, gitignored)
 
 Matrix:
 

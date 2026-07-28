@@ -1,5 +1,5 @@
 {
-  "_note": "Redacted example of GET /api/diag/light1_next_cts output. Save real captures as docs/diag-*.json locally (gitignored).",
+  "_note": "Redacted example of GET /api/diag/light1_next_cts output. Save real captures under docs/local/ (gitignored).",
   "version": {
     "version": "1.6.1",
     "build": "Apr 28 2026 - 12:16:38",
