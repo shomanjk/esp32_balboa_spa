@@ -38,11 +38,11 @@ Use GitHub’s **compare** view or `git diff` as needed. There is no requirement
 
 Default branch for this fork is **`ESP32`**. Solo maintenance is fine; **prefer pull requests for substantive work** so [Codex](https://developers.openai.com/codex/integrations/github) and GitHub Actions can review the diff before merge. Direct pushes remain OK for tiny docs/typos or when you explicitly choose them.
 
-**PR compile CI:** [`.github/workflows/build.yml`](.github/workflows/build.yml) runs `pio run` for **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**. The job copies **`src/config-example.h`** → **`src/config.h`** on the runner only (never commit private `config.h`). Wait for those checks plus Codex (or `@codex review`), triage findings, then merge. Wiki publish ([`publish-wiki.yml`](.github/workflows/publish-wiki.yml)) is separate and is not a PR gate.
+**PR compile CI:** [`.github/workflows/build.yml`](.github/workflows/build.yml) runs `pio run` for **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**. The job copies **`src/config-example.h`** → **`src/config.h`** on the runner only (never commit private `config.h`). Wait for those checks plus **automatic Codex** (this repo uses Automatic reviews on PR open). Comment `@codex review` only if auto review never appears, after substantive follow-up commits, or for a focused ask — not by default on open, and not after a clean pass for tiny docs tweaks. Wiki publish ([`publish-wiki.yml`](.github/workflows/publish-wiki.yml)) is separate and is not a PR gate.
 
 | Action | When to use |
 |--------|-------------|
-| **Feature branch + PR** into **`ESP32`** | **Preferred** for firmware, protocol, MQTT, web UI, release-bound, or otherwise risky changes. Open the PR, wait for **Build** checks + Codex (or comment `@codex review`), triage findings, then merge. |
+| **Feature branch + PR** into **`ESP32`** | **Preferred** for firmware, protocol, MQTT, web UI, release-bound, or otherwise risky changes. Open the PR, wait for **Build** checks + automatic Codex, triage findings, then merge. |
 | **`git push`** straight to **`ESP32`** | OK for tiny docs/typos, throwaway experiments, or an explicit direct-push choice. Not the default for behavior changes. |
 | **Pull request to another user’s repo** | Only if you decide to contribute upstream later. **Not** the default plan for this fork. |
 | **Tags + GitHub Releases** | When you want a **named snapshot** others can pin (e.g. `v0.1.0`). Tag **after** the commits you want are on **`ESP32`**. |

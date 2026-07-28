@@ -10,7 +10,7 @@ where version numbers are used.
 
 ### Changed
 
-- **Maintainer workflow** ([`FORK.md`](FORK.md), [`AGENTS.md`](AGENTS.md)): Prefer feature-branch PRs into **`ESP32`** for substantive changes; wait for **Build** CI + Codex; direct pushes remain OK for tiny docs/typos or an explicit choice.
+- **Maintainer workflow** ([`FORK.md`](FORK.md), [`AGENTS.md`](AGENTS.md)): Prefer feature-branch PRs into **`ESP32`** for substantive changes; wait for **Build** CI + automatic Codex (on PR open); `@codex review` only when auto misses or a substantive re-review is needed; direct pushes remain OK for tiny docs/typos or an explicit choice.
 
 ### Added
 
