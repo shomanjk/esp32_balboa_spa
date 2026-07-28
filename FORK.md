@@ -36,22 +36,24 @@ Use GitHub’s **compare** view or `git diff` as needed. There is no requirement
 
 ## Git workflow: push, PRs, and tags
 
+Default branch for this fork is **`ESP32`**. Solo maintenance is fine; **prefer pull requests for substantive work** so CI and [Codex](https://developers.openai.com/codex/integrations/github) can review the diff before merge. Direct pushes remain OK for tiny docs/typos or when you explicitly choose them.
+
 | Action | When to use |
 |--------|-------------|
-| **`git push`** to your default branch (e.g. `main`) | Normal way to publish work to **your fork** on GitHub. You do **not** need a pull request on GitHub just to update your own fork’s `main`. |
-| **Pull request on your fork** (e.g. `feature/xyz` → `main`) | Optional. Useful for CI, review, or your own checklist before merging. Not required for solo development. |
+| **Feature branch + PR** into **`ESP32`** | **Preferred** for firmware, protocol, MQTT, web UI, release-bound, or otherwise risky changes. Open the PR, wait for CI + Codex (or comment `@codex review`), triage findings, then merge. |
+| **`git push`** straight to **`ESP32`** | OK for tiny docs/typos, throwaway experiments, or an explicit direct-push choice. Not the default for behavior changes. |
 | **Pull request to another user’s repo** | Only if you decide to contribute upstream later. **Not** the default plan for this fork. |
-| **Tags + GitHub Releases** | When you want a **named snapshot** others can pin (e.g. `v0.1.0`). Tag **after** the commits you want are on the target branch. |
+| **Tags + GitHub Releases** | When you want a **named snapshot** others can pin (e.g. `v0.1.0`). Tag **after** the commits you want are on **`ESP32`**. |
 
 ### Suggested release flow
 
-1. Commit and push to `main` (or merge a feature branch via PR if you use that workflow).
+1. Land the work on **`ESP32`** via a merged feature-branch PR (preferred) or a deliberate direct push for trivial changes.
 2. Update [CHANGELOG.md](CHANGELOG.md): move `[Unreleased]` items into a new `## [x.y.z] - YYYY-MM-DD` section. Use a **major** version (for example **`2.0.0`**) for milestone changes such as **reliable spa command writes**, per [Semantic Versioning](https://semver.org/) and the changelog narrative.
 3. Align firmware **`VERSION`** in [`src/main.h`](src/main.h) and **`ANALYTICS_VERSION`** in [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h) with the release tag (see [AGENTS.md](AGENTS.md)).
 4. Create an annotated tag: `git tag -a v0.2.0 -m "v0.2.0"` (use the next version) then `git push origin v0.2.0`. The first release from this fork is **`v0.1.0`** (see [CHANGELOG.md](CHANGELOG.md)).
 5. On GitHub: **Releases → Draft a new release**, choose the tag, paste changelog highlights.
 
-**You can use tags without PRs**, and **PRs without tags**; for a maintained fork, **both** are useful: PRs for your own process, tags for everyone else’s reproducible checkouts.
+**PRs** give you CI/Codex checkpoints; **tags** give others reproducible checkouts. You can still tag without a PR for a hotfix, but prefer merging via PR when the change is non-trivial.
 
 ## Issues and contributions
 
