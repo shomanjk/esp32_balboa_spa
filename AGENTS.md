@@ -102,12 +102,13 @@ Planned and deferred **product** direction lives in the README so it stays visib
 
 - **Changelog:** [`CHANGELOG.md`](CHANGELOG.md); **`[Unreleased]`** for pending work.
 - **Firmware version:** [`src/main.h`](src/main.h) `VERSION` should align with tagged releases when cutting a release.
-- **Process:** [FORK.md](FORK.md) (prefer feature-branch PRs into **`ESP32`** for substantive work so Codex can review; wait for CI only when PR checks are configured; tags + GitHub Releases for named snapshots).
+- **Process:** [FORK.md](FORK.md) (prefer feature-branch PRs into **`ESP32`**; wait for **Build** CI + Codex; tags + GitHub Releases for named snapshots).
 
 ## Conventions for agents
 
 - **Git:** Do **not** run **`git commit`**, **`git push`**, or push-implying **`gh`** steps unless the user **explicitly** asks in the same request. Summarize edits and let the maintainer commit/push.
-- **PRs:** Prefer a feature branch + PR into **`ESP32`** for substantive firmware/protocol/MQTT/web or release-bound changes (Codex reviews PR diffs). Direct push is OK for tiny docs/typos or when the maintainer chooses it. Remind; do not open PRs unless asked. See [FORK.md](FORK.md).
+- **PRs:** Prefer a feature branch + PR into **`ESP32`** for substantive firmware/protocol/MQTT/web or release-bound changes. Wait for [`.github/workflows/build.yml`](.github/workflows/build.yml) (`M5AtomLite-tub`, `ESP32ota`; CI uses `config-example.h` only) and Codex. Direct push is OK for tiny docs/typos or when the maintainer chooses it. Remind; do not open PRs unless asked. See [FORK.md](FORK.md).
+- **Testing:** Prefer **`pio run -e M5AtomLite-tub`** (and **`ESP32ota`** when changing shared build flags) locally before asking for a PR; CI mirrors those compile checks.
 - Prefer **small, focused changes**; match existing style and naming.
 - **Never commit `.claude/`** (local Claude / agent worktrees) or **`.cursor/`** (local Cursor rules); both are **gitignored**. Accidental gitlinks under `.claude/` broke `git submodule update` ([issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)).
 - **`config.h`** secrets: never commit; use **`config-example.h`** for templates only.
