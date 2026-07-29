@@ -17,14 +17,14 @@
 #include <rs485.h>
 #include <bridge.h>
 #include <spaEpaper.h>
-#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
+#ifdef M5_STATUS_LED
 #include <led_control.h>
 #endif
 
 #include "main.h"
 #include <webLogBuffer.h>
 
-#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
+#ifdef M5_STATUS_LED
 void onStationModeGotIP(WiFiEvent_t event, WiFiEventInfo_t info) {
     ledControl.setWifiConnected();
 }
@@ -91,11 +91,8 @@ void setup()
   addBuildDefinition("spaEpaper");
 #endif
 
-#ifdef M5_ATOM_LED
-  addBuildDefinition("M5_ATOM_LED");
-#endif
-#ifdef M5_ATOMS3_LITE_LED
-  addBuildDefinition("M5_ATOMS3_LITE_LED");
+#ifdef M5_STATUS_LED
+  addBuildDefinition("M5_STATUS_LED");
 #endif
 
 #ifdef DIAG_FAULT_CAPTURE
@@ -116,7 +113,7 @@ void setup()
   Log.verbose(F("SDK version: %s" CR), ESP.getSdkVersion());
 
   logSection("Wifi Module Setup");
-#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
+#ifdef M5_STATUS_LED
   WiFi.onEvent(onStationModeGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.onEvent(onStationModeDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 #endif
@@ -142,7 +139,7 @@ void setup()
   logSection("Bridge Setup");
   bridgeSetup();
 #endif
-#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
+#ifdef M5_STATUS_LED
   ledControl.begin();
 #endif
   logSection("Setup Complete");
@@ -178,7 +175,7 @@ void loop()
     bridgeLoop();
 #endif
   }
-#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
+#ifdef M5_STATUS_LED
   ledControl.update();
 #endif
 }

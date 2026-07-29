@@ -46,7 +46,7 @@ src/config.h — Wi-Fi / MQTT (pins only if generic env):
 UART port (default Serial2 in this project):
 Optional DE/RE or transceiver wiring notes:
 Mechanical stack (e.g. M5 Atom on Atomic RS485 Base): verified compatible? doc link?
-Optional RGB / status LED: enabled build flag (e.g. M5_ATOM_LED)? library (M5Atom vs M5Unified vs FastLED only)?
+Optional RGB / status LED: **`M5_STATUS_LED`** + **`M5_STATUS_LED_PIN`** (FastLED)?
 Libraries added to env vs [com]: lib_deps = …
 USB upload / bootloader / CDC quirks:
 Smoke test: serial log, /status, RS485 counters (/api/rs485):
@@ -71,7 +71,7 @@ Official hardware docs:
 
 - PlatformIO: **`M5AtomS3Lite-tub`** (USB CDC) and **`M5AtomS3Lite-tub-ota`** (espota) — `board = esp32-s3-devkitc-1`, same tub-side flags as Atom Lite (`LOCAL_CLIENT` + `LOCAL_CONNECT` + `BRIDGE` + `DIAG_FAULT_CAPTURE`).
 - UART on Atomic base with AtomS3 Lite: **`TX485_Rx=5`**, **`TX485_Tx=6`**, **`AUTO_TX`** (set by the env).
-- **RGB LED:** **`M5_ATOMS3_LITE_LED`** drives the onboard WS2812C on **GPIO 35** via FastLED (not `M5Atom` / not M5Unified `M5.Led`). Same meanings as Atom Lite: green = Wi‑Fi up, red = down, blue/yellow = coarse RS485 activity.
+- **RGB LED:** **`M5_STATUS_LED`** + **`M5_STATUS_LED_PIN=35`** drives the onboard WS2812C via FastLED (same path as Atom Lite pin **27**). Meanings: green = Wi‑Fi up, red = down, blue/yellow = coarse RS485 activity.
 - Fill `[env:M5AtomS3Lite-tub]` USB ports and/or `[env:M5AtomS3Lite-tub-ota]` `upload_port` in `platformio_local.ini` (see `platformio_local.ini.example`).
 - **USB flash quirk:** if esptool connects then fails with **`No serial data received`** after the stub, enter **download mode** (hold **reset ~2 s** until the internal green LED, release) and immediately re-run `pio run -e M5AtomS3Lite-tub -t upload`. Env uses **`upload_speed = 115200`** for more reliable CDC. Close any serial monitor first. After the first successful USB flash, prefer **`pio run -e M5AtomS3Lite-tub-ota -t upload`** for updates.
 
@@ -84,7 +84,6 @@ Official hardware docs:
 
 ### Still deferred
 
-- Unify Atom Lite + AtomS3 Lite status LED on **FastLED** (drop dual `M5Atom` / `M5_ATOMS3_LITE_LED` backends) — parked until Atom Lite colors can be verified: [`docs/led-fastled-unify.md`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/docs/led-fastled-unify.md)
 - Optional [`spa_module.csv`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/spa_module.csv) resize for 8 MB (current 4 MB-oriented table is fine; unused flash at the end)
 - CI matrix entry for `M5AtomS3Lite-tub` (after local USB compile/smoke)
 

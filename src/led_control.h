@@ -1,7 +1,7 @@
 #ifndef LED_CONTROL_H
 #define LED_CONTROL_H
 
-#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
+#ifdef M5_STATUS_LED
 
 #include <Arduino.h>
 
@@ -31,6 +31,6 @@ private:
 
 extern LedControl ledControl;
 
-#endif // M5_ATOM_LED || M5_ATOMS3_LITE_LED
+#endif // M5_STATUS_LED
 
 #endif
