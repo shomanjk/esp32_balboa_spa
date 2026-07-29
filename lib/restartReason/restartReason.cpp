@@ -1,6 +1,5 @@
 #include "restartReason.h"
 
-
 #include <esp_system.h>
 #include <ArduinoLog.h>
 
@@ -12,13 +11,18 @@ struct RestartReason
 
 RTC_NOINIT_ATTR RestartReason restartReason;
 
-String getLastRestartReason()
+static bool s_softIntentConsumed = false;
+
+static void clearLastRestartIntentStorage()
 {
+  restartReason.magicNumber = 0;
+  restartReason.description[0] = '\0';
+}
 
+String getEspResetReasonText()
+{
   String espResetReason = "";
-  esp_reset_reason_t reason = esp_reset_reason();
-
-  switch (reason)
+  switch (esp_reset_reason())
   {
   case ESP_RST_UNKNOWN:
     espResetReason = "Reset reason can not be determined";
@@ -67,10 +71,39 @@ String getLastRestartReason()
   default:
     break;
   }
-  String lastRestartReason = getLastRestartReasonDescription();
-  if (lastRestartReason != "")
+  return espResetReason;
+}
+
+String getLastRestartReasonDescription()
+{
+  if (restartReason.magicNumber == RR_MAGIC_NUMBER)
   {
-    espResetReason += " - " + lastRestartReason;
+    return String(restartReason.description);
+  }
+  return "";
+}
+
+String getLastRestartIntent()
+{
+  return getLastRestartReasonDescription();
+}
+
+String getLastRestartReason()
+{
+  String espResetReason = getEspResetReasonText();
+  const esp_reset_reason_t reason = esp_reset_reason();
+  const String intent = getLastRestartReasonDescription();
+
+  // Soft intent only applies to intentional esp_restart paths (OTA, web reboot, watchdogs).
+  if (reason == ESP_RST_SW && intent.length() > 0)
+  {
+    espResetReason += " - " + intent;
+  }
+  else if (reason != ESP_RST_SW && !s_softIntentConsumed)
+  {
+    // Drop stale labels (e.g. weeks-old OTA) so they do not linger across panic/WDT boots.
+    clearLastRestartIntentStorage();
+    s_softIntentConsumed = true;
   }
   return espResetReason;
 }
@@ -79,14 +112,8 @@ void setLastRestartReason(String reason)
 {
   restartReason.magicNumber = RR_MAGIC_NUMBER;
   reason.toCharArray(restartReason.description, RR_MAXIMUM_DESCRIPTION_LENGTH);
-}
-
-String getLastRestartReasonDescription()
-{
-  if (restartReason.magicNumber == RR_MAGIC_NUMBER)
-  {
-  //  restartReason.magicNumber = {0};
-    return String(restartReason.description);
-  }
-  return "";
+  restartReason.description[RR_MAXIMUM_DESCRIPTION_LENGTH - 1] = '\0';
+  // Do not clear s_softIntentConsumed here. On a non-SW boot, cleanup may already have
+  // run; re-arming would let a concurrent getLastRestartReason() erase a newly recorded
+  // intent (e.g. "Web restart") before ESP.restart() completes.
 }

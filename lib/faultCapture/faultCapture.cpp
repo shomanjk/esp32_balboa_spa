@@ -250,12 +250,21 @@ void faultCaptureAppendToJson(JsonObject root)
 
 #else
 
+#include <ArduinoJson.h>
+
 void faultCaptureInit() {}
 void faultCaptureOnBootFromResetReason() {}
 void faultCaptureAppend(const char *) {}
 void faultCaptureAppendf(const char *fmt, ...)
 {
   (void)fmt;
+}
+
+void faultCaptureAppendToJson(JsonObject root)
+{
+  root["deviceUptimeMs"] = millis();
+  root.createNestedArray("faultLog");
+  root["lastBridgeIngress"] = "";
 }
 
 #endif

@@ -57,10 +57,17 @@ void cacheRead(uint8_t *data, size_t length)
   }
 }
 
-#define cacheRecent(structure)                                                                                                                               \
-  {                                                                                                                                                          \
-    unsigned long currentTime = getTime();                                                                                                                   \
-    ((currentTime - (structure).lastUpdate < STALE_TIME * 2) ? bridgeSend((structure).rawData, (structure).rawDataLength) : sendMessageToSpa(data, length)); \
+#define cacheRecent(structure)                                                                                         \
+  {                                                                                                                    \
+    unsigned long currentTime = getTime();                                                                             \
+    if (currentTime - (structure).lastUpdate < STALE_TIME * 2)                                                         \
+    {                                                                                                                  \
+      bridgeSend((structure).rawData, (structure).rawDataLength);                                                      \
+    }                                                                                                                  \
+    else                                                                                                               \
+    {                                                                                                                  \
+      (void)sendMessageToSpa(data, length);                                                                            \
+    }                                                                                                                  \
   }
 
 void processFragment(uint8_t *data, size_t length)
