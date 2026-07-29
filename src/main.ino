@@ -159,22 +159,21 @@ void loop()
 
 #ifdef LOCAL_CLIENT
   if (WiFi.status() == WL_CONNECTED && wifiOtaIsStarted() &&
-      (!rs485UartBegun() || rs485RetryPending()))
+      (rs485RetryPending() || (!rs485UartBegun() && !rs485SafeModeActive())))
   {
     (void)rs485EnsureUartBegun();
   }
 #ifdef M5_STATUS_LED
   {
     Rs485LedAlert alert = Rs485LedAlert::None;
-    if (rs485SafeModeActive())
+    if (WiFi.status() == WL_CONNECTED)
     {
-      alert = Rs485LedAlert::SafeMode;
-    }
-    else if (WiFi.status() == WL_CONNECTED && rs485UartBegun() &&
-             rs485UartUptimeMs() >= 15000u)
-    {
-      const char *health = rs485HealthCode();
-      if (health != nullptr && strcmp(health, "VALID_FRAMES_OK") != 0)
+      if (rs485SafeModeActive())
+      {
+        alert = Rs485LedAlert::SafeMode;
+      }
+      else if (rs485UartBegun() && rs485UartUptimeMs() >= 15000u &&
+               rs485ValidFramesSinceBoot == 0)
       {
         alert = Rs485LedAlert::NoSpaData;
       }

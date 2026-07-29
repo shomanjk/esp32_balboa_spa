@@ -18,6 +18,8 @@ bool rs485EnsureUartBegun();
 bool rs485UartBegun();
 /** Milliseconds since UART begin, or 0 if not begun. */
 uint32_t rs485UartUptimeMs();
+/** Valid CRC frames since this boot (RAM; not RTC day counters). */
+extern uint32_t rs485ValidFramesSinceBoot;
 bool rs485SafeModeActive();
 /** Clear safe mode / streak and set retry-pending (main loop calls ensure). */
 void rs485RequestRetry();
