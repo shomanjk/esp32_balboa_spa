@@ -12,7 +12,7 @@ This page lists **supported** boards (matching a checked-in PlatformIO **`[env:�
 |---------------|------------------------|----------------|--------|
 | Generic ESP32 dev board (tub-side RS485) | ESP32 · varies | `ESP32ota`, `ESP32prodOta`, etc. | **Supported** — pins in `config.h` |
 | **M5 Atom Lite** + Atomic RS485 Base | ESP32-PICO-D4 · 4 MB | `M5AtomLite-tub`, `M5AtomLite-tub-ota` | **Supported** — env pins **RX 22 / TX 19** ([README — M5 section](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side)) |
-| **M5 AtomS3 Lite** + Atomic RS485 Base (**not** display AtomS3) | ESP32-S3FN8 · 8 MB | `M5AtomS3Lite-tub` (USB) | **Bring-up** — env pins **RX 5 / TX 6**; RGB via FastLED GPIO **35**; no `-ota` env yet |
+| **M5 AtomS3 Lite** + Atomic RS485 Base (**not** display AtomS3) | ESP32-S3FN8 · 8 MB | `M5AtomS3Lite-tub`, `M5AtomS3Lite-tub-ota` | **Bring-up** — env pins **RX 5 / TX 6**; RGB via FastLED GPIO **35** |
 | LilyGo T5 ePaper | ESP32-S3 · varies | `ESP32-epd47` | **Supported** (remote display; `REMOTE_CLIENT` + `spaEpaper`) |
 
 ---
@@ -22,7 +22,7 @@ This page lists **supported** boards (matching a checked-in PlatformIO **`[env:�
 | Env class | Who sets `TX485_Rx` / `TX485_Tx` / `AUTO_TX` |
 |-----------|-----------------------------------------------|
 | **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`** | PlatformIO `build_flags` (**22 / 19**, `AUTO_TX`) — omit overrides in `config.h` |
-| **`M5AtomS3Lite-tub`** (AtomS3 Lite) | PlatformIO `build_flags` (**5 / 6**, `AUTO_TX`) — omit overrides in `config.h` |
+| **`M5AtomS3Lite-tub`**, **`M5AtomS3Lite-tub-ota`** (AtomS3 Lite) | PlatformIO `build_flags` (**5 / 6**, `AUTO_TX`) — omit overrides in `config.h` |
 | Generic (`ESP32ota`, …) | [`src/config.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) (`#ifndef`-guarded defaults **16 / 17**) |
 
 [`src/config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) wraps pin/`AUTO_TX` defines in `#ifndef` so env `-D` wins. **Migration:** private `config.h` files that still `#define TX485_*` / `AUTO_TX` **unconditionally** will redefinition-warn/error on M5 envs until those lines are wrapped or removed.
@@ -69,24 +69,22 @@ Official hardware docs:
 
 ### Env and pins
 
-- PlatformIO: **`M5AtomS3Lite-tub`** — `board = esp32-s3-devkitc-1`, USB CDC on boot, same tub-side flags as Atom Lite (`LOCAL_CLIENT` + `LOCAL_CONNECT` + `BRIDGE` + `DIAG_FAULT_CAPTURE`).
+- PlatformIO: **`M5AtomS3Lite-tub`** (USB CDC) and **`M5AtomS3Lite-tub-ota`** (espota) — `board = esp32-s3-devkitc-1`, same tub-side flags as Atom Lite (`LOCAL_CLIENT` + `LOCAL_CONNECT` + `BRIDGE` + `DIAG_FAULT_CAPTURE`).
 - UART on Atomic base with AtomS3 Lite: **`TX485_Rx=5`**, **`TX485_Tx=6`**, **`AUTO_TX`** (set by the env).
 - **RGB LED:** **`M5_ATOMS3_LITE_LED`** drives the onboard WS2812C on **GPIO 35** via FastLED (not `M5Atom` / not M5Unified `M5.Led`). Same meanings as Atom Lite: green = Wi‑Fi up, red = down, blue/yellow = coarse RS485 activity.
-- **No** `M5AtomS3Lite-tub-ota` yet — USB only.
-- Fill `[env:M5AtomS3Lite-tub]` ports in `platformio_local.ini` (see `platformio_local.ini.example`).
-- **USB flash quirk:** if esptool connects then fails with **`No serial data received`** after the stub, enter **download mode** (hold **reset ~2 s** until the internal green LED, release) and immediately re-run `pio run -e M5AtomS3Lite-tub -t upload`. Env uses **`upload_speed = 115200`** for more reliable CDC. Close any serial monitor first.
+- Fill `[env:M5AtomS3Lite-tub]` USB ports and/or `[env:M5AtomS3Lite-tub-ota]` `upload_port` in `platformio_local.ini` (see `platformio_local.ini.example`).
+- **USB flash quirk:** if esptool connects then fails with **`No serial data received`** after the stub, enter **download mode** (hold **reset ~2 s** until the internal green LED, release) and immediately re-run `pio run -e M5AtomS3Lite-tub -t upload`. Env uses **`upload_speed = 115200`** for more reliable CDC. Close any serial monitor first. After the first successful USB flash, prefer **`pio run -e M5AtomS3Lite-tub-ota -t upload`** for updates.
 
 ### Desk bench without disturbing a spa Atom Lite
 
 1. Leave the installed Atom Lite powered and do **not** run `M5AtomLite-tub` / `-ota` upload while testing.
 2. One private `src/config.h` for Wi‑Fi / MQTT. For Docker Mosquitto on a laptop, temporarily set `MQTT_SERVER` to the Mac **LAN IP** (not `127.0.0.1`), empty broker auth, and `#define MQTT_HA_DISCOVERY 0` — see [`docker/mosquitto/`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/docker/mosquitto/docker-compose.yml). Restore production broker settings before any Atom Lite rebuild.
 3. Power the AtomS3 Lite with **USB-C** only; do not parallel both gateways on the live spa RS485 bus.
-4. `pio run -e M5AtomS3Lite-tub -t upload` — confirm hostname `spa-<mac>`, `/status` loads (no spa frames until RS485 is connected later).
+4. `pio run -e M5AtomS3Lite-tub -t upload` (first flash) — confirm hostname `spa-<mac>`, `/status` loads (no spa frames until RS485 is connected later). Later updates: `pio run -e M5AtomS3Lite-tub-ota -t upload`.
 
 ### Still deferred
 
 - Unify Atom Lite + AtomS3 Lite status LED on **FastLED** (drop dual `M5Atom` / `M5_ATOMS3_LITE_LED` backends) — parked until Atom Lite colors can be verified: [`docs/led-fastled-unify.md`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/docs/led-fastled-unify.md)
-- `M5AtomS3Lite-tub-ota`
 - Optional [`spa_module.csv`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/spa_module.csv) resize for 8 MB (current 4 MB-oriented table is fine; unused flash at the end)
 - CI matrix entry for `M5AtomS3Lite-tub` (after local USB compile/smoke)
 

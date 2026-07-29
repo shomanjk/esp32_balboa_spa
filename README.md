@@ -335,21 +335,22 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
 
 ### M5 AtomS3 Lite (bench / bring-up)
 
-USB-only env **`M5AtomS3Lite-tub`** for the [AtomS3 Lite](https://docs.m5stack.com/en/core/AtomS3%20Lite) (SKU **C124** — **not** the display AtomS3 / AtomS3R). `board = esp32-s3-devkitc-1`, USB CDC; Atomic RS485 Base pins **RX 5 / TX 6** from the env; RGB status LED via **`M5_ATOMS3_LITE_LED`** (FastLED, GPIO **35** — same colors as Atom Lite). No OTA env yet. Desk bring-up without disturbing an installed Atom Lite: wiki **[Hardware targets](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets)** (source: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md)).
+Envs **`M5AtomS3Lite-tub`** (USB CDC) and **`M5AtomS3Lite-tub-ota`** (espota) for the [AtomS3 Lite](https://docs.m5stack.com/en/core/AtomS3%20Lite) (SKU **C124** — **not** the display AtomS3 / AtomS3R). `board = esp32-s3-devkitc-1`; Atomic RS485 Base pins **RX 5 / TX 6** from the env; RGB status LED via **`M5_ATOMS3_LITE_LED`** (FastLED, GPIO **35** — same colors as Atom Lite). Prefer **OTA** after the first USB flash if CDC upload is flaky. Desk bring-up without disturbing an installed Atom Lite: wiki **[Hardware targets](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets)** (source: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md)).
 
 ---
 
 ## OTA updates (M5 Atom tub-side)
 
 - **ArduinoOTA** is enabled from Wi‑Fi connect ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)); serial logs show hostname/IP.
-- Use environment **`M5AtomLite-tub-ota`** (`upload_protocol = espota`). Copy [`platformio_local.ini.example`](platformio_local.ini.example) to **`platformio_local.ini`** (gitignored) and set `upload_port` to `spa-XXXXXXXXXXXX.local` or the device IP — or pass `--upload-port` on the CLI.
+- Use **`M5AtomLite-tub-ota`** or **`M5AtomS3Lite-tub-ota`** (`upload_protocol = espota`). Copy [`platformio_local.ini.example`](platformio_local.ini.example) to **`platformio_local.ini`** (gitignored) and set `upload_port` to `spa-XXXXXXXXXXXX.local` or the device IP — or pass `--upload-port` on the CLI.
 
 ```
 pio run -e M5AtomLite-tub-ota -t upload
+pio run -e M5AtomS3Lite-tub-ota -t upload
 ```
 
 - **Auth:** Off by default; set `ENABLE_OTA_AUTH` + `OTA_PASSWORD` in `config.h` for stricter LANs.
-- **Recovery:** Keep USB flashing via **`M5AtomLite-tub`** if OTA fails.
+- **Recovery:** Keep USB flashing via **`M5AtomLite-tub`** or **`M5AtomS3Lite-tub`** if OTA fails (AtomS3 Lite CDC can be finicky — OTA is often easier after the first USB flash).
 - **Visibility:** `/state` shows firmware version/build; **`GET /api/version`** returns JSON for dashboards.
 - **Runbook:** [`OTA_LOGGING_WORKFLOW.md`](OTA_LOGGING_WORKFLOW.md).
 
