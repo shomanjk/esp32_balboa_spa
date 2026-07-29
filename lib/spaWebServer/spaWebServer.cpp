@@ -1136,7 +1136,7 @@ static void appendStatusHistoriesSection(String &html)
 
   html += "<div id=\"statusTempHistSection\" class=\"history-block status-temp-hist-anchor\">";
   html += "<h3>Temperature history</h3>";
-  html += "<p class=\"chart-caption\">Last 24 hours, every 10 minutes (left = older, right = now). Saved to flash hourly when changed; power loss may drop samples since last save.</p>";
+  html += "<p class=\"chart-caption\">Last 24 hours, every 10 minutes (left = older, right = now). Held in RAM (survives soft reboot); power loss clears the chart until it refills.</p>";
   html += "<div class=\"chart-wrap\"><canvas id=\"statusTempHistChart\" height=\"140\" aria-label=\"Temperature history chart\"></canvas></div>";
   html += "<details class=\"history-raw\"><summary>Raw temperature values (oldest first, matches chart)</summary><pre>";
   html += temperatureHistoryOldestFirstString();

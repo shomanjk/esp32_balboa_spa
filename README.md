@@ -98,7 +98,7 @@ headers intact when redistributing those files.
 ## Usage history and analytics
 
 - Caching of hot tub configuration to reduce traffic to the spa controller and improve client responsiveness.
-- **Temperature:** 10-minute samples for **24 hours** (144 points) in RAM; persisted to LittleFS (`/TempHist.bin`) at most hourly and only when the buffer changed since last save. Soft reboot keeps RTC detail; power loss restores the last flash snapshot.
+- **Temperature:** 10-minute samples for **24 hours** (144 points) in RTC RAM (soft reboot keeps the series; power loss clears until it refills). Hourly LittleFS persist (`/TempHist.bin`) is **parked** after field panics on the write path — see [`docs/temp-history-littlefs-panic.md`](docs/temp-history-littlefs-panic.md).
 - Daily tracking of heater on-time (seconds), 24 days of history.
 - Daily tracking of filter on-time (seconds), 24 days of history.
 

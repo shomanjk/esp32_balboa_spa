@@ -69,6 +69,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 ## Known product gaps (do not assume they work)
 
 1. **LittleFS `balboa-spa` tab** — upstream-style SPA bundle may not expose the same controls as firmware **`/status`**; treat as read-first unless verified for your build.
+2. **Temperature history flash persist** — RTC 24h chart works; **`TEMP_HISTORY_FLASH_PERSIST`** defaults **off** (LittleFS `/TempHist.bin` writes paniced on field hardware). Do not re-enable without following [`docs/temp-history-littlefs-panic.md`](docs/temp-history-littlefs-panic.md).
 
 ## Active command-write scope
 

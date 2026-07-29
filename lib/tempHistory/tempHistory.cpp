@@ -4,17 +4,6 @@
 #include <ArduinoLog.h>
 #include <cstring>
 
-static const char kTempHistoryFile[] = "/TempHist.bin";
-
-typedef struct __attribute__((packed))
-{
-  uint16_t storeVersion;
-  uint16_t slotCount;
-  uint32_t magicNumber;
-  time_t lastSampleUnix;
-  float samples[TEMP_HISTORY_SLOTS];
-} TempHistoryStoreV1;
-
 static void tempHistoryReset(TempHistoryData *data)
 {
   data->magicNumber = TEMP_HISTORY_MAGIC_NUMBER;
@@ -26,6 +15,18 @@ static void tempHistoryReset(TempHistoryData *data)
     data->lastPersistedSamples[i] = 0.0f;
   }
 }
+
+#if TEMP_HISTORY_FLASH_PERSIST
+static const char kTempHistoryFile[] = "/TempHist.bin";
+
+typedef struct __attribute__((packed))
+{
+  uint16_t storeVersion;
+  uint16_t slotCount;
+  uint32_t magicNumber;
+  time_t lastSampleUnix;
+  float samples[TEMP_HISTORY_SLOTS];
+} TempHistoryStoreV1;
 
 static bool tempHistoryLoadFromFlash(TempHistoryData *data)
 {
@@ -65,6 +66,11 @@ static bool tempHistoryLoadFromFlash(TempHistoryData *data)
   return true;
 }
 
+/**
+ * Known-bad on field hardware (ESP_RST_PANIC). Kept only for deliberate re-enable soaks.
+ * See docs/temp-history-littlefs-panic.md — do not ship with TEMP_HISTORY_FLASH_PERSIST=1
+ * until that investigation is finished.
+ */
 static void tempHistorySaveToFlash(const TempHistoryData *data)
 {
   TempHistoryStoreV1 store = {};
@@ -92,6 +98,7 @@ static void tempHistorySaveToFlash(const TempHistoryData *data)
   }
   file.close();
 }
+#endif
 
 void tempHistorySetup(TempHistoryData *data)
 {
@@ -102,16 +109,25 @@ void tempHistorySetup(TempHistoryData *data)
 
   if (data->magicNumber != TEMP_HISTORY_MAGIC_NUMBER)
   {
+#if TEMP_HISTORY_FLASH_PERSIST
     if (!tempHistoryLoadFromFlash(data))
     {
       tempHistoryReset(data);
     }
+#else
+    // Persist parked: do not restore a stale /TempHist.bin after power loss.
+    tempHistoryReset(data);
+#endif
   }
   else
   {
     Log.notice(F("[TempHist]: Using RTC temperature history buffer" CR));
     data->lastPersistMs = millis();
   }
+
+#if !TEMP_HISTORY_FLASH_PERSIST
+  Log.notice(F("[TempHist]: Flash persist disabled (TEMP_HISTORY_FLASH_PERSIST=0)" CR));
+#endif
 }
 
 void tempHistorySample(TempHistoryData *data, float temp)
@@ -136,6 +152,11 @@ void tempHistoryMaybePersist(TempHistoryData *data)
     return;
   }
 
+#if !TEMP_HISTORY_FLASH_PERSIST
+  // Parked: LittleFS persist panics on field hardware. See docs/temp-history-littlefs-panic.md.
+  (void)data;
+  return;
+#else
   const unsigned long nowMs = millis();
   if (nowMs - data->lastPersistMs < TEMP_FLASH_SAVE_MIN_MS)
   {
@@ -152,6 +173,7 @@ void tempHistoryMaybePersist(TempHistoryData *data)
 
   tempHistorySaveToFlash(data);
   memcpy(data->lastPersistedSamples, data->samples, sizeof(data->lastPersistedSamples));
+#endif
 }
 
 const float *tempHistorySamplesNewestFirst(const TempHistoryData *data)

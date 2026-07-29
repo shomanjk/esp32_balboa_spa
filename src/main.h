@@ -10,7 +10,7 @@
 #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define VERSION "2.21.0"
+#define VERSION "2.21.1"
 // Compile-time string — do not use String(...).c_str() (dangling pointer if used as const char*).
 #define BUILD __DATE__ " - " __TIME__
 
@@ -95,5 +95,12 @@ extern String buildDefinitionString;
 #define TEMP_HISTORY_SLOTS 144
 #define TEMP_SAMPLE_INTERVAL_MS (10UL * 60UL * 1000UL)
 #define TEMP_FLASH_SAVE_MIN_MS (60UL * 60UL * 1000UL)
+/**
+ * Hourly LittleFS persist of /TempHist.bin. Default off — writing panics on field hardware.
+ * See docs/temp-history-littlefs-panic.md. Set to 1 only for deliberate isolation soaks.
+ */
+#ifndef TEMP_HISTORY_FLASH_PERSIST
+#define TEMP_HISTORY_FLASH_PERSIST 0
+#endif
 
 #endif
