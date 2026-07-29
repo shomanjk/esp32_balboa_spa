@@ -17,6 +17,14 @@
 
 #define WIFI_SSID "xxxxxx"
 #define WIFI_PASSWORD "xxxxxx"
+// Optional: lock STA to one mesh AP (BSSID). Omit for strongest-AP selection on connect/reconnect.
+// First remote OTA of the mesh STA build should leave this undefined until /api/wifi confirms the desired AP.
+// #define WIFI_BSSID "aa:bb:cc:dd:ee:ff"
+// Optional reconnect knobs (defaults in lib/wifiModule/wifiModule.h):
+// #define WIFI_RECONNECT_INITIAL_MS 5000UL
+// #define WIFI_RECONNECT_MAX_MS 60000UL
+// #define WIFI_CONNECT_ATTEMPT_TIMEOUT_MS 15000UL
+// Legacy WIFI_CONNECT_TIMEOUT (if set without WIFI_CONNECT_ATTEMPT_TIMEOUT_MS) maps to the async attempt timeout.
 
 #define MQTT_SERVER "mqtt.local"
 #define MQTT_PORT 1883
