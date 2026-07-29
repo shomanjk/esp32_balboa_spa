@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **Spa Website → firmware portal navigation** ([`balboa-spa`](balboa-spa) submodule): compact **Gateway** menu on the Vue SPA (login + top bar) links to `/status`, `/config`, `/state`, and `/logs`. PWA service worker denylist so those routes are not intercepted as SPA navigations. Requires LittleFS **`uploadfs`** after submodule update (firmware OTA alone does not ship SPA assets).
+
 ## [2.26.0] - 2026-07-29
 
 ### Added
