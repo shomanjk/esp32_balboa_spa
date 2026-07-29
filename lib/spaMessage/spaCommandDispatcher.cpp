@@ -52,9 +52,17 @@ SpaCommandResult queueFrame(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &frame,
   }
   if (!sendMessageToSpa(frame))
   {
-    Log.warning(F("[Cmd ]: rejected %s from %s (UART not ready / queue): %s" CR),
+#ifdef LOCAL_CLIENT
+    if (!rs485UartBegun())
+    {
+      Log.warning(F("[Cmd ]: rejected %s from %s (UART not ready): %s" CR),
+                  logAction, sourceLabel(source), msgToString(frame).c_str());
+      return {false, SPA_COMMAND_NOT_READY, "rs485_uart_not_ready"};
+    }
+#endif
+    Log.warning(F("[Cmd ]: rejected %s from %s (write queue full): %s" CR),
                 logAction, sourceLabel(source), msgToString(frame).c_str());
-    return {false, SPA_COMMAND_NOT_READY, "rs485_uart_not_ready"};
+    return {false, SPA_COMMAND_NOT_READY, "spa_write_queue_full"};
   }
   Log.verbose(F("[Cmd ]: accepted %s from %s: %s" CR), logAction, sourceLabel(source), msgToString(frame).c_str());
   return {true, SPA_COMMAND_ACCEPTED, "accepted"};
