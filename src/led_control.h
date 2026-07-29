@@ -1,9 +1,9 @@
 #ifndef LED_CONTROL_H
 #define LED_CONTROL_H
 
-#ifdef M5_ATOM_LED
+#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
 
-#include <M5Atom.h>
+#include <Arduino.h>
 
 // LED states
 enum LedState {
@@ -23,6 +23,7 @@ public:
     void update();
 
 private:
+    void showColor(uint32_t rgb); // 0xRRGGBB
     LedState currentState;
     unsigned long flashStartTime;
     bool isFlashing;
@@ -30,6 +31,6 @@ private:
 
 extern LedControl ledControl;
 
-#endif // M5_ATOM_LED
+#endif // M5_ATOM_LED || M5_ATOMS3_LITE_LED
 
 #endif

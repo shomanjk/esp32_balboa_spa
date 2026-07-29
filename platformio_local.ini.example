@@ -18,5 +18,13 @@ monitor_port = /dev/cu.usbserial-XXXX
 [env:M5AtomLite-tub-ota]
 upload_port = spa-XXXXXXXXXXXX.local
 
+; M5 AtomS3 Lite (not AtomS3) native USB CDC — path appears after plug-in / download mode.
+[env:M5AtomS3Lite-tub]
+upload_port = /dev/cu.usbmodemXXXX
+monitor_port = /dev/cu.usbmodemXXXX
+
+[env:M5AtomS3Lite-tub-ota]
+upload_port = spa-XXXXXXXXXXXX.local
+
 [env:ESP32-epd47]
 upload_port = spa-XXXXXXXXXXXX.local

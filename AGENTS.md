@@ -12,16 +12,16 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 | Target | PlatformIO env | Notes |
 |--------|----------------|--------|
-| Generic ESP32 dev board (tub-side RS485) | `ESP32prodOta`, `ESP32ota`, etc. | Default UART pins in `config-example.h`: RX **16**, TX **17**. |
-| **M5 Atom Lite + Atomic RS485 Base** | **`M5AtomLite-tub`** | `board = m5stack-atom`. Primary hardware target: stack UART **RX 22** / **TX 19**, **`AUTO_TX true`** — [README](README.md) “M5 Atom Lite + Atomic RS485 Base”, [`src/config-example.h`](src/config-example.h). Optional: [Unit RS485](https://docs.m5stack.com/en/unit/rs485) on Grove **32/26**. Build flag **`M5_ATOM_LED`** enables RGB status / RS485 activity (`src/led_control.*`). |
-| **M5 AtomS3 Lite** *(planned)* | *(none yet)* | Bring-up checklist and “do not assume” pins: [GitHub Wiki · Hardware targets](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets). **Deferred to ship:** new `pio` env (ESP32-S3 board + USB flags), port or gate **`M5_ATOM_LED`** (likely **M5Unified** vs **`m5stack/M5Atom`**), optional [`spa_module.csv`](spa_module.csv) resize for **8 MB** flash. |
+| Generic ESP32 dev board (tub-side RS485) | `ESP32prodOta`, `ESP32ota`, etc. | UART pins / **`AUTO_TX`** in `config.h` (`#ifndef` defaults RX **16**, TX **17** in [`config-example.h`](src/config-example.h)). |
+| **M5 Atom Lite + Atomic RS485 Base** | **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`** | `board = m5stack-atom`. Env **`build_flags`** set **RX 22** / **TX 19** / **`AUTO_TX`** (omit pin overrides in `config.h`). **`M5_ATOM_LED`** RGB status — [README](README.md). Nonstandard Grove wiring: use a **generic** env + `config.h` pins. |
+| **M5 AtomS3 Lite** + Atomic RS485 Base (not AtomS3) | **`M5AtomS3Lite-tub`**, **`M5AtomS3Lite-tub-ota`** | `board = esp32-s3-devkitc-1`, USB CDC. Env pins **RX 5** / **TX 6** / **`AUTO_TX`**. **`M5_ATOMS3_LITE_LED`**: FastLED WS2812 on GPIO **35** (same green/red/blue/yellow meaning as Atom Lite). Prefer `-ota` after first USB flash if CDC upload fails — [wiki · Hardware targets](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets). |
 | LilyGo T5 ePaper (remote display) | `ESP32-epd47` | `REMOTE_CLIENT` + `spaEpaper`; separate use case from tub RS485. |
 
 **Tub-side path:** `LOCAL_CLIENT` → RS485 at **115200 8N1** on `Serial2` ([`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp)).
 
 ## Configuration (required before a useful build)
 
-- **`src/config.h`** is **gitignored** (see `.gitignore`). Copy from [`src/config-example.h`](src/config-example.h) and set Wi‑Fi, MQTT, **`TX485_Rx` / `TX485_Tx`**, **`AUTO_TX`**. Optional: **`AUTO_SYNC_PANEL_CLOCK`** (panel time from NTP once per boot when drift exceeds threshold; example defaults **on**, omitted in older configs → **off** — see [`spaCommandDispatcher.h`](lib/spaMessage/spaCommandDispatcher.h)). Optional MQTT overrides: **`MQTT_HA_DISCOVERY`**, **`MQTT_DISCOVERY_PREFIX`**, **`MQTT_HA_TEMP_UNIT`** (see [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h) defaults).
+- **`src/config.h`** is **gitignored** (see `.gitignore`). Copy from [`src/config-example.h`](src/config-example.h) and set Wi‑Fi / MQTT. **`TX485_Rx` / `TX485_Tx` / `AUTO_TX`:** set in `config.h` for **generic** envs; **M5\*‑tub** envs supply them via `platformio.ini` `build_flags` (use `#ifndef` guards — see example). Optional: **`AUTO_SYNC_PANEL_CLOCK`** (panel time from NTP once per boot when drift exceeds threshold; example defaults **on**, omitted in older configs → **off** — see [`spaCommandDispatcher.h`](lib/spaMessage/spaCommandDispatcher.h)). Optional MQTT overrides: **`MQTT_HA_DISCOVERY`**, **`MQTT_DISCOVERY_PREFIX`**, **`MQTT_HA_TEMP_UNIT`** (see [`lib/mqttModule/mqttModule.h`](lib/mqttModule/mqttModule.h) defaults).
 - **`VERSION`** string for serial logs: [`src/main.h`](src/main.h) (`#define VERSION`).
 
 ## Licensing

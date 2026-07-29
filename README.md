@@ -110,6 +110,7 @@ Planned or deferred enhancements (not commitments; order and timing vary).
 
 - **OTA boot-verified rollback** — After a successful OTA, the firmware marks the new partition valid only after confirming a healthy boot (Wi-Fi up, OTA listener running). Uses `esp_ota_mark_app_valid_cancel_rollback()` with `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`; if the device panics or WDT-resets before the mark, the bootloader automatically reverts to the previous partition. Critical safety net for tub-side devices that are physically difficult to reach. Currently ArduinoOTA marks the partition valid at flash time with no boot verification.
 - **ePaper temperature UOM** — When building with **`spaEpaper`**, align [`lib/spaEpaper/spaEpaper.cpp`](lib/spaEpaper/spaEpaper.cpp) labels and chart titles with **`spaStatusData.tempScale`** (same °F/°C and decimal rules as the firmware **`/status`** page).
+- **Unify M5 status LEDs on FastLED** — Single LED backend for Atom Lite (GPIO **27**) and AtomS3 Lite (GPIO **35**); drop dual `M5Atom` / `M5_ATOMS3_LITE_LED` paths. Parked until Atom Lite colors can be verified — checklist: [`docs/led-fastled-unify.md`](docs/led-fastled-unify.md).
 - **Equipment display names** — On the spa config page (or a dedicated settings area), let users assign friendly names per equipment slot (e.g. Pump 1 → "Lounger Jets", Pump 2 → "Deep Chair Jets"). Store names in firmware-backed nonvolatile storage so labels survive reboots and stay consistent across the web UI (`balboa-spa` + [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp) APIs as needed). Optional later: expose the same labels to MQTT / Home Assistant discovery if useful.
 - **`TELNET_LOG` (optional Telnet listener)** — Implementation in [`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp) starts **TelnetStream** on TCP **23** when the compile flag is set; **`Log`** remains on **`webLogBufferGetLogPrint()`** (Serial + web ring). **Default [`platformio.ini`](platformio.ini) envs omit the flag** (no listener). A future **non-blocking** duplicate log sink over raw TCP/Telnet remains possible if operators want **`nc`**-style tailing without mirroring the global logger (mutex / WDT constraints).
 
@@ -317,36 +318,38 @@ The LittleFS pre-build script [`scripts/extra_script.py`](scripts/extra_script.p
 
 ## M5 Atom Lite + Atomic RS485 Base (tub-side)
 
-This fork documents **tub-side** builds on the [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) stacked on the [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (TTL ↔ RS‑485, **SP3485EE**, built-in **12 V→5 V** DC‑DC for the Atom). Generic ESP32 dev boards remain supported; see [`src/config-example.h`](src/config-example.h) for default GPIO **16/17**.
+This fork documents **tub-side** builds on the [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) stacked on the [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (TTL ↔ RS‑485, **SP3485EE**, built-in **12 V→5 V** DC‑DC for the Atom). Generic ESP32 dev boards remain supported; see [`src/config-example.h`](src/config-example.h) for default GPIO **16/17** on **generic** envs.
 
 - **PlatformIO environment:** `M5AtomLite-tub` in [`platformio.ini`](platformio.ini) uses `board = m5stack-atom` and partition table `spa_module.csv` (4MB class builds).
-- **Pins (Atom on Atomic RS485 Base):** UART2 **RX = GPIO 22**, **TX = GPIO 19** (see M5 [Atomic RS485 Arduino example](https://github.com/m5stack/M5-ProductExampleCodes/blob/master/AtomBase/AtomicRS485/Arduino/AtomicRS485/AtomicRS485.ino)). In `config.h` set **`TX485_Rx 22`** and **`TX485_Tx 19`**. If you see no frames, verify **A/B** on the spa bus (swap if needed); optional **120 Ω** termination between A and B for long runs per M5 guidance.
-- **`AUTO_TX`:** Prefer **`AUTO_TX true`** in [`src/config.h`](src/config-example.h) unless your transceiver needs explicit DE/RE.
+- **Pins (env-owned):** `M5AtomLite-tub` / `-ota` set UART2 **RX = GPIO 22**, **TX = GPIO 19**, and **`AUTO_TX`** via `build_flags` — omit pin overrides in `config.h` (use `#ifndef` guards from [`config-example.h`](src/config-example.h)). If you see no frames, verify **A/B** on the spa bus (swap if needed); optional **120 Ω** termination between A and B for long runs per M5 guidance.
 - **Power:** The base can step **12 V** to **5 V** for the Atom; follow M5 **VH‑3.96** pinout and your controller’s accessory supply. **12 V/GND** are not the same as RS‑485 **A/B** — use the Balboa [physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer) notes. Bench: **USB 5 V** is fine.
 - **Factory spa connector (field report):** On at least one **Balboa BP501** board, a **Molex `0451320403`** plug housing ([DigiKey `WM16117-ND`](https://www.digikey.com/short/p5ctrr0m)) mates directly with the **factory-wired header** on the controller so you can run a short harness to the Atomic base without cutting the OEM harness. You still need correct **crimp terminals** and pinout verification — see wiki [Hardware field notes · Parts that worked](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-field-notes#parts-that-worked-community).
-- **RGB LED (`M5AtomLite-tub` only):** With **`M5_ATOM_LED`** in [`platformio.ini`](platformio.ini): **green** = Wi‑Fi has IP; **red** = disconnected; **blue/yellow** flashes bracket RS485 loop work (coarse activity, not per-byte TX/RX) — see [`src/led_control.cpp`](src/led_control.cpp).
+- **RGB LED (`M5AtomLite-tub` / `M5AtomS3Lite-tub`):** **`M5_ATOM_LED`** (Atom Lite / M5Atom) or **`M5_ATOMS3_LITE_LED`** (AtomS3 Lite / FastLED GPIO **35**): **green** = Wi‑Fi has IP; **red** = disconnected; **blue/yellow** flashes bracket RS485 loop work (coarse activity, not per-byte TX/RX) — see [`src/led_control.cpp`](src/led_control.cpp).
 
-Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑Fi / MQTT / pins, then enable the M5 UART block (and comment out default **16/17** if unused) before `pio run -e M5AtomLite-tub`.
+Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑Fi / MQTT, then `pio run -e M5AtomLite-tub`.
 
 **Panel clock auto-sync:** New `config-example.h` sets **`AUTO_SYNC_PANEL_CLOCK 1`** so the gateway can set the spa panel time once per boot after Wi‑Fi/NTP (when drift exceeds 2 minutes). Existing **`config.h`** files without this line keep auto-sync **off** until you add it. Requires correct **`GMT_OFFSET`** / **`DAYLIGHT_OFFSET`**.
 
-**Alternate wiring:** Generic ESP32 **16/17**, or [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) on the Atom Grove (**TX485_Rx 32** / **TX485_Tx 26**) — comments in [`src/config-example.h`](src/config-example.h).
+**Alternate wiring:** On a **generic** env, set pins in `config.h` (defaults **16/17**, or [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove example **32/26** in [`src/config-example.h`](src/config-example.h)). Do not expect `config.h` pin overrides to win on `M5*-tub` envs.
 
-**Other M5 Atom variants and boards:** Planned targets and a copy-paste **bring-up checklist** live in the wiki **[Hardware targets and bring-up checklist](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets)** (source: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md)). The **Atom Lite + Atomic RS485 Base** section above remains the **supported** tub-side M5 path until additional `env:` blocks land in [`platformio.ini`](platformio.ini).
+### M5 AtomS3 Lite (bench / bring-up)
+
+Envs **`M5AtomS3Lite-tub`** (USB CDC) and **`M5AtomS3Lite-tub-ota`** (espota) for the [AtomS3 Lite](https://docs.m5stack.com/en/core/AtomS3%20Lite) (SKU **C124** — **not** the display AtomS3 / AtomS3R). `board = esp32-s3-devkitc-1`; Atomic RS485 Base pins **RX 5 / TX 6** from the env; RGB status LED via **`M5_ATOMS3_LITE_LED`** (FastLED, GPIO **35** — same colors as Atom Lite). Prefer **OTA** after the first USB flash if CDC upload is flaky. Desk bring-up without disturbing an installed Atom Lite: wiki **[Hardware targets](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets)** (source: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md)).
 
 ---
 
 ## OTA updates (M5 Atom tub-side)
 
 - **ArduinoOTA** is enabled from Wi‑Fi connect ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)); serial logs show hostname/IP.
-- Use environment **`M5AtomLite-tub-ota`** (`upload_protocol = espota`). Copy [`platformio_local.ini.example`](platformio_local.ini.example) to **`platformio_local.ini`** (gitignored) and set `upload_port` to `spa-XXXXXXXXXXXX.local` or the device IP — or pass `--upload-port` on the CLI.
+- Use **`M5AtomLite-tub-ota`** or **`M5AtomS3Lite-tub-ota`** (`upload_protocol = espota`). Copy [`platformio_local.ini.example`](platformio_local.ini.example) to **`platformio_local.ini`** (gitignored) and set `upload_port` to `spa-XXXXXXXXXXXX.local` or the device IP — or pass `--upload-port` on the CLI.
 
 ```
 pio run -e M5AtomLite-tub-ota -t upload
+pio run -e M5AtomS3Lite-tub-ota -t upload
 ```
 
 - **Auth:** Off by default; set `ENABLE_OTA_AUTH` + `OTA_PASSWORD` in `config.h` for stricter LANs.
-- **Recovery:** Keep USB flashing via **`M5AtomLite-tub`** if OTA fails.
+- **Recovery:** Keep USB flashing via **`M5AtomLite-tub`** or **`M5AtomS3Lite-tub`** if OTA fails (AtomS3 Lite CDC can be finicky — OTA is often easier after the first USB flash).
 - **Visibility:** `/state` shows firmware version/build; **`GET /api/version`** returns JSON for dashboards.
 - **Runbook:** [`OTA_LOGGING_WORKFLOW.md`](OTA_LOGGING_WORKFLOW.md).
 
@@ -362,7 +365,8 @@ pio run -e M5AtomLite-tub-ota -t upload
 | **`BRIDGE`** | TCP server on **4257** (Homebridge plugin path). |
 | **`TELNET_LOG`** | Optional. When set, starts **TelnetStream** on TCP **23**; **`Log`** stays on Serial + web ring ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)). **Omitted** in default [`platformio.ini`](platformio.ini) tub/OTA envs. |
 | **`spaEpaper`** | ePaper UI (ESP32-S3 T5 env, etc.). |
-| **`M5_ATOM_LED`** | (Optional, **`M5AtomLite-tub`**) Atom RGB status / RS485 activity. |
+| **`M5_ATOM_LED`** | (Optional, **`M5AtomLite-tub`**) Atom Lite RGB via M5Atom. |
+| **`M5_ATOMS3_LITE_LED`** | (Optional, **`M5AtomS3Lite-tub`**) AtomS3 Lite WS2812 on GPIO **35** via FastLED. |
 
 ### Example: spa / tub-side gateway
 
