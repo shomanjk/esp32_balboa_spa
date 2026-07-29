@@ -52,6 +52,7 @@ void handleDiagToggleSequenceApi(AsyncWebServerRequest *request);
 void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request);
 void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request);
 void handleRs485(AsyncWebServerRequest *request);
+void handleRs485Retry(AsyncWebServerRequest *request);
 void handleRs485Raw(AsyncWebServerRequest *request);
 void handleRs485History(AsyncWebServerRequest *request);
 void handleSlash(AsyncWebServerRequest *request);
@@ -192,6 +193,14 @@ static String rs485HealthLabel(const String &health)
   {
     return "Bytes seen, no valid frames";
   }
+  if (health == "UART_DEFERRED")
+  {
+    return "UART deferred (waiting for Wi‑Fi/OTA)";
+  }
+  if (health == "RS485_SAFE_MODE")
+  {
+    return "RS485 safe mode";
+  }
   return "No UART bytes";
 }
 
@@ -202,6 +211,14 @@ static String rs485HealthColor(const String &health)
     return "#04AA6D";
   }
   if (health == "UART_BYTES_NO_VALID_FRAMES")
+  {
+    return "#ef6c00";
+  }
+  if (health == "UART_DEFERRED")
+  {
+    return "#546e7a";
+  }
+  if (health == "RS485_SAFE_MODE")
   {
     return "#ef6c00";
   }
@@ -224,6 +241,14 @@ static String rs485HealthHint(const String &health)
   if (health == "UART_BYTES_NO_VALID_FRAMES")
   {
     return "Signal is present, but framing/quality is not yet valid.";
+  }
+  if (health == "UART_DEFERRED")
+  {
+    return "RS485 UART starts only after Wi‑Fi is up and ArduinoOTA is listening.";
+  }
+  if (health == "RS485_SAFE_MODE")
+  {
+    return "UART is skipped after repeated faults so OTA stays reachable. Fix pins, then POST /api/rs485/retry or power-cycle.";
   }
   return "No bus activity detected at UART RX yet.";
 }
@@ -528,6 +553,7 @@ void spaWebServerLoop()
     server.on("/api/diag/light1_next_cts_window", HTTP_GET, handleDiagLight1NextCtsWindowApi);
     server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
     server.on("/api/rs485/history", HTTP_GET, handleRs485History);
+    server.on("/api/rs485/retry", HTTP_POST, handleRs485Retry);
     server.on("/api/rs485", HTTP_GET, handleRs485);
     server.on("/api/logs", HTTP_GET, handleLogsApi);
     server.on("/api/logs/config", HTTP_GET, handleLogsConfigGet);
@@ -2516,6 +2542,15 @@ void handleState(AsyncWebServerRequest *request)
           "<div style='margin-top:4px'><span class='diag-badge' style='font-weight:700;color:#fff;background:" + rs485HealthColor(rsHealth) + "'>" + rs485HealthLabel(rsHealth) + "</span></div></div>";
 #endif
   html += "</div>";
+#ifdef LOCAL_CLIENT
+  if (rs485SafeModeActive())
+  {
+    html += "<p class='sys-meta' style='margin-top:10px;padding:10px;border-radius:8px;background:#fff3e0;border:1px solid #ef6c00'>"
+            "<b>RS485 safe mode:</b> UART is skipped so Wi‑Fi/OTA stay reachable (" +
+            String(rs485SafeModeReason()) + "). "
+            "Fix pin config, then <code>POST /api/rs485/retry</code> or power-cycle.</p>";
+  }
+#endif
   {
     const String restartComposite = getLastRestartReason();
     const String restartIntent = getLastRestartIntent();
@@ -2624,6 +2659,7 @@ void handleState(AsyncWebServerRequest *request)
   html += "<li><b>Firmware metadata: </b><a href='/api/version' target='_blank' rel='noopener'>GET /api/version</a></li>";
   html += "<li><b>Gateway diagnostics: </b><a href='/api/diagnostics' target='_blank' rel='noopener'>GET /api/diagnostics</a></li>";
   html += "<li><b>RS485 summary diagnostics: </b><a href='/api/rs485' target='_blank' rel='noopener'>GET /api/rs485</a></li>";
+  html += "<li><b>RS485 retry UART (safe mode): </b><code>POST /api/rs485/retry</code></li>";
   html += "<li><b>RS485 raw byte trace: </b><a href='/api/rs485/raw?limit=200' target='_blank' rel='noopener'>GET /api/rs485/raw?limit=200</a></li>";
   html += "<li><b>RS485 history snapshots: </b><a href='/api/rs485/history?limit=200' target='_blank' rel='noopener'>GET /api/rs485/history?limit=200</a></li>";
   html += "</ul></section>";
@@ -2932,6 +2968,17 @@ void handleDiagnostics(AsyncWebServerRequest *request)
   root["version"] = VERSION;
   root["hostname"] = WiFi.getHostname();
   root["ip"] = WiFi.localIP().toString();
+#ifdef LOCAL_CLIENT
+  root["uartBegun"] = rs485UartBegun();
+  root["rs485SafeMode"] = rs485SafeModeActive();
+  root["safeModeReason"] = rs485SafeModeReason();
+  root["rs485FaultBootStreak"] = rs485FaultBootStreak();
+  root["rs485BeginAttempted"] = rs485BeginAttemptedFlag();
+  root["retryPending"] = rs485RetryPending();
+  root["rxGpio"] = rs485RxGpio();
+  root["txGpio"] = rs485TxGpio();
+  root["rs485Health"] = rs485HealthCode();
+#endif
   serializeJson(doc, *response);
   request->send(response);
 }
@@ -3610,7 +3657,26 @@ void handleRs485(AsyncWebServerRequest *request)
   doc["nextCtsArmCount"] = rs485NextCtsArmCount();
   doc["nextCtsFireCount"] = rs485NextCtsFireCount();
   doc["health"] = rs485HealthCode();
+  doc["uartBegun"] = rs485UartBegun();
+  doc["rs485SafeMode"] = rs485SafeModeActive();
+  doc["safeModeReason"] = rs485SafeModeReason();
+  doc["rs485FaultBootStreak"] = rs485FaultBootStreak();
+  doc["rs485BeginAttempted"] = rs485BeginAttemptedFlag();
+  doc["retryPending"] = rs485RetryPending();
 
+  serializeJson(doc, *response);
+  request->send(response);
+}
+
+void handleRs485Retry(AsyncWebServerRequest *request)
+{
+  rs485RequestRetry();
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  DynamicJsonDocument doc(512);
+  doc["ok"] = true;
+  doc["retryPending"] = rs485RetryPending();
+  doc["rs485SafeMode"] = rs485SafeModeActive();
+  doc["message"] = "RS485 UART begin scheduled on main loop";
   serializeJson(doc, *response);
   request->send(response);
 }

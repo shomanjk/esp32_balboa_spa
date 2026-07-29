@@ -13,7 +13,7 @@
 
 Obsolete: **`M5_ATOM_LED`**, **`M5_ATOMS3_LITE_LED`**.
 
-## Colors (unchanged meaning)
+## Colors
 
 | Color | Meaning |
 |-------|---------|
@@ -21,6 +21,8 @@ Obsolete: **`M5_ATOM_LED`**, **`M5_ATOMS3_LITE_LED`**.
 | Red | Wi‑Fi disconnected |
 | Blue flash | Coarse RS485 TX activity |
 | Yellow flash | Coarse RS485 RX activity |
+| Green/orange **fast** (~200 ms) | RS485 **safe mode** (UART skipped — wrong pins / fault streak) |
+| Green/orange **slow** (~1.25 s) | UART up, no valid spa frames (after 15 s grace) |
 
 ## Smoke test (desk Atom Lite)
 

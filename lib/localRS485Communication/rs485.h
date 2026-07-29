@@ -13,6 +13,20 @@ void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 #define RS485_RAW_CAPTURE_SIZE 256
 
 void rs485Setup();
+/** Idempotent UART begin + polarity after Wi‑Fi/OTA; no-op if safe mode or already begun. */
+bool rs485EnsureUartBegun();
+bool rs485UartBegun();
+/** Milliseconds since UART begin, or 0 if not begun. */
+uint32_t rs485UartUptimeMs();
+bool rs485SafeModeActive();
+/** Clear safe mode / streak and set retry-pending (main loop calls ensure). */
+void rs485RequestRetry();
+bool rs485RetryPending();
+uint8_t rs485FaultBootStreak();
+bool rs485BeginAttemptedFlag();
+const char *rs485SafeModeReason();
+/** Clear streak after healthy UART uptime; call from loop. */
+void rs485BootSafetyTick();
 void rs485Loop();
 /** After spa id is assigned: restart if no valid RS485 frame for `RUNNING_WDT_TIMEOUT` seconds. */
 void rs485CheckSpaSilenceWatchdog();

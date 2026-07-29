@@ -349,6 +349,13 @@ void spaMessageLoop()
   }
   else
   {
+#ifdef LOCAL_CLIENT
+    if (!rs485UartBegun())
+    {
+      // UART deferred or RS485 safe mode — do not flood spaWriteQueue.
+    }
+    else
+#endif
     if (!spaFaultLogHistoryIsActive() &&
         (staleData(spaConfigurationData) || staleData(spaSettings0x04Data) || staleData(spaFilterSettingsData) ||
          staleData(spaInformationData) || staleData(spaPreferencesData)))
@@ -842,6 +849,13 @@ bool sendMessageToSpa(uint8_t *data, int length)
     Log.error(F("[Mess]: Rejected spa write len=%d (max %d)" CR), length, BALBOA_MESSAGE_SIZE);
     return false;
   }
+#ifdef LOCAL_CLIENT
+  if (!rs485UartBegun())
+  {
+    Log.warning(F("[Mess]: Rejected spa write — RS485 UART not ready (%s)" CR), rs485HealthCode());
+    return false;
+  }
+#endif
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
   messageToSend->length = length;
   memcpy(messageToSend->message, data, length);
@@ -865,6 +879,13 @@ bool sendMessageToSpa(uint8_t *data, int length)
 
 void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
 {
+#ifdef LOCAL_CLIENT
+  if (!rs485UartBegun())
+  {
+    Log.warning(F("[Mess]: Rejected spa write — RS485 UART not ready (%s)" CR), rs485HealthCode());
+    return;
+  }
+#endif
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
   messageToSend->length = data.size();
   for (int i = 0; i < data.size() && i < BALBOA_MESSAGE_SIZE; i++)

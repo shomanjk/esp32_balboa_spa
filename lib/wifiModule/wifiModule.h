@@ -93,6 +93,8 @@ void notifyOfUpdateEnded();
 /** Start one async association attempt (no blocking wait). */
 void wifiConnect();
 void otaSetup();
+/** True after ArduinoOTA.begin() has run this boot. */
+bool wifiOtaIsStarted();
 
 String getStringTime();
 

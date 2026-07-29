@@ -483,6 +483,11 @@ void otaSetup()
   Log.notice(F("[WiFi]: Arduino OTA Enabled" CR));
 }
 
+bool wifiOtaIsStarted()
+{
+  return wifiOtaStarted;
+}
+
 void notifyOfUpdateStarted()
 {
   lastOtaProgressLoggedPercent = 0;
