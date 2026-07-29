@@ -29,6 +29,7 @@
 #include <faultCapture.h>
 #include <rs485.h>
 #include <mqttModule.h>
+#include <wifiModule.h>
 #include "../../src/config.h"
 #include "../../src/main.h"
 #include "spaConfigExport.h"
@@ -355,8 +356,10 @@ static void appendWifiStateSection(String &html)
   html += "</span></div><div id=\"wf-quality\" style=\"font-size:12px\"></div></div></div>";
   html += "<p class='wifi-meta'>Ch <span id=\"wf-ch\">";
   html += ok ? String(WiFi.channel()) : String("—");
-  html += "</span><span class='wifi-meta__sep'>&middot;</span>MAC <span id=\"wf-mac\">";
+  html += "</span><span class='wifi-meta__sep'>&middot;</span>STA MAC <span id=\"wf-mac\">";
   html += WiFi.macAddress();
+  html += "</span><span class='wifi-meta__sep'>&middot;</span>AP BSSID <span id=\"wf-bssid\">";
+  html += ok ? WiFi.BSSIDstr() : String("—");
   html += "</span><span class='wifi-meta__sep'>&middot;</span>Status code <span id=\"wf-st\">";
   html += String(static_cast<int>(st));
   html += "</span></p>";
@@ -369,6 +372,15 @@ static void appendWifiStateSection(String &html)
   html += ok ? WiFi.subnetMask().toString() : String("—");
   html += "</dd><dt>DNS</dt><dd id=\"wf-dns\">";
   html += ok ? WiFi.dnsIP(0).toString() : String("—");
+  html += "</dd><dt>BSSID lock</dt><dd id=\"wf-bssid-lock\">";
+  if (wifiBssidLockActive() && wifiConfiguredBssidLock()[0] != '\0')
+  {
+    html += wifiConfiguredBssidLock();
+  }
+  else
+  {
+    html += "— (strongest AP)";
+  }
   html += "</dd></dl></div>";
   html += "<div class='wifi-signal-card'><p class='wifi-block-title'>Signal</p>";
   html += "<div class='wifi-signal-row'><span class='wifi-signal-row__label'>Now</span><span class='wifi-signal-row__value' id=\"wf-signal-now\">";
@@ -407,6 +419,8 @@ static void appendWifiStateSection(String &html)
   html += "set('wf-ip',j.connected?j.ip:'—');set('wf-gw',j.connected?j.gateway:'—');";
   html += "set('wf-sn',j.connected?j.subnet:'—');set('wf-dns',j.connected?j.dns:'—');";
   html += "set('wf-ch',j.connected?String(j.channel):'—');set('wf-mac',j.mac||'—');";
+  html += "set('wf-bssid',j.connected&&j.bssid?j.bssid:'—');";
+  html += "set('wf-bssid-lock',j.bssidLock?j.bssidLock:'— (strongest AP)');";
   html += "if(j.connected&&typeof j.rssi==='number'){var q=qualityOf(j.rssi);set('wf-rssi',j.rssi+' dBm');set('wf-quality',q);set('wf-signal-now',j.rssi+' dBm '+q);";
   html += "var rc=document.getElementById('wf-rssi'),qc=document.getElementById('wf-quality'),sc=document.getElementById('wf-signal-now');var col=colorOf(j.rssi);if(rc)rc.style.color=col;if(qc)qc.style.color=col;if(sc)sc.style.color=col;";
   html += "d.push(j.rssi);if(d.length>maxPts)d.shift();var sum=0;for(var k=0;k<d.length;k++)sum+=d[k];set('wf-avg',(sum/d.length).toFixed(1)+' dBm');draw();}";
@@ -2915,7 +2929,7 @@ void handleDiagnostics(AsyncWebServerRequest *request)
 void handleWifi(AsyncWebServerRequest *request)
 {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(1024);
   wl_status_t st = WiFi.status();
   const bool ok = (st == WL_CONNECTED);
   doc["connected"] = ok;
@@ -2930,6 +2944,16 @@ void handleWifi(AsyncWebServerRequest *request)
   {
     doc["hostname"] = "";
   }
+  if (wifiBssidLockActive() && wifiConfiguredBssidLock()[0] != '\0')
+  {
+    doc["bssidLock"] = wifiConfiguredBssidLock();
+  }
+  else
+  {
+    doc["bssidLock"] = "";
+  }
+  doc["lastDisconnectReason"] = wifiLastDisconnectReasonCode();
+  doc["connectAttempts"] = wifiConnectAttemptCount();
   if (ok)
   {
     doc["ssid"] = WiFi.SSID();
@@ -2939,6 +2963,7 @@ void handleWifi(AsyncWebServerRequest *request)
     doc["subnet"] = WiFi.subnetMask().toString();
     doc["dns"] = WiFi.dnsIP(0).toString();
     doc["channel"] = WiFi.channel();
+    doc["bssid"] = WiFi.BSSIDstr();
   }
   else
   {
@@ -2948,6 +2973,7 @@ void handleWifi(AsyncWebServerRequest *request)
     doc["subnet"] = "";
     doc["dns"] = "";
     doc["channel"] = 0;
+    doc["bssid"] = "";
   }
   serializeJson(doc, *response);
   request->send(response);

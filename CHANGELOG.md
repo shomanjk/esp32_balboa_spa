@@ -12,6 +12,20 @@ where version numbers are used.
 
 - **PR compile CI** ([`.github/workflows/build.yml`](.github/workflows/build.yml)): PlatformIO builds **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**, using a runner copy of **`src/config-example.h`** (private `config.h` stays gitignored).
 
+## [2.22.0] - 2026-07-28
+
+### Added
+
+- **Wi‑Fi mesh STA reliability** ([`lib/wifiModule/`](lib/wifiModule/), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/config-example.h`](src/config-example.h)): App-owned **async** reconnect (no blocking 10s wait / no every-loop `WiFi.begin` thrash); strongest-AP scan/sort when unlocked; optional compile-time **`WIFI_BSSID`** lock; disconnect reason logs; **`GET /api/wifi`** / `/state` expose AP **BSSID**, **STA MAC**, and optional **`bssidLock`**. OTA/Telnet setup once-guarded; GOT_IP side effects avoid blocking `getLocalTime`. **Do not enable `WIFI_BSSID` on the first field OTA** — confirm `/api/wifi` first.
+
+### Changed
+
+- **Wi‑Fi station bring-up** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)): `WIFI_STA` mode, `setAutoReconnect(false)`, high TX power after STA start, continuous offline watchdog across retries.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.22.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.21.1] - 2026-07-28
 
 ### Changed

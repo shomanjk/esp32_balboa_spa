@@ -14,6 +14,9 @@
 #define WIFI_PASSWORD "password"
 #endif
 
+// Optional: lock STA to one mesh node (AP MAC). Omit for strongest-AP selection.
+// Example: #define WIFI_BSSID "aa:bb:cc:dd:ee:ff"
+
 #ifndef ENABLE_OTA_AUTH
 #define ENABLE_OTA_AUTH false
 #endif
@@ -40,7 +43,29 @@
 #define DAYLIGHT_OFFSET 0
 #endif
 
-#define WIFI_CONNECT_TIMEOUT 10000
+// Async in-flight association timeout (not a blocking wait inside loop()).
+// If only legacy WIFI_CONNECT_TIMEOUT is set in config.h, it is used as this timeout.
+#ifndef WIFI_CONNECT_ATTEMPT_TIMEOUT_MS
+#ifdef WIFI_CONNECT_TIMEOUT
+#define WIFI_CONNECT_ATTEMPT_TIMEOUT_MS (WIFI_CONNECT_TIMEOUT)
+#else
+#define WIFI_CONNECT_ATTEMPT_TIMEOUT_MS 15000UL
+#endif
+#endif
+
+// Legacy alias only — prefer WIFI_CONNECT_ATTEMPT_TIMEOUT_MS. No longer a blocking
+// WiFi.begin() wait; kept so older config.h values still apply via the mapping above.
+#ifndef WIFI_CONNECT_TIMEOUT
+#define WIFI_CONNECT_TIMEOUT WIFI_CONNECT_ATTEMPT_TIMEOUT_MS
+#endif
+
+#ifndef WIFI_RECONNECT_INITIAL_MS
+#define WIFI_RECONNECT_INITIAL_MS 5000UL
+#endif
+
+#ifndef WIFI_RECONNECT_MAX_MS
+#define WIFI_RECONNECT_MAX_MS 60000UL
+#endif
 
 #ifndef WIFI_OFFLINE_RESTART_TIMEOUT_MS
 // If Wi-Fi stays offline this long, force a reboot to recover from stale stack/AP states.
@@ -65,9 +90,19 @@ void wifiModuleSetup();
 void wifiModuleLoop();
 void notifyOfUpdateStarted();
 void notifyOfUpdateEnded();
+/** Start one async association attempt (no blocking wait). */
 void wifiConnect();
 void otaSetup();
 
 String getStringTime();
+
+/** True when a valid compile-time WIFI_BSSID lock is active. */
+bool wifiBssidLockActive();
+/** Configured lock string (lowercase aa:bb:…) or empty if unlocked / invalid. */
+const char *wifiConfiguredBssidLock();
+/** Last disconnect reason code (0 if none yet). */
+uint8_t wifiLastDisconnectReasonCode();
+/** App-started connect attempts since boot. */
+unsigned long wifiConnectAttemptCount();
 
 #endif
