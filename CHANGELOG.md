@@ -10,7 +10,16 @@ where version numbers are used.
 
 ### Added
 
+- **M5 AtomS3 Lite tub envs (`M5AtomS3Lite-tub` / `-ota`)** ([`platformio.ini`](platformio.ini)): AtomS3 **Lite** (not the display AtomS3) + USB CDC or espota, tub-side flags (`LOCAL_CLIENT` / `LOCAL_CONNECT` / `BRIDGE` / `DIAG_FAULT_CAPTURE`), Atomic RS485 pins **RX 5 / TX 6** via `build_flags`, onboard RGB via **`M5_ATOMS3_LITE_LED`** (FastLED / GPIO **35**). Bring-up notes: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md).
 - **PR compile CI** ([`.github/workflows/build.yml`](.github/workflows/build.yml)): PlatformIO builds **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**, using a runner copy of **`src/config-example.h`** (private `config.h` stays gitignored).
+
+### Changed
+
+- **Env-owned RS485 pins for known M5 stacks:** **`M5AtomLite-tub`** / **`-ota`** set **`TX485_Rx=22`**, **`TX485_Tx=19`**, **`AUTO_TX`** in `build_flags`. Generic envs still use `config.h`. [`src/config-example.h`](src/config-example.h) wraps pin/`AUTO_TX` defines in **`#ifndef`** so env `-D` wins. **Migration:** private `config.h` with unconditional `#define TX485_*` / `AUTO_TX` will redefinition-warn/error on M5 envs until wrapped or removed.
+
+### Deferred
+
+- **Unify M5 status LEDs on FastLED** (Atom Lite GPIO **27** + AtomS3 Lite GPIO **35**, drop `M5Atom` LED path) — see [`docs/led-fastled-unify.md`](docs/led-fastled-unify.md). Parked until Atom Lite LED colors can be checked on hardware.
 
 ## [2.22.0] - 2026-07-28
 

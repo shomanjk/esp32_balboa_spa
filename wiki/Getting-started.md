@@ -37,7 +37,7 @@ Edit at minimum:
 | `WIFI_SSID` / `WIFI_PASSWORD` | **2.4 GHz** Wi‑Fi (ESP32 has no 5 GHz) |
 | `MQTT_SERVER` / `MQTT_PORT` | Optional until you add HA; required for MQTT/HA |
 | `BROKER_LOGIN` / `BROKER_PASS` | If your broker requires auth |
-| `TX485_Rx` / `TX485_Tx` | **22 / 19** for Atom on Atomic RS485 Base |
+| `TX485_Rx` / `TX485_Tx` | **M5\*‑tub envs:** set by PlatformIO (Atom Lite **22/19**, AtomS3 Lite **5/6**) — omit in `config.h`. **Generic envs:** set here (e.g. **16/17**) |
 | `AUTO_TX` | Prefer **`true`** unless your transceiver needs explicit DE/RE |
 
 Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pins.

@@ -9,7 +9,7 @@ Short **symptom → checks** guide. For release-accurate API and flag lists, use
 **Checks (in order):**
 
 1. **Wiring** — Confirm RS485 **A/B** on the spa bus ([ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer)). Swap A/B if you see no frames.
-2. **Pins** — M5 Atom + Atomic base: `TX485_Rx` **22**, `TX485_Tx` **19** in `config.h`.
+2. **Pins** — `M5AtomLite-tub`: env **RX 22 / TX 19**. `M5AtomS3Lite-tub` (AtomS3 Lite): env **RX 5 / TX 6**. Generic envs: set pins in `config.h`.
 3. **`AUTO_TX`** — Prefer `true` unless your module needs manual DE/RE.
 4. **RS485 health** — Open `/state` or `GET /api/rs485`. Look at `health`, frame/CRC counters, and polarity hints.
 5. **Power / bench** — USB-only bench power is OK; ensure the transceiver shares a valid ground reference with the bus.

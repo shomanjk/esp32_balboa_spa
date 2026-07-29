@@ -1,6 +1,6 @@
 #include "rs485_led_hooks.h"
 
-#ifdef M5_ATOM_LED
+#if defined(M5_ATOM_LED) || defined(M5_ATOMS3_LITE_LED)
 #include "led_control.h"
 
 void rs485LedNotifyTx(void)

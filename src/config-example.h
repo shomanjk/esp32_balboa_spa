@@ -56,13 +56,26 @@
 #define AUTO_SYNC_PANEL_CLOCK 1
 // #define AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN 2
 
-#define AUTO_TX true
-
 // Used by LOCAL_CLIENT — UART2 pins for TTL side of RS485 transceiver (see README).
+//
+// Pin ownership:
+//   - M5AtomLite-tub / M5AtomLite-tub-ota: env sets TX485_Rx=22, TX485_Tx=19, AUTO_TX — omit overrides here.
+//   - M5AtomS3Lite-tub (AtomS3 Lite, not AtomS3): env sets TX485_Rx=5, TX485_Tx=6, AUTO_TX — omit overrides here.
+//   - Generic envs (ESP32ota, ESP32prodOta, …): set pins / AUTO_TX in this file (defaults below).
+// Migration: if your private config.h still #define's TX485_* / AUTO_TX unconditionally, M5 envs will
+// redefinition-warn/error until you wrap them in #ifndef (as below) or remove those lines.
 
-// Default (generic ESP32 dev board wiring, e.g. GPIO16/17):
+#ifndef AUTO_TX
+#define AUTO_TX true
+#endif
+
+// Default (generic ESP32 dev board wiring, e.g. GPIO16/17) when the env does not -D the pins:
+#ifndef TX485_Rx
 #define TX485_Rx 16
+#endif
+#ifndef TX485_Tx
 #define TX485_Tx 17
+#endif
 
 // RS485 UART (default ESP32: Serial2). Override in config.h if you use a different port.
 #ifndef RS485_SERIAL_PORT
@@ -70,32 +83,29 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// M5 Atom Lite + Atomic RS485 Base (recommended tub-side stack for this repo)
+// Known M5 stacks (pins from PlatformIO env — do not redefine above)
 // ---------------------------------------------------------------------------
-// Copy the lines you need into your active config.h (only one RX/TX pair).
-//
-// Stack Atom Lite on the Atomic RS485 Base, UART2 per M5:
+// M5 Atom Lite + Atomic RS485 Base (M5AtomLite-tub / -ota): RX=22, TX=19
 //   https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base
-// Arduino reference: Serial2 @ RX=22, TX=19
-//   https://github.com/m5stack/M5-ProductExampleCodes/tree/master/AtomBase/AtomicRS485
-//
-// #undef TX485_Rx
-// #undef TX485_Tx
-// #define TX485_Rx 22
-// #define TX485_Tx 19
-// #define AUTO_TX true
+// M5 AtomS3 Lite + Atomic RS485 Base (M5AtomS3Lite-tub): RX=5, TX=6
+//   Not the screen AtomS3 / AtomS3R — https://docs.m5stack.com/en/core/AtomS3%20Lite
+//   wiki: Hardware-targets
 //
 // ---------------------------------------------------------------------------
-// Alternate: M5 Atom Lite + Unit RS485 (Grove on HY2.0, not the Atomic base)
+// Alternate wiring on a generic env (set TX485_* in config.h; not an M5*-tub env)
 // ---------------------------------------------------------------------------
-// Atom Lite Grove: Black=GND, Red=5V, Yellow=G26, White=G32
-// Unit RS485 Grove: Yellow = module UART_RX, White = module UART_TX
+// M5 Unit RS485 on Grove (example for Atom Lite Grove pinout):
+//   Black=GND, Red=5V, Yellow=G26, White=G32
 //   https://docs.m5stack.com/en/unit/rs485
 // Wire: ESP TX (G26) -> module RX (yellow); ESP RX (G32) -> module TX (white).
 // If you see no frames, swap those two TTL wires.
 //
-// #undef TX485_Rx
-// #undef TX485_Tx
+// #ifndef TX485_Rx
 // #define TX485_Rx 32
+// #endif
+// #ifndef TX485_Tx
 // #define TX485_Tx 26
+// #endif
+// #ifndef AUTO_TX
 // #define AUTO_TX true
+// #endif
