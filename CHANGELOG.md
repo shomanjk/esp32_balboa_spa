@@ -8,18 +8,33 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.24.0] - 2026-07-29
+
 ### Added
 
 - **M5 AtomS3 Lite tub envs (`M5AtomS3Lite-tub` / `-ota`)** ([`platformio.ini`](platformio.ini)): AtomS3 **Lite** (not the display AtomS3) + USB CDC or espota, tub-side flags (`LOCAL_CLIENT` / `LOCAL_CONNECT` / `BRIDGE` / `DIAG_FAULT_CAPTURE`), Atomic RS485 pins **RX 5 / TX 6** via `build_flags`, onboard RGB via **`M5_ATOMS3_LITE_LED`** (FastLED / GPIO **35**). Bring-up notes: [`wiki/Hardware-targets.md`](wiki/Hardware-targets.md).
-- **PR compile CI** ([`.github/workflows/build.yml`](.github/workflows/build.yml)): PlatformIO builds **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**, using a runner copy of **`src/config-example.h`** (private `config.h` stays gitignored).
 
 ### Changed
 
-- **Env-owned RS485 pins for known M5 stacks:** **`M5AtomLite-tub`** / **`-ota`** set **`TX485_Rx=22`**, **`TX485_Tx=19`**, **`AUTO_TX`** in `build_flags`. Generic envs still use `config.h`. [`src/config-example.h`](src/config-example.h) wraps pin/`AUTO_TX` defines in **`#ifndef`** so env `-D` wins. **Migration:** private `config.h` with unconditional `#define TX485_*` / `AUTO_TX` will redefinition-warn/error on M5 envs until wrapped or removed.
+- **Env-owned RS485 pins for known M5 stacks:** **`M5AtomLite-tub`** / **`-ota`** set **`TX485_Rx=22`**, **`TX485_Tx=19`**, **`AUTO_TX`** in `build_flags` (AtomS3 Lite: **5 / 6**). Generic envs still use `config.h`. [`src/config-example.h`](src/config-example.h) wraps pin/`AUTO_TX` defines in **`#ifndef`** so env `-D` wins. **Migration:** private `config.h` with unconditional `#define TX485_*` / `AUTO_TX` will redefinition-warn/error on M5 envs until wrapped or removed. **Why it matters:** without the Atom Lite env overrides, `#ifndef` defaults (**16 / 17**) are unsafe on the ESP32-PICO-D4 and can interrupt-WDT crash-loop in `rs485Setup()` before Wi‑Fi/OTA come up.
 
 ### Deferred
 
 - **Unify M5 status LEDs on FastLED** (Atom Lite GPIO **27** + AtomS3 Lite GPIO **35**, drop `M5Atom` LED path) — see [`docs/led-fastled-unify.md`](docs/led-fastled-unify.md). Parked until Atom Lite LED colors can be checked on hardware.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.24.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
+## [2.23.0] - 2026-07-29
+
+### Added
+
+- **Firmware portal dark mode** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `/status`, `/config`, `/state`, and `/logs` follow the OS light/dark preference by default. **Auto / Light / Dark** toggle (sun, moon, and half-circle icons) cycles the theme and persists per browser via `localStorage` (`portal-theme`). Desktop: icon-only utility control pinned to the nav bar (not a page link). Dark semantic overrides for heat/equip/range/status chips. Canvas charts (Wi‑Fi RSSI, temperature history) track theme CSS variables.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.23.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.22.0] - 2026-07-28
 
