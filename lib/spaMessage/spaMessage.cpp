@@ -383,41 +383,54 @@ void configurationRequest()
   // Queue one Balboa request frame per write-queue entry. Batching into a single
   // SpaWriteQueueMessage overflowed BALBOA_MESSAGE_SIZE (50) when all six were stale
   // (6 × 10 = 60), corrupting heap and causing hourly ESP_RST_PANIC after STALE_TIME.
+  // Only stamp lastRequest after a successful enqueue so a full queue can retry sooner.
   if (staleData(spaConfigurationData) && retryRequest(spaConfigurationData))
   {
-    sendMessageToSpa(config_request, sizeof(config_request));
-    spaConfigurationData.lastRequest = getTime();
-    Log.verbose(F("[Mess]: Queuing Configuration request" CR));
+    if (sendMessageToSpa(config_request, sizeof(config_request)))
+    {
+      spaConfigurationData.lastRequest = getTime();
+      Log.verbose(F("[Mess]: Queuing Configuration request" CR));
+    }
   }
   if (staleData(spaSettings0x04Data) && retryRequest(spaSettings0x04Data))
   {
-    sendMessageToSpa(settings_request, sizeof(settings_request));
-    spaSettings0x04Data.lastRequest = getTime();
-    Log.verbose(F("[Mess]: Queuing Settings request" CR));
+    if (sendMessageToSpa(settings_request, sizeof(settings_request)))
+    {
+      spaSettings0x04Data.lastRequest = getTime();
+      Log.verbose(F("[Mess]: Queuing Settings request" CR));
+    }
   }
   if (staleData(spaFilterSettingsData) && retryRequest(spaFilterSettingsData))
   {
-    sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request));
-    spaFilterSettingsData.lastRequest = getTime();
-    Log.verbose(F("[Mess]: Queuing Filter request" CR));
+    if (sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request)))
+    {
+      spaFilterSettingsData.lastRequest = getTime();
+      Log.verbose(F("[Mess]: Queuing Filter request" CR));
+    }
   }
   if (staleData(spaInformationData) && retryRequest(spaInformationData))
   {
-    sendMessageToSpa(information_request, sizeof(information_request));
-    spaInformationData.lastRequest = getTime();
-    Log.verbose(F("[Mess]: Queuing Information request" CR));
+    if (sendMessageToSpa(information_request, sizeof(information_request)))
+    {
+      spaInformationData.lastRequest = getTime();
+      Log.verbose(F("[Mess]: Queuing Information request" CR));
+    }
   }
   if (staleData(spaFaultLogData) && retryRequest(spaFaultLogData) && !spaFaultLogHistoryIsActive())
   {
-    sendMessageToSpa(fault_log_request, sizeof(fault_log_request));
-    spaFaultLogData.lastRequest = getTime();
-    Log.verbose(F("[Mess]: Queuing FaultLog request" CR));
+    if (sendMessageToSpa(fault_log_request, sizeof(fault_log_request)))
+    {
+      spaFaultLogData.lastRequest = getTime();
+      Log.verbose(F("[Mess]: Queuing FaultLog request" CR));
+    }
   }
   if (staleData(spaPreferencesData) && retryRequest(spaPreferencesData))
   {
-    sendMessageToSpa(preferences_request, sizeof(preferences_request));
-    spaPreferencesData.lastRequest = getTime();
-    Log.verbose(F("[Mess]: Queuing Preferences request" CR));
+    if (sendMessageToSpa(preferences_request, sizeof(preferences_request)))
+    {
+      spaPreferencesData.lastRequest = getTime();
+      Log.verbose(F("[Mess]: Queuing Preferences request" CR));
+    }
   }
 }
 
@@ -822,12 +835,12 @@ void spaRequestFaultLogEntry(uint8_t entry)
   spaFaultLogData.lastRequest = getTime();
 }
 
-void sendMessageToSpa(uint8_t *data, int length)
+bool sendMessageToSpa(uint8_t *data, int length)
 {
   if (data == nullptr || length <= 0 || length > BALBOA_MESSAGE_SIZE)
   {
     Log.error(F("[Mess]: Rejected spa write len=%d (max %d)" CR), length, BALBOA_MESSAGE_SIZE);
-    return;
+    return false;
   }
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
   messageToSend->length = length;
@@ -839,15 +852,15 @@ void sendMessageToSpa(uint8_t *data, int length)
     faultCaptureAppendf("[fault] spaWriteQueue full len=%d", messageToSend->length);
 #endif
     delete messageToSend;
+    return false;
   }
-  else
-  {
-    Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
-               millis(),
-               static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
-               msgToString(messageToSend->message, messageToSend->length).c_str());
-  }
+
+  Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+             millis(),
+             static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
+             msgToString(messageToSend->message, messageToSend->length).c_str());
+  return true;
 }
 
 void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)

@@ -20,7 +20,8 @@ extern RTC_NOINIT_ATTR SpaFaultLogData spaFaultLogData;
 void spaMessageSetup();
 void spaMessageLoop();
 
-void sendMessageToSpa(uint8_t *data, int length);
+/** Enqueue a raw Balboa frame. Returns false if rejected or write queue is full. */
+bool sendMessageToSpa(uint8_t *data, int length);
 void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data);
 /** Queue a filter-settings read (`0x22` subcode `0x01`) to refresh `spaFilterSettingsData`. */
 void spaRequestFilterSettings();
