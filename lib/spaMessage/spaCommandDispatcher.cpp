@@ -993,6 +993,12 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
   }
   if (!rs485ArmFrameOnNextCts(raw, len, outArmCount))
   {
+#ifdef LOCAL_CLIENT
+    if (!rs485UartBegun() || rs485SafeModeActive())
+    {
+      return {false, SPA_COMMAND_NOT_READY, "rs485_uart_not_ready"};
+    }
+#endif
     return {false, SPA_COMMAND_INVALID_ARGUMENT, "failed to arm next_cts frame"};
   }
   Log.verbose(F("[Cmd ]: armed next_cts toggle from %s: %s" CR), sourceLabel(source), msgToString(frame).c_str());

@@ -35,6 +35,7 @@ void rs485ProcessByte(uint8_t x, uint8_t uartAvailable);
 void rs485RecordRawByte(uint8_t value, uint8_t uartAvailable);
 static void rs485BootSafetyEnsureInit();
 static bool rs485PinsUnsafeForAtomLite();
+static void rs485ClearNextCtsArm();
 // bool hasDayChanged();
 
 RTC_NOINIT_ATTR Rs485Stats rs485Stats;
@@ -130,6 +131,7 @@ void rs485Setup()
     {
       s_bootSafety.safeMode = 1;
       s_safeModeReason = "fault_streak";
+      rs485ClearNextCtsArm();
       Log.error(F("[rs485]: Entering RS485 safe mode — UART skipped so Wi-Fi/OTA stay reachable" CR));
 #if defined(DIAG_FAULT_CAPTURE)
       faultCaptureAppendf("[fault] rs485 safe mode streak=%u", s_bootSafety.faultStreak);
@@ -177,6 +179,17 @@ static bool rs485PinsUnsafeForAtomLite()
   }
 #endif
   return false;
+}
+
+static void rs485ClearNextCtsArm()
+{
+  if (!rs485NextCtsArmed)
+  {
+    return;
+  }
+  rs485NextCtsArmed = false;
+  rs485NextCtsFrameLength = 0;
+  Log.notice(F("[rs485]: Cleared armed next-CTS frame (UART unavailable / safe mode)" CR));
 }
 
 bool rs485UartBegun()
@@ -251,6 +264,7 @@ bool rs485EnsureUartBegun()
   {
     s_bootSafety.safeMode = 1;
     s_safeModeReason = "pico_flash_pins_16_17";
+    rs485ClearNextCtsArm();
     Log.error(F("[rs485]: Refusing UART on GPIO 16/17 (ESP32-PICO-D4 flash) — safe mode" CR));
 #if defined(DIAG_FAULT_CAPTURE)
     faultCaptureAppend("[fault] rs485 refused pins 16/17 on Atom Lite");
@@ -612,6 +626,11 @@ uint32_t rs485NextCtsFireCount()
 
 bool rs485ArmFrameOnNextCts(const uint8_t *frame, int length, uint32_t *outArmCount)
 {
+  if (!s_uartBegun || s_bootSafety.safeMode)
+  {
+    Log.warning(F("[rs485]: next-CTS arm rejected — UART not ready (%s)" CR), rs485HealthCode());
+    return false;
+  }
   if (frame == nullptr || length <= 0 || length > BALBOA_MESSAGE_SIZE)
   {
     return false;
