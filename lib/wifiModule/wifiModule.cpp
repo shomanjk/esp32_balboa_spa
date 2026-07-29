@@ -420,7 +420,9 @@ void wifiModuleLoop()
     return;
   }
 
-  const bool due = wifiBootConnectPending || (nowMs >= wifiNextAttemptDueMs);
+  // Wrap-safe: unsigned elapsed comparison survives millis() rollover (~49.7 days).
+  const bool due = wifiBootConnectPending ||
+                   ((int32_t)(nowMs - wifiNextAttemptDueMs) >= 0);
   if (due)
   {
     wifiBootConnectPending = false;
