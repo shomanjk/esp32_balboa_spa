@@ -92,7 +92,7 @@
 //   wiki: Hardware-targets
 //
 // ---------------------------------------------------------------------------
-// Alternate wiring on a generic env (set TX485_* in config.h; not an M5*-tub env)
+// Alternate wiring on a generic env (not an M5*-tub env — those own pins via build_flags)
 // ---------------------------------------------------------------------------
 // M5 Unit RS485 on Grove (example for Atom Lite Grove pinout):
 //   Black=GND, Red=5V, Yellow=G26, White=G32
@@ -100,12 +100,11 @@
 // Wire: ESP TX (G26) -> module RX (yellow); ESP RX (G32) -> module TX (white).
 // If you see no frames, swap those two TTL wires.
 //
-// #ifndef TX485_Rx
+// Uncomment below to override the defaults above. Use #undef first — a second
+// #ifndef TX485_Rx after the defaults would silently keep 16/17.
+// #undef TX485_Rx
+// #undef TX485_Tx
+// #undef AUTO_TX
 // #define TX485_Rx 32
-// #endif
-// #ifndef TX485_Tx
 // #define TX485_Tx 26
-// #endif
-// #ifndef AUTO_TX
 // #define AUTO_TX true
-// #endif
