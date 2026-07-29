@@ -24,6 +24,10 @@ where version numbers are used.
 - **`GET /api/version` slimmed** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Identity / update-check metadata only (`version`, `build`, `hostname`, `ip`, restart fields, repo URLs). **`faultLog`**, chip temp, and **`panelClockAutoSync`** moved to **`/api/diagnostics`** so ArduinoJson pool pressure can no longer drop diagnostics or firmware identity keys from a shared document.
 - **Restart soft-label attribution** ([`lib/restartReason/`](lib/restartReason/)): Composite **`restartReason`** appends the RTC soft intent (e.g. **OTA Update**) only for **`ESP_RST_SW`**. Panic / WDT / brownout show the ESP reason alone and clear a stale soft label so weeks-old OTA text no longer appears on later crashes.
 
+### Fixed
+
+- **Hourly panic from config refresh overflow** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): **`configurationRequest()`** no longer concatenates up to six 10-byte settings frames into one **`SpaWriteQueueMessage`** (`BALBOA_MESSAGE_SIZE` 50). When all datasets were stale after **`STALE_TIME`** (1 hour), `offset` reached 60 and overflowed the message buffer → heap corruption → `ESP_RST_PANIC` on a ~hourly cadence. Each request is now queued separately; **`sendMessageToSpa`** rejects lengths above **`BALBOA_MESSAGE_SIZE`**.
+
 ### Version bump
 
 - Firmware **`VERSION`** is **`2.21.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).

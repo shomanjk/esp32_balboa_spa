@@ -373,9 +373,6 @@ void configurationRequest()
     return;
   }
 
-  unsigned char byte_array[100] = {0};
-  int offset = 0;
-
   unsigned char config_request[] = CONFIGURATION_REQUEST;
   unsigned char settings_request[] = SETTINGS_0X04_REQUEST;
   unsigned char filter_settings_request[] = FILTER_SETTINGS_REQUEST;
@@ -383,59 +380,44 @@ void configurationRequest()
   unsigned char fault_log_request[] = FAULT_LOG_REQUEST;
   unsigned char preferences_request[] = PREFERENCES_REQUEST;
 
-  String request = "";
-
+  // Queue one Balboa request frame per write-queue entry. Batching into a single
+  // SpaWriteQueueMessage overflowed BALBOA_MESSAGE_SIZE (50) when all six were stale
+  // (6 × 10 = 60), corrupting heap and causing hourly ESP_RST_PANIC after STALE_TIME.
   if (staleData(spaConfigurationData) && retryRequest(spaConfigurationData))
   {
-    append_request(byte_array, &offset, config_request, sizeof(config_request));
+    sendMessageToSpa(config_request, sizeof(config_request));
     spaConfigurationData.lastRequest = getTime();
-    request += "Configuration ";
+    Log.verbose(F("[Mess]: Queuing Configuration request" CR));
   }
   if (staleData(spaSettings0x04Data) && retryRequest(spaSettings0x04Data))
   {
-    append_request(byte_array, &offset, settings_request, sizeof(settings_request));
+    sendMessageToSpa(settings_request, sizeof(settings_request));
     spaSettings0x04Data.lastRequest = getTime();
-    request += "Settings ";
+    Log.verbose(F("[Mess]: Queuing Settings request" CR));
   }
   if (staleData(spaFilterSettingsData) && retryRequest(spaFilterSettingsData))
   {
-    append_request(byte_array, &offset, filter_settings_request, sizeof(filter_settings_request));
+    sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request));
     spaFilterSettingsData.lastRequest = getTime();
-    request += "Filter ";
+    Log.verbose(F("[Mess]: Queuing Filter request" CR));
   }
   if (staleData(spaInformationData) && retryRequest(spaInformationData))
   {
-    append_request(byte_array, &offset, information_request, sizeof(information_request));
+    sendMessageToSpa(information_request, sizeof(information_request));
     spaInformationData.lastRequest = getTime();
-    request += "Information ";
+    Log.verbose(F("[Mess]: Queuing Information request" CR));
   }
   if (staleData(spaFaultLogData) && retryRequest(spaFaultLogData) && !spaFaultLogHistoryIsActive())
   {
-    append_request(byte_array, &offset, fault_log_request, sizeof(fault_log_request));
+    sendMessageToSpa(fault_log_request, sizeof(fault_log_request));
     spaFaultLogData.lastRequest = getTime();
-    request += "FaultLog ";
+    Log.verbose(F("[Mess]: Queuing FaultLog request" CR));
   }
   if (staleData(spaPreferencesData) && retryRequest(spaPreferencesData))
   {
-    append_request(byte_array, &offset, preferences_request, sizeof(preferences_request));
+    sendMessageToSpa(preferences_request, sizeof(preferences_request));
     spaPreferencesData.lastRequest = getTime();
-    request += "Preferences ";
-  }
-
-  if (offset)
-  {
-    SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
-    messageToSend->length = offset;
-    memcpy(messageToSend->message, byte_array, offset);
-    if (xQueueSend(spaWriteQueue, &messageToSend, 0) != pdTRUE)
-    {
-      Log.error(F("[Mess]: SPA Write Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-      delete messageToSend;
-    }
-    else
-    {
-      Log.verbose(F("[Mess]: Queuing request to spa '%s' - %s" CR), request.c_str(), msgToString(messageToSend->message, messageToSend->length).c_str());
-    }
+    Log.verbose(F("[Mess]: Queuing Preferences request" CR));
   }
 }
 
@@ -842,6 +824,11 @@ void spaRequestFaultLogEntry(uint8_t entry)
 
 void sendMessageToSpa(uint8_t *data, int length)
 {
+  if (data == nullptr || length <= 0 || length > BALBOA_MESSAGE_SIZE)
+  {
+    Log.error(F("[Mess]: Rejected spa write len=%d (max %d)" CR), length, BALBOA_MESSAGE_SIZE);
+    return;
+  }
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
   messageToSend->length = length;
   memcpy(messageToSend->message, data, length);
