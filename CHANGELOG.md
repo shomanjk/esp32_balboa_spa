@@ -12,6 +12,16 @@ where version numbers are used.
 
 - **PR compile CI** ([`.github/workflows/build.yml`](.github/workflows/build.yml)): PlatformIO builds **`M5AtomLite-tub`** and **`ESP32ota`** on pull requests and pushes to **`ESP32`**, using a runner copy of **`src/config-example.h`** (private `config.h` stays gitignored).
 
+## [2.23.0] - 2026-07-29
+
+### Added
+
+- **Firmware portal dark mode** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `/status`, `/config`, `/state`, and `/logs` follow the OS light/dark preference by default. **Auto / Light / Dark** toggle (sun, moon, and half-circle icons) cycles the theme and persists per browser via `localStorage` (`portal-theme`). Desktop: icon-only utility control pinned to the nav bar (not a page link). Dark semantic overrides for heat/equip/range/status chips. Canvas charts (Wi‑Fi RSSI, temperature history) track theme CSS variables.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.23.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.22.0] - 2026-07-28
 
 ### Added
