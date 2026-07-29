@@ -50,7 +50,20 @@ SpaCommandResult queueFrame(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &frame,
   {
     *outFrameHex = msgToString(frame);
   }
-  sendMessageToSpa(frame);
+  if (!sendMessageToSpa(frame))
+  {
+#ifdef LOCAL_CLIENT
+    if (!rs485UartBegun())
+    {
+      Log.warning(F("[Cmd ]: rejected %s from %s (UART not ready): %s" CR),
+                  logAction, sourceLabel(source), msgToString(frame).c_str());
+      return {false, SPA_COMMAND_NOT_READY, "rs485_uart_not_ready"};
+    }
+#endif
+    Log.warning(F("[Cmd ]: rejected %s from %s (write queue full): %s" CR),
+                logAction, sourceLabel(source), msgToString(frame).c_str());
+    return {false, SPA_COMMAND_NOT_READY, "spa_write_queue_full"};
+  }
   Log.verbose(F("[Cmd ]: accepted %s from %s: %s" CR), logAction, sourceLabel(source), msgToString(frame).c_str());
   return {true, SPA_COMMAND_ACCEPTED, "accepted"};
 }
@@ -980,6 +993,12 @@ SpaCommandResult spaSendToggleOnNextCtsDiagnostic(
   }
   if (!rs485ArmFrameOnNextCts(raw, len, outArmCount))
   {
+#ifdef LOCAL_CLIENT
+    if (!rs485UartBegun() || rs485SafeModeActive())
+    {
+      return {false, SPA_COMMAND_NOT_READY, "rs485_uart_not_ready"};
+    }
+#endif
     return {false, SPA_COMMAND_INVALID_ARGUMENT, "failed to arm next_cts frame"};
   }
   Log.verbose(F("[Cmd ]: armed next_cts toggle from %s: %s" CR), sourceLabel(source), msgToString(frame).c_str());

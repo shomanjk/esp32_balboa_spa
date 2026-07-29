@@ -349,6 +349,13 @@ void spaMessageLoop()
   }
   else
   {
+#ifdef LOCAL_CLIENT
+    if (!rs485UartBegun())
+    {
+      // UART deferred or RS485 safe mode — do not flood spaWriteQueue.
+    }
+    else
+#endif
     if (!spaFaultLogHistoryIsActive() &&
         (staleData(spaConfigurationData) || staleData(spaSettings0x04Data) || staleData(spaFilterSettingsData) ||
          staleData(spaInformationData) || staleData(spaPreferencesData)))
@@ -831,7 +838,7 @@ void spaRequestFaultLogEntry(uint8_t entry)
   frame.push(entry);
   frame.push(0x00);
   addCRC(frame);
-  sendMessageToSpa(frame);
+  (void)sendMessageToSpa(frame);
   spaFaultLogData.lastRequest = getTime();
 }
 
@@ -842,6 +849,13 @@ bool sendMessageToSpa(uint8_t *data, int length)
     Log.error(F("[Mess]: Rejected spa write len=%d (max %d)" CR), length, BALBOA_MESSAGE_SIZE);
     return false;
   }
+#ifdef LOCAL_CLIENT
+  if (!rs485UartBegun())
+  {
+    Log.warning(F("[Mess]: Rejected spa write — RS485 UART not ready (%s)" CR), rs485HealthCode());
+    return false;
+  }
+#endif
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
   messageToSend->length = length;
   memcpy(messageToSend->message, data, length);
@@ -863,8 +877,15 @@ bool sendMessageToSpa(uint8_t *data, int length)
   return true;
 }
 
-void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
+bool sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
 {
+#ifdef LOCAL_CLIENT
+  if (!rs485UartBegun())
+  {
+    Log.warning(F("[Mess]: Rejected spa write — RS485 UART not ready (%s)" CR), rs485HealthCode());
+    return false;
+  }
+#endif
   SpaWriteQueueMessage *messageToSend = new SpaWriteQueueMessage;
   messageToSend->length = data.size();
   for (int i = 0; i < data.size() && i < BALBOA_MESSAGE_SIZE; i++)
@@ -878,15 +899,15 @@ void sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
     faultCaptureAppendf("[fault] spaWriteQueue full len=%d", messageToSend->length);
 #endif
     delete messageToSend;
+    return false;
   }
-  else
-  {
-    Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
-               millis(),
-               static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
-               msgToString(messageToSend->message, messageToSend->length).c_str());
-  }
+
+  Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+             millis(),
+             static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
+             msgToString(messageToSend->message, messageToSend->length).c_str());
+  return true;
 }
 
 String getMapDescription(uint8_t element, const std::map<uint8_t, const char *> &suppliedMap)

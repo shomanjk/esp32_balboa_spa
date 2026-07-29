@@ -2,6 +2,7 @@
 #include <CircularBuffer.hpp>
 #include <ArduinoLog.h>
 #include <esp_task_wdt.h>
+#include <esp_system.h>
 #include <cstring>
 #if defined(ARDUINO_ARCH_ESP32)
 #include "driver/uart.h"
@@ -16,6 +17,9 @@
 #include "../../src/main.h"
 #include "../../src/rs485_led_hooks.h"
 #include <diagBridgeLog.h>
+#if defined(DIAG_FAULT_CAPTURE)
+#include <faultCapture.h>
+#endif
 
 // QueueHandle_t rs485WriteQueue;
 
@@ -29,9 +33,32 @@ const char *rs485ModeName(bool inverted);
 void rs485DrainUart();
 void rs485ProcessByte(uint8_t x, uint8_t uartAvailable);
 void rs485RecordRawByte(uint8_t value, uint8_t uartAvailable);
+static void rs485BootSafetyEnsureInit();
+static bool rs485PinsUnsafeForAtomLite();
+static void rs485ClearNextCtsArm();
 // bool hasDayChanged();
 
 RTC_NOINIT_ATTR Rs485Stats rs485Stats;
+
+#define RS485_BOOT_SAFE_MAGIC 0x485AFE01u
+#define RS485_FAULT_STREAK_THRESHOLD 3
+#define RS485_HEALTHY_CLEAR_MS 60000UL
+
+typedef struct
+{
+  uint32_t magic;
+  uint8_t beginAttempted;
+  uint8_t faultStreak;
+  uint8_t safeMode;
+  uint8_t reserved;
+} Rs485BootSafety;
+
+RTC_NOINIT_ATTR static Rs485BootSafety s_bootSafety;
+
+static bool s_uartBegun = false;
+static bool s_retryPending = false;
+static uint32_t s_uartBegunAtMs = 0;
+static const char *s_safeModeReason = "";
 
 CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> spaMessage;
 uint8_t id = 0x00; // spa id
@@ -79,14 +106,45 @@ time_t lastCheckedTime;
 
 void rs485Setup()
 {
+  rs485BootSafetyEnsureInit();
+  s_uartBegun = false;
+  s_uartBegunAtMs = 0;
+
+  const esp_reset_reason_t rr = esp_reset_reason();
+  if (rr == ESP_RST_POWERON)
+  {
+    s_bootSafety.beginAttempted = 0;
+    s_bootSafety.faultStreak = 0;
+    s_bootSafety.safeMode = 0;
+    s_safeModeReason = "";
+  }
+  else if (s_bootSafety.beginAttempted &&
+           (rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT))
+  {
+    if (s_bootSafety.faultStreak < 255)
+    {
+      s_bootSafety.faultStreak++;
+    }
+    Log.warning(F("[rs485]: Fault boot streak %u after UART begin attempt (reset=%d)" CR),
+                s_bootSafety.faultStreak, static_cast<int>(rr));
+    if (s_bootSafety.faultStreak >= RS485_FAULT_STREAK_THRESHOLD)
+    {
+      s_bootSafety.safeMode = 1;
+      s_safeModeReason = "fault_streak";
+      rs485ClearNextCtsArm();
+      Log.error(F("[rs485]: Entering RS485 safe mode — UART skipped so Wi-Fi/OTA stay reachable" CR));
+#if defined(DIAG_FAULT_CAPTURE)
+      faultCaptureAppendf("[fault] rs485 safe mode streak=%u", s_bootSafety.faultStreak);
+#endif
+    }
+    // Count this begin-crash once; further unrelated resets should not keep stacking.
+    s_bootSafety.beginAttempted = 0;
+  }
+
   if (!AUTO_TX)
   {
-    pinMode(TX485_Tx, OUTPUT);
-    digitalWrite(TX485_Tx, LOW);
+    // DE/RE GPIO only after UART pins are known safe; deferred until ensureUartBegun.
   }
-  // Spa communication, 115.200 baud 8N1
-  applyRs485Polarity(false);
-  Log.verbose(F("[rs485]: RS485 setup, RX GPIO %d, TX GPIO %d, auto polarity detect %s" CR), TX485_Rx, TX485_Tx, "enabled");
 
   lastCheckedTime = getTime();
   if (rs485Stats.magicNumber != RS_485_MAGIC_NUMBER)
@@ -97,7 +155,157 @@ void rs485Setup()
   }
   rs485Stats.polarityInverted = rs485PolarityInverted ? 1 : 0;
   rs485Stats.polarityLocked = rs485PolarityLocked ? 1 : 0;
-};
+  Log.notice(F("[rs485]: Setup (UART deferred until Wi-Fi/OTA); safeMode=%u streak=%u" CR),
+             s_bootSafety.safeMode, s_bootSafety.faultStreak);
+}
+
+static void rs485BootSafetyEnsureInit()
+{
+  if (s_bootSafety.magic != RS485_BOOT_SAFE_MAGIC)
+  {
+    memset(&s_bootSafety, 0, sizeof(s_bootSafety));
+    s_bootSafety.magic = RS485_BOOT_SAFE_MAGIC;
+  }
+}
+
+static bool rs485PinsUnsafeForAtomLite()
+{
+  // Atom Lite (ESP32-PICO-D4): status LED pin 27 identifies this board family;
+  // GPIO 16/17 are tied to embedded flash and must not be used for UART.
+#if defined(M5_STATUS_LED) && defined(M5_STATUS_LED_PIN) && (M5_STATUS_LED_PIN == 27)
+  if (TX485_Rx == 16 || TX485_Rx == 17 || TX485_Tx == 16 || TX485_Tx == 17)
+  {
+    return true;
+  }
+#endif
+  return false;
+}
+
+static void rs485ClearNextCtsArm()
+{
+  if (!rs485NextCtsArmed)
+  {
+    return;
+  }
+  rs485NextCtsArmed = false;
+  rs485NextCtsFrameLength = 0;
+  Log.notice(F("[rs485]: Cleared armed next-CTS frame (UART unavailable / safe mode)" CR));
+}
+
+bool rs485UartBegun()
+{
+  return s_uartBegun;
+}
+
+uint32_t rs485UartUptimeMs()
+{
+  if (!s_uartBegun || s_uartBegunAtMs == 0)
+  {
+    return 0;
+  }
+  return millis() - s_uartBegunAtMs;
+}
+
+bool rs485SafeModeActive()
+{
+  return s_bootSafety.safeMode != 0;
+}
+
+uint8_t rs485FaultBootStreak()
+{
+  return s_bootSafety.faultStreak;
+}
+
+bool rs485BeginAttemptedFlag()
+{
+  return s_bootSafety.beginAttempted != 0;
+}
+
+bool rs485RetryPending()
+{
+  return s_retryPending;
+}
+
+const char *rs485SafeModeReason()
+{
+  if (!rs485SafeModeActive())
+  {
+    return "";
+  }
+  return (s_safeModeReason != nullptr && s_safeModeReason[0] != '\0') ? s_safeModeReason : "safe_mode";
+}
+
+void rs485RequestRetry()
+{
+  rs485BootSafetyEnsureInit();
+  s_bootSafety.safeMode = 0;
+  s_bootSafety.faultStreak = 0;
+  s_bootSafety.beginAttempted = 0;
+  s_safeModeReason = "";
+  s_retryPending = true;
+  Log.notice(F("[rs485]: Retry requested — UART begin scheduled on main loop" CR));
+}
+
+bool rs485EnsureUartBegun()
+{
+  rs485BootSafetyEnsureInit();
+  s_retryPending = false;
+
+  if (s_uartBegun)
+  {
+    return true;
+  }
+  if (s_bootSafety.safeMode)
+  {
+    Log.warning(F("[rs485]: UART begin skipped (safe mode: %s)" CR), rs485SafeModeReason());
+    return false;
+  }
+  if (rs485PinsUnsafeForAtomLite())
+  {
+    s_bootSafety.safeMode = 1;
+    s_safeModeReason = "pico_flash_pins_16_17";
+    rs485ClearNextCtsArm();
+    Log.error(F("[rs485]: Refusing UART on GPIO 16/17 (ESP32-PICO-D4 flash) — safe mode" CR));
+#if defined(DIAG_FAULT_CAPTURE)
+    faultCaptureAppend("[fault] rs485 refused pins 16/17 on Atom Lite");
+#endif
+    return false;
+  }
+
+  if (!AUTO_TX)
+  {
+    pinMode(TX485_Tx, OUTPUT);
+    digitalWrite(TX485_Tx, LOW);
+  }
+
+  // Mark before begin so a crash during Serial2.begin counts toward safe mode.
+  s_bootSafety.beginAttempted = 1;
+  Log.notice(F("[rs485]: Beginning UART RX GPIO %d TX GPIO %d" CR), TX485_Rx, TX485_Tx);
+  applyRs485Polarity(false);
+  Log.verbose(F("[rs485]: RS485 setup, RX GPIO %d, TX GPIO %d, auto polarity detect %s" CR), TX485_Rx, TX485_Tx, "enabled");
+  s_uartBegun = true;
+  s_uartBegunAtMs = millis();
+  return true;
+}
+
+void rs485BootSafetyTick()
+{
+  if (!s_uartBegun || s_uartBegunAtMs == 0)
+  {
+    return;
+  }
+  if (millis() - s_uartBegunAtMs < RS485_HEALTHY_CLEAR_MS)
+  {
+    return;
+  }
+  if (s_bootSafety.beginAttempted || s_bootSafety.faultStreak)
+  {
+    s_bootSafety.beginAttempted = 0;
+    s_bootSafety.faultStreak = 0;
+    Log.notice(F("[rs485]: Cleared UART begin-attempt / fault streak after healthy uptime" CR));
+  }
+  // Keep s_uartBegunAtMs so rs485UartUptimeMs() stays valid for LED no-spa grace.
+}
 
 /*
 
@@ -105,6 +313,10 @@ void rs485Setup()
 
 void rs485Loop()
 {
+  if (!s_uartBegun)
+  {
+    return;
+  }
   if (!rs485PolarityLocked && millis() - rs485PolarityDetectWindowStartMs >= RS485_POLARITY_DETECT_WINDOW_MS)
   {
     if (rs485ValidFramesSinceBoot == 0)
@@ -178,6 +390,10 @@ void rs485CheckSpaSilenceWatchdog()
 
 void rs485DrainUart()
 {
+  if (!s_uartBegun)
+  {
+    return;
+  }
   const uint16_t maxBytesPerLoop = 512;
   uint16_t processed = 0;
   while (RS485_SERIAL_PORT.available() && processed < maxBytesPerLoop)
@@ -336,6 +552,10 @@ void rs485ProcessByte(uint8_t x, uint8_t uartAvailable)
 
 void rs485ClearToSend()
 {
+  if (!s_uartBegun)
+  {
+    return;
+  }
   //  mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "rs485ClearToSend");
   rs485WriteQueueMessage *message;
   CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> dataBuffer;
@@ -406,6 +626,11 @@ uint32_t rs485NextCtsFireCount()
 
 bool rs485ArmFrameOnNextCts(const uint8_t *frame, int length, uint32_t *outArmCount)
 {
+  if (!s_uartBegun || s_bootSafety.safeMode)
+  {
+    Log.warning(F("[rs485]: next-CTS arm rejected — UART not ready (%s)" CR), rs485HealthCode());
+    return false;
+  }
   if (frame == nullptr || length <= 0 || length > BALBOA_MESSAGE_SIZE)
   {
     return false;
@@ -495,6 +720,11 @@ void addCRC(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
 
 void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
 {
+  if (!s_uartBegun)
+  {
+    data.clear();
+    return;
+  }
   // The following is not required for the new RS485 chip
   if (AUTO_TX)
   {
@@ -558,6 +788,14 @@ const char *rs485ModeName(bool inverted)
 
 const char *rs485HealthCode()
 {
+  if (rs485SafeModeActive())
+  {
+    return "RS485_SAFE_MODE";
+  }
+  if (!s_uartBegun)
+  {
+    return "UART_DEFERRED";
+  }
   if (rs485Stats.rawBytesToday == 0 && rs485Stats.lastByteMs == 0)
   {
     return "NO_UART_BYTES";

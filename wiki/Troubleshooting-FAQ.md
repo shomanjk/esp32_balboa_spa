@@ -9,9 +9,9 @@ Short **symptom → checks** guide. For release-accurate API and flag lists, use
 **Checks (in order):**
 
 1. **Wiring** — Confirm RS485 **A/B** on the spa bus ([ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer)). Swap A/B if you see no frames.
-2. **Pins** — `M5AtomLite-tub`: env **RX 22 / TX 19**. `M5AtomS3Lite-tub` (AtomS3 Lite): env **RX 5 / TX 6**. Generic envs: set pins in `config.h`.
+2. **Pins** — `M5AtomLite-tub`: env **RX 22 / TX 19**. `M5AtomS3Lite-tub` (AtomS3 Lite): env **RX 5 / TX 6**. Generic envs: set pins in `config.h`. On Atom Lite, **GPIO 16/17** are unsafe (PICO flash) and trigger RS485 safe mode.
 3. **`AUTO_TX`** — Prefer `true` unless your module needs manual DE/RE.
-4. **RS485 health** — Open `/state` or `GET /api/rs485`. Look at `health`, frame/CRC counters, and polarity hints.
+4. **RS485 health** — Open `/state` or `GET /api/rs485`. Look at `health`, frame/CRC counters, and polarity hints. `UART_DEFERRED` means waiting for Wi‑Fi/OTA; `RS485_SAFE_MODE` means UART is skipped after faults — fix pins then `POST /api/rs485/retry` or power-cycle.
 5. **Power / bench** — USB-only bench power is OK; ensure the transceiver shares a valid ground reference with the bus.
 
 **Deeper (maintainer checklist in repo):**

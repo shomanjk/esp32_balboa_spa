@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.26.0] - 2026-07-29
+
+### Added
+
+- **RS485 OTA-safe boot** ([`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp), [`src/main.ino`](src/main.ino)): Defer `Serial2.begin` until Wi‑Fi is up and `ArduinoOTA.begin()` has completed (no fixed grace delay). After repeated WDT/panic boots that follow a UART begin attempt, enter **RS485 safe mode** (skip UART) so the portal/OTA stay reachable. `POST /api/rs485/retry` clears safe mode and schedules begin on the main loop. Atom Lite (`M5_STATUS_LED_PIN == 27`) refuses GPIO **16/17** (PICO flash pins). Status LED **green/orange**: **fast** alternate in safe mode (only while Wi‑Fi is up), **slow** when UART is up but no valid frames **this boot** (after 15 s grace; uptime stamp kept after the 60 s streak-clear so the slow blink does not drop to solid green). `/api/rs485` and `/api/diagnostics` expose `uartBegun`, `rs485SafeMode`, streak, and related fields. CircularBuffer `sendMessageToSpa` / dispatcher `queueFrame` return **not ready** when UART is deferred or in safe mode (no false accepted). Maintainer notes updated in [`AGENTS.md`](AGENTS.md).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.26.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.25.0] - 2026-07-29
 
 ### Changed

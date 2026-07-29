@@ -150,11 +150,38 @@ void loop()
   esp_task_wdt_reset();
 #ifdef LOCAL_CLIENT
   rs485Loop();
+  rs485BootSafetyTick();
 #endif
 #ifdef spaEpaper
   spaEpaperLoop();
 #endif
   wifiModuleLoop();
+
+#ifdef LOCAL_CLIENT
+  if (WiFi.status() == WL_CONNECTED && wifiOtaIsStarted() &&
+      (rs485RetryPending() || (!rs485UartBegun() && !rs485SafeModeActive())))
+  {
+    (void)rs485EnsureUartBegun();
+  }
+#ifdef M5_STATUS_LED
+  {
+    Rs485LedAlert alert = Rs485LedAlert::None;
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      if (rs485SafeModeActive())
+      {
+        alert = Rs485LedAlert::SafeMode;
+      }
+      else if (rs485UartBegun() && rs485UartUptimeMs() >= 15000u &&
+               rs485ValidFramesSinceBoot == 0)
+      {
+        alert = Rs485LedAlert::NoSpaData;
+      }
+    }
+    ledControl.setRs485LedAlert(alert);
+  }
+#endif
+#endif
 
   if (WiFi.status() == WL_CONNECTED)
   {
