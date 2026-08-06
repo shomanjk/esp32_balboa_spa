@@ -223,6 +223,69 @@ static void portalHtmlHoldReleaseSlot(uint8_t slot)
   hold->destroy();
 }
 
+/** Stream one chunk from a hold slot. Kept free of captures so callers can wrap a POD slot index. */
+static size_t portalHtmlChunkFill(uint8_t slotU8, uint8_t *buffer, size_t maxLen, size_t index)
+{
+  PortalHtmlChunkHold *slotHold = s_portalHtmlHoldSlots[slotU8];
+  if (slotHold == nullptr)
+  {
+    return 0;
+  }
+  PortalHtmlChunkBody &body = slotHold->body;
+  if (index >= body.totalLen || maxLen == 0 || body.usedSlabs == 0)
+  {
+    return 0;
+  }
+  if (index != body.cursorAbs)
+  {
+    size_t remaining = index;
+    body.cursorSlab = 0;
+    body.cursorOff = 0;
+    while (body.cursorSlab < body.usedSlabs && remaining >= body.slabLens[body.cursorSlab])
+    {
+      remaining -= body.slabLens[body.cursorSlab];
+      body.cursorSlab++;
+    }
+    body.cursorOff = remaining;
+    body.cursorAbs = index;
+  }
+
+  size_t written = 0;
+  while (written < maxLen && body.cursorAbs < body.totalLen)
+  {
+    if (body.cursorSlab >= body.usedSlabs)
+    {
+      break;
+    }
+    const size_t slabLen = body.slabLens[body.cursorSlab];
+    if (body.cursorOff >= slabLen)
+    {
+      body.cursorSlab++;
+      body.cursorOff = 0;
+      continue;
+    }
+    const size_t avail = slabLen - body.cursorOff;
+    size_t n = maxLen - written;
+    if (n > avail)
+    {
+      n = avail;
+    }
+    memcpy(buffer + written, body.slabs[body.cursorSlab].get() + body.cursorOff, n);
+    written += n;
+    body.cursorOff += n;
+    body.cursorAbs += n;
+    if (body.cursorOff >= slabLen)
+    {
+      body.cursorSlab++;
+      body.cursorOff = 0;
+    }
+  }
+  return written;
+}
+
+/** Contiguous heap needed for AsyncCallbackResponse + two addHeader Strings (beyond SBO filler). */
+static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
+
 class PortalHtmlChunks
 {
 public:
@@ -444,69 +507,35 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
   }
   const uint8_t slotU8 = static_cast<uint8_t>(slot);
   const size_t bodyLen = hold->body.totalLen;
+  // beginResponse uses throwing `new AsyncCallbackResponse`. After slabs + hold have consumed
+  // heap, require headroom and construct with nothrow so this path can 503 instead of abort.
+  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  if (maxAlloc < kPortalHtmlResponseHeadroom)
+  {
+    Log.error("[Web]: portal HTML response headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
+              static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
+              static_cast<unsigned>(ESP.getFreeHeap()));
+    portalHtmlHoldReleaseSlot(slotU8);
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+
+  AsyncCallbackResponse *response = new (std::nothrow) AsyncCallbackResponse(
+      "text/html; charset=utf-8", bodyLen,
+      [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+        return portalHtmlChunkFill(slotU8, buffer, maxLen, index);
+      });
+  if (response == nullptr)
+  {
+    Log.error("[Web]: portal HTML AsyncCallbackResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    portalHtmlHoldReleaseSlot(slotU8);
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+
   // Idempotent free when the TCP client drops (request teardown); POD capture for SBO.
   request->onDisconnect([slotU8]() { portalHtmlHoldReleaseSlot(slotU8); });
-
-  AsyncWebServerResponse *response = request->beginResponse(
-      "text/html; charset=utf-8",
-      bodyLen,
-      [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-        PortalHtmlChunkHold *slotHold = s_portalHtmlHoldSlots[slotU8];
-        if (slotHold == nullptr)
-        {
-          return 0;
-        }
-        PortalHtmlChunkBody &body = slotHold->body;
-        if (index >= body.totalLen || maxLen == 0 || body.usedSlabs == 0)
-        {
-          return 0;
-        }
-        if (index != body.cursorAbs)
-        {
-          size_t remaining = index;
-          body.cursorSlab = 0;
-          body.cursorOff = 0;
-          while (body.cursorSlab < body.usedSlabs && remaining >= body.slabLens[body.cursorSlab])
-          {
-            remaining -= body.slabLens[body.cursorSlab];
-            body.cursorSlab++;
-          }
-          body.cursorOff = remaining;
-          body.cursorAbs = index;
-        }
-
-        size_t written = 0;
-        while (written < maxLen && body.cursorAbs < body.totalLen)
-        {
-          if (body.cursorSlab >= body.usedSlabs)
-          {
-            break;
-          }
-          const size_t slabLen = body.slabLens[body.cursorSlab];
-          if (body.cursorOff >= slabLen)
-          {
-            body.cursorSlab++;
-            body.cursorOff = 0;
-            continue;
-          }
-          const size_t avail = slabLen - body.cursorOff;
-          size_t n = maxLen - written;
-          if (n > avail)
-          {
-            n = avail;
-          }
-          memcpy(buffer + written, body.slabs[body.cursorSlab].get() + body.cursorOff, n);
-          written += n;
-          body.cursorOff += n;
-          body.cursorAbs += n;
-          if (body.cursorOff >= slabLen)
-          {
-            body.cursorSlab++;
-            body.cursorOff = 0;
-          }
-        }
-        return written;
-      });
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);

@@ -10,7 +10,7 @@ where version numbers are used.
 
 ### Fixed
 
-- **/status, /config, and /state HTML truncation on Atom Lite** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Large portal pages were assembled into one Arduino `String` and could stop growing under heap fragmentation (no PSRAM), leaving mid-document corruption. Those handlers now assemble into small **RAM slabs** (`PortalHtmlChunks`, 4 KiB) and stream with the existing ETag callback path — **no LittleFS spool** (TempHist write panic remains parked). Failed slab alloc returns HTTP **503** instead of truncated HTML. `/logs` still uses `String` pending size bench.
+- **/status, /config, and /state HTML truncation on Atom Lite** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Large portal pages were assembled into one Arduino `String` and could stop growing under heap fragmentation (no PSRAM), leaving mid-document corruption. Those handlers now assemble into small **RAM slabs** (`PortalHtmlChunks`, 4 KiB) and stream with the existing ETag callback path — **no LittleFS spool** (TempHist write panic remains parked). Failed slab alloc returns HTTP **503** instead of truncated HTML. Delivery uses a POD slot-index filler (libstdc++ `std::function` SBO), plus max-alloc headroom and `nothrow` `AsyncCallbackResponse` so low-heap send also **503**s instead of aborting under `-fno-exceptions`. `/logs` still uses `String` pending size bench.
 
 ### Added
 
