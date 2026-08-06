@@ -82,7 +82,10 @@ String parseBody(String body);
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
 String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
 
-static bool sendNotModifiedIfEtagMatches(AsyncWebServerRequest *request, const String &etag)
+/** Contiguous heap needed for a small Async*Response + a couple of addHeader Strings. */
+static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
+
+static bool ifNoneMatchHits(AsyncWebServerRequest *request, const String &etag)
 {
   if (!request || etag.length() == 0 || !request->hasHeader("If-None-Match"))
   {
@@ -93,12 +96,36 @@ static bool sendNotModifiedIfEtagMatches(AsyncWebServerRequest *request, const S
   {
     return false;
   }
+  // Header value copy is small; avoid holding large page bodies while allocating the 304.
   const String matchValue = matchHeader->value();
-  if (matchValue.indexOf(etag) < 0)
+  return matchValue.indexOf(etag) >= 0;
+}
+
+/**
+ * Send HTTP 304 with nothrow response alloc. Caller must free large page bodies first so slabs
+ * are not still consuming heap under -fno-exceptions. Returns true if 304 was queued; false if
+ * a 503 was sent instead.
+ */
+static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String &etag)
+{
+  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  if (maxAlloc < kPortalHtmlResponseHeadroom)
   {
+    Log.error("[Web]: portal HTML 304 headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
+              static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
+              static_cast<unsigned>(ESP.getFreeHeap()));
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
     return false;
   }
-  AsyncWebServerResponse *notModified = request->beginResponse(304);
+
+  AsyncBasicResponse *notModified = new (std::nothrow) AsyncBasicResponse(304);
+  if (notModified == nullptr)
+  {
+    Log.error("[Web]: portal HTML 304 alloc failed freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return false;
+  }
   notModified->addHeader("ETag", etag);
   notModified->addHeader("Cache-Control", "no-cache");
   request->send(notModified);
@@ -114,8 +141,10 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
   {
     return;
   }
-  if (sendNotModifiedIfEtagMatches(request, etag))
+  if (ifNoneMatchHits(request, etag))
   {
+    html = String();
+    (void)sendNotModified304Soft(request, etag);
     return;
   }
   const size_t bodyLen = html.length();
@@ -282,9 +311,6 @@ static size_t portalHtmlChunkFill(uint8_t slotU8, uint8_t *buffer, size_t maxLen
   }
   return written;
 }
-
-/** Contiguous heap needed for AsyncCallbackResponse + two addHeader Strings (beyond SBO filler). */
-static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
 
 class PortalHtmlChunks
 {
@@ -475,9 +501,11 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
     return;
   }
-  if (sendNotModifiedIfEtagMatches(request, etag))
+  if (ifNoneMatchHits(request, etag))
   {
+    // Free slabs before allocating the 304 response (throwing beginResponse(304) raced slabs).
     html.clear();
+    (void)sendNotModified304Soft(request, etag);
     return;
   }
 
