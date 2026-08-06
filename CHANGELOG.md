@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Fixed
+
+- **/status, /config, and /state HTML truncation on Atom Lite** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Large portal pages were assembled into one Arduino `String` and could stop growing under heap fragmentation (no PSRAM), leaving mid-document corruption. Those handlers now assemble into small **RAM slabs** (`PortalHtmlChunks`, 4 KiB) and stream with the existing ETag callback path — **no LittleFS spool** (TempHist write panic remains parked). Failed slab alloc returns HTTP **503** instead of truncated HTML. `/logs` still uses `String` pending size bench.
+
 ### Added
 
 - **Spa Website → firmware portal navigation** ([`balboa-spa`](balboa-spa) submodule): compact **Gateway** menu on the Vue SPA (login + top bar) links to `/status`, `/config`, `/state`, and `/logs`. PWA service worker denylist so those routes are not intercepted as SPA navigations. Requires LittleFS **`uploadfs`** after submodule update (firmware OTA alone does not ship SPA assets).
