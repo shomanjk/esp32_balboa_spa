@@ -357,7 +357,20 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
 
-  auto body = std::make_shared<PortalHtmlChunkBody>();
+  // Do not use std::make_shared here: throwing/default new aborts under -fno-exceptions when
+  // heap is exhausted after a successful page assemble. Allocate delivery state with nothrow first.
+  PortalHtmlChunkBody *rawBody = new (std::nothrow) PortalHtmlChunkBody();
+  if (rawBody == nullptr)
+  {
+    Log.error("[Web]: portal HTML body hold alloc failed len=%u slabs=%u freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
+              static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    html.clear();
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+  std::shared_ptr<PortalHtmlChunkBody> body(rawBody);
   html.releaseTo(*body);
   const size_t bodyLen = body->totalLen;
   AsyncWebServerResponse *response = request->beginResponse(
