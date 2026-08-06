@@ -162,6 +162,72 @@ struct PortalHtmlChunkBody
   size_t cursorAbs = 0;
 };
 
+/** Single nothrow malloc for delivery state + intrusive refcount (no std::shared_ptr control block). */
+struct PortalHtmlChunkHold
+{
+  unsigned refs = 1;
+  PortalHtmlChunkBody body;
+
+  static PortalHtmlChunkHold *create()
+  {
+    void *mem = ::operator new(sizeof(PortalHtmlChunkHold), std::nothrow);
+    if (mem == nullptr)
+    {
+      return nullptr;
+    }
+    return new (mem) PortalHtmlChunkHold();
+  }
+
+  void retain()
+  {
+    ++refs;
+  }
+
+  void release()
+  {
+    if (--refs == 0)
+    {
+      this->~PortalHtmlChunkHold();
+      ::operator delete(this, std::nothrow);
+    }
+  }
+};
+
+struct PortalHtmlChunkHoldPtr
+{
+  PortalHtmlChunkHold *p = nullptr;
+
+  PortalHtmlChunkHoldPtr() = default;
+  explicit PortalHtmlChunkHoldPtr(PortalHtmlChunkHold *hold) : p(hold) {}
+  PortalHtmlChunkHoldPtr(const PortalHtmlChunkHoldPtr &other) : p(other.p)
+  {
+    if (p != nullptr)
+    {
+      p->retain();
+    }
+  }
+  PortalHtmlChunkHoldPtr &operator=(const PortalHtmlChunkHoldPtr &) = delete;
+  ~PortalHtmlChunkHoldPtr()
+  {
+    if (p != nullptr)
+    {
+      p->release();
+    }
+  }
+  PortalHtmlChunkBody *operator->() const
+  {
+    return &p->body;
+  }
+  PortalHtmlChunkBody &operator*() const
+  {
+    return p->body;
+  }
+  explicit operator bool() const
+  {
+    return p != nullptr;
+  }
+};
+
 class PortalHtmlChunks
 {
 public:
@@ -357,10 +423,11 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
 
-  // Do not use std::make_shared here: throwing/default new aborts under -fno-exceptions when
-  // heap is exhausted after a successful page assemble. Allocate delivery state with nothrow first.
-  PortalHtmlChunkBody *rawBody = new (std::nothrow) PortalHtmlChunkBody();
-  if (rawBody == nullptr)
+  // Do not use std::make_shared / allocating shared_ptr ctors: control-block new aborts under
+  // -fno-exceptions when heap is exhausted after a successful page assemble. Intrusive hold is
+  // one nothrow allocation for body + refcount.
+  PortalHtmlChunkHoldPtr body(PortalHtmlChunkHold::create());
+  if (!body)
   {
     Log.error("[Web]: portal HTML body hold alloc failed len=%u slabs=%u freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
@@ -370,7 +437,6 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
     return;
   }
-  std::shared_ptr<PortalHtmlChunkBody> body(rawBody);
   html.releaseTo(*body);
   const size_t bodyLen = body->totalLen;
   AsyncWebServerResponse *response = request->beginResponse(
