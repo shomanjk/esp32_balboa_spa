@@ -24,7 +24,6 @@
 #include <ctime>
 #include <memory>
 #include <new>
-#include <vector>
 #include <spaMessage.h>
 #include <tempHistory.h>
 #include <spaUtilities.h>
@@ -146,11 +145,17 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
  * Assemble large portal HTML as small RAM slabs so Arduino `String` never needs one contiguous
  * ~70–90KB heap block (Atom Lite has no PSRAM; fragmentation truncates mid-document). Streamed
  * with the same ETag callback pattern as `sendHtmlWithEtag`. No LittleFS writes.
+ *
+ * Fixed slab table (not std::vector) so metadata growth cannot throw/abort under -fno-exceptions;
+ * only nothrow payload allocs feed the healthy_/503 path.
  */
 struct PortalHtmlChunkBody
 {
-  std::vector<std::unique_ptr<uint8_t[]>> slabs;
-  std::vector<size_t> slabLens;
+  static constexpr size_t kMaxSlabs = 40; // 40 × 4 KiB = 160 KiB max page
+
+  std::unique_ptr<uint8_t[]> slabs[kMaxSlabs];
+  size_t slabLens[kMaxSlabs] = {};
+  size_t usedSlabs = 0;
   size_t totalLen = 0;
   size_t cursorSlab = 0;
   size_t cursorOff = 0;
@@ -160,10 +165,16 @@ struct PortalHtmlChunkBody
 class PortalHtmlChunks
 {
 public:
+  static constexpr size_t kMaxSlabs = PortalHtmlChunkBody::kMaxSlabs;
+
   void clear()
   {
-    slabs_.clear();
-    slabLens_.clear();
+    for (size_t i = 0; i < usedSlabs_; i++)
+    {
+      slabs_[i].reset();
+      slabLens_[i] = 0;
+    }
+    usedSlabs_ = 0;
     totalLen_ = 0;
     healthy_ = true;
   }
@@ -238,19 +249,22 @@ public:
 
   size_t slabCount() const
   {
-    return slabs_.size();
+    return usedSlabs_;
   }
 
   void releaseTo(PortalHtmlChunkBody &out)
   {
-    out.slabs = std::move(slabs_);
-    out.slabLens = std::move(slabLens_);
+    for (size_t i = 0; i < usedSlabs_; i++)
+    {
+      out.slabs[i] = std::move(slabs_[i]);
+      out.slabLens[i] = slabLens_[i];
+    }
+    out.usedSlabs = usedSlabs_;
     out.totalLen = totalLen_;
     out.cursorSlab = 0;
     out.cursorOff = 0;
     out.cursorAbs = 0;
-    slabs_.clear();
-    slabLens_.clear();
+    usedSlabs_ = 0;
     totalLen_ = 0;
     healthy_ = true;
   }
@@ -260,6 +274,14 @@ private:
 
   bool pushSlab()
   {
+    if (usedSlabs_ >= kMaxSlabs)
+    {
+      healthy_ = false;
+      Log.error("[Web]: portal HTML slab count exhausted (%u) freeHeap=%u maxAlloc=%u" CR,
+                static_cast<unsigned>(kMaxSlabs), static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(ESP.getMaxAllocHeap()));
+      return false;
+    }
     std::unique_ptr<uint8_t[]> slab(new (std::nothrow) uint8_t[kSlabCap]);
     if (!slab)
     {
@@ -269,8 +291,9 @@ private:
                 static_cast<unsigned>(ESP.getMaxAllocHeap()));
       return false;
     }
-    slabs_.push_back(std::move(slab));
-    slabLens_.push_back(0);
+    slabs_[usedSlabs_] = std::move(slab);
+    slabLens_[usedSlabs_] = 0;
+    usedSlabs_++;
     return true;
   }
 
@@ -283,29 +306,31 @@ private:
     size_t off = 0;
     while (off < n)
     {
-      if (slabs_.empty() || slabLens_.back() >= kSlabCap)
+      if (usedSlabs_ == 0 || slabLens_[usedSlabs_ - 1] >= kSlabCap)
       {
         if (!pushSlab())
         {
           return *this;
         }
       }
-      const size_t room = kSlabCap - slabLens_.back();
+      const size_t idx = usedSlabs_ - 1;
+      const size_t room = kSlabCap - slabLens_[idx];
       size_t take = n - off;
       if (take > room)
       {
         take = room;
       }
-      memcpy(slabs_.back().get() + slabLens_.back(), p + off, take);
-      slabLens_.back() += take;
+      memcpy(slabs_[idx].get() + slabLens_[idx], p + off, take);
+      slabLens_[idx] += take;
       totalLen_ += take;
       off += take;
     }
     return *this;
   }
 
-  std::vector<std::unique_ptr<uint8_t[]>> slabs_;
-  std::vector<size_t> slabLens_;
+  std::unique_ptr<uint8_t[]> slabs_[kMaxSlabs];
+  size_t slabLens_[kMaxSlabs] = {};
+  size_t usedSlabs_ = 0;
   size_t totalLen_ = 0;
   bool healthy_ = true;
 };
@@ -339,7 +364,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
       "text/html; charset=utf-8",
       bodyLen,
       [body](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-        if (index >= body->totalLen || maxLen == 0 || body->slabs.empty())
+        if (index >= body->totalLen || maxLen == 0 || body->usedSlabs == 0)
         {
           return 0;
         }
@@ -348,7 +373,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
           size_t remaining = index;
           body->cursorSlab = 0;
           body->cursorOff = 0;
-          while (body->cursorSlab < body->slabs.size() &&
+          while (body->cursorSlab < body->usedSlabs &&
                  remaining >= body->slabLens[body->cursorSlab])
           {
             remaining -= body->slabLens[body->cursorSlab];
@@ -361,7 +386,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
         size_t written = 0;
         while (written < maxLen && body->cursorAbs < body->totalLen)
         {
-          if (body->cursorSlab >= body->slabs.size())
+          if (body->cursorSlab >= body->usedSlabs)
           {
             break;
           }
@@ -2786,7 +2811,9 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:start;}@media (max-width:560px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:var(--surface-2);color:var(--text);}.fw-pill-current{background:#edf7ff;color:var(--heading);border-color:#b7d6f2;}.fw-pill-latest{background:var(--surface-2);color:var(--muted);}.fw-pill-branch{background:#fffbeb;color:#92400e;border-style:dashed;border-color:#fcd34d;}.sub-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.fw-repo-links{display:flex;flex-wrap:nowrap;align-items:center;gap:0 6px;margin-top:8px;font-size:13px;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}.fw-repo-links a{flex:0 0 auto;}.fw-repo-sep{color:var(--muted);opacity:.7;flex:0 0 auto;user-select:none;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
+  // Keep CSS as a flash/rodata literal and append through PortalHtmlChunks (do not heap-allocate
+  // a large Arduino String first — that can fail under fragmentation while slabs still succeed).
+  const char *stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:start;}@media (max-width:560px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:var(--surface-2);color:var(--text);}.fw-pill-current{background:#edf7ff;color:var(--heading);border-color:#b7d6f2;}.fw-pill-latest{background:var(--surface-2);color:var(--muted);}.fw-pill-branch{background:#fffbeb;color:#92400e;border-style:dashed;border-color:#fcd34d;}.sub-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.fw-repo-links{display:flex;flex-wrap:nowrap;align-items:center;gap:0 6px;margin-top:8px;font-size:13px;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}.fw-repo-links a{flex:0 0 auto;}.fw-repo-sep{color:var(--muted);opacity:.7;flex:0 0 auto;user-select:none;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
   PortalHtmlChunks html;
   html = F("<html>");
   const bool sawPortalCss = appendPortalHead(html, "ESP State");
