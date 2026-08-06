@@ -162,10 +162,9 @@ struct PortalHtmlChunkBody
   size_t cursorAbs = 0;
 };
 
-/** Single nothrow malloc for delivery state + intrusive refcount (no std::shared_ptr control block). */
+/** Single nothrow malloc for delivery state (no std::shared_ptr control block). */
 struct PortalHtmlChunkHold
 {
-  unsigned refs = 1;
   PortalHtmlChunkBody body;
 
   static PortalHtmlChunkHold *create()
@@ -178,55 +177,51 @@ struct PortalHtmlChunkHold
     return new (mem) PortalHtmlChunkHold();
   }
 
-  void retain()
+  void destroy()
   {
-    ++refs;
-  }
-
-  void release()
-  {
-    if (--refs == 0)
-    {
-      this->~PortalHtmlChunkHold();
-      ::operator delete(this, std::nothrow);
-    }
+    this->~PortalHtmlChunkHold();
+    ::operator delete(this, std::nothrow);
   }
 };
 
-struct PortalHtmlChunkHoldPtr
+/**
+ * AwsResponseFiller is std::function; libstdc++ SBO requires a trivially-copyable callable.
+ * Capture only a slot index (POD). Holds live in this table until request disconnect.
+ */
+static constexpr size_t kPortalHtmlHoldSlots = 4;
+static PortalHtmlChunkHold *s_portalHtmlHoldSlots[kPortalHtmlHoldSlots] = {};
+
+static int portalHtmlHoldAcquire(PortalHtmlChunkHold *hold)
 {
-  PortalHtmlChunkHold *p = nullptr;
+  if (hold == nullptr)
+  {
+    return -1;
+  }
+  for (size_t i = 0; i < kPortalHtmlHoldSlots; i++)
+  {
+    if (s_portalHtmlHoldSlots[i] == nullptr)
+    {
+      s_portalHtmlHoldSlots[i] = hold;
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
 
-  PortalHtmlChunkHoldPtr() = default;
-  explicit PortalHtmlChunkHoldPtr(PortalHtmlChunkHold *hold) : p(hold) {}
-  PortalHtmlChunkHoldPtr(const PortalHtmlChunkHoldPtr &other) : p(other.p)
+static void portalHtmlHoldReleaseSlot(uint8_t slot)
+{
+  if (slot >= kPortalHtmlHoldSlots)
   {
-    if (p != nullptr)
-    {
-      p->retain();
-    }
+    return;
   }
-  PortalHtmlChunkHoldPtr &operator=(const PortalHtmlChunkHoldPtr &) = delete;
-  ~PortalHtmlChunkHoldPtr()
+  PortalHtmlChunkHold *hold = s_portalHtmlHoldSlots[slot];
+  if (hold == nullptr)
   {
-    if (p != nullptr)
-    {
-      p->release();
-    }
+    return;
   }
-  PortalHtmlChunkBody *operator->() const
-  {
-    return &p->body;
-  }
-  PortalHtmlChunkBody &operator*() const
-  {
-    return p->body;
-  }
-  explicit operator bool() const
-  {
-    return p != nullptr;
-  }
-};
+  s_portalHtmlHoldSlots[slot] = nullptr;
+  hold->destroy();
+}
 
 class PortalHtmlChunks
 {
@@ -423,11 +418,11 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
 
-  // Do not use std::make_shared / allocating shared_ptr ctors: control-block new aborts under
-  // -fno-exceptions when heap is exhausted after a successful page assemble. Intrusive hold is
-  // one nothrow allocation for body + refcount.
-  PortalHtmlChunkHoldPtr body(PortalHtmlChunkHold::create());
-  if (!body)
+  // Delivery hold: one nothrow alloc. Callback/onDisconnect capture only a POD slot index so
+  // AwsResponseFiller / ArDisconnectHandler (std::function) stay in libstdc++ SBO — a nontrivial
+  // capture (HoldPtr/shared_ptr) forces throwing operator new under -fno-exceptions.
+  PortalHtmlChunkHold *hold = PortalHtmlChunkHold::create();
+  if (hold == nullptr)
   {
     Log.error("[Web]: portal HTML body hold alloc failed len=%u slabs=%u freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
@@ -437,59 +432,77 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
     return;
   }
-  html.releaseTo(*body);
-  const size_t bodyLen = body->totalLen;
+  html.releaseTo(hold->body);
+  const int slot = portalHtmlHoldAcquire(hold);
+  if (slot < 0)
+  {
+    Log.error("[Web]: portal HTML hold slots exhausted freeHeap=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()));
+    hold->destroy();
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+  const uint8_t slotU8 = static_cast<uint8_t>(slot);
+  const size_t bodyLen = hold->body.totalLen;
+  // Idempotent free when the TCP client drops (request teardown); POD capture for SBO.
+  request->onDisconnect([slotU8]() { portalHtmlHoldReleaseSlot(slotU8); });
+
   AsyncWebServerResponse *response = request->beginResponse(
       "text/html; charset=utf-8",
       bodyLen,
-      [body](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-        if (index >= body->totalLen || maxLen == 0 || body->usedSlabs == 0)
+      [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+        PortalHtmlChunkHold *slotHold = s_portalHtmlHoldSlots[slotU8];
+        if (slotHold == nullptr)
         {
           return 0;
         }
-        if (index != body->cursorAbs)
+        PortalHtmlChunkBody &body = slotHold->body;
+        if (index >= body.totalLen || maxLen == 0 || body.usedSlabs == 0)
+        {
+          return 0;
+        }
+        if (index != body.cursorAbs)
         {
           size_t remaining = index;
-          body->cursorSlab = 0;
-          body->cursorOff = 0;
-          while (body->cursorSlab < body->usedSlabs &&
-                 remaining >= body->slabLens[body->cursorSlab])
+          body.cursorSlab = 0;
+          body.cursorOff = 0;
+          while (body.cursorSlab < body.usedSlabs && remaining >= body.slabLens[body.cursorSlab])
           {
-            remaining -= body->slabLens[body->cursorSlab];
-            body->cursorSlab++;
+            remaining -= body.slabLens[body.cursorSlab];
+            body.cursorSlab++;
           }
-          body->cursorOff = remaining;
-          body->cursorAbs = index;
+          body.cursorOff = remaining;
+          body.cursorAbs = index;
         }
 
         size_t written = 0;
-        while (written < maxLen && body->cursorAbs < body->totalLen)
+        while (written < maxLen && body.cursorAbs < body.totalLen)
         {
-          if (body->cursorSlab >= body->usedSlabs)
+          if (body.cursorSlab >= body.usedSlabs)
           {
             break;
           }
-          const size_t slabLen = body->slabLens[body->cursorSlab];
-          if (body->cursorOff >= slabLen)
+          const size_t slabLen = body.slabLens[body.cursorSlab];
+          if (body.cursorOff >= slabLen)
           {
-            body->cursorSlab++;
-            body->cursorOff = 0;
+            body.cursorSlab++;
+            body.cursorOff = 0;
             continue;
           }
-          const size_t avail = slabLen - body->cursorOff;
+          const size_t avail = slabLen - body.cursorOff;
           size_t n = maxLen - written;
           if (n > avail)
           {
             n = avail;
           }
-          memcpy(buffer + written, body->slabs[body->cursorSlab].get() + body->cursorOff, n);
+          memcpy(buffer + written, body.slabs[body.cursorSlab].get() + body.cursorOff, n);
           written += n;
-          body->cursorOff += n;
-          body->cursorAbs += n;
-          if (body->cursorOff >= slabLen)
+          body.cursorOff += n;
+          body.cursorAbs += n;
+          if (body.cursorOff >= slabLen)
           {
-            body->cursorSlab++;
-            body->cursorOff = 0;
+            body.cursorSlab++;
+            body.cursorOff = 0;
           }
         }
         return written;
@@ -998,8 +1011,19 @@ void handleepdpanel(AsyncWebServerRequest *request)
 
 #define portalLogsHeadExtraStyle "<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--panel);color:var(--text)}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px;background:var(--panel);color:var(--text)}</style>"
 
+/** True when portal global CSS marker is present (String: buffer scan; chunks: append stayed healthy). */
+static bool portalHtmlSawGlobalCss(const String &html)
+{
+  return html.indexOf(F(":root{--bg:#f4f7f8")) >= 0;
+}
+
+static bool portalHtmlSawGlobalCss(const PortalHtmlChunks &html)
+{
+  return html.healthy();
+}
+
 /** Append shared portal `<head>` with sequential writes (no chained `String` temporaries).
- *  Returns true after `portalBaseStyle` is appended (flag-based CSS presence; no page scan). */
+ *  Returns whether portal global CSS is present after the base-style append. */
 template <typename HtmlOut>
 static bool appendPortalHead(HtmlOut &html, const char *title, const char *viewportExtra = "",
                              const char *extraHeadStyle = nullptr)
@@ -1016,7 +1040,7 @@ static bool appendPortalHead(HtmlOut &html, const char *title, const char *viewp
   html += F("</title>");
   html += portalHeadIcon;
   html += portalBaseStyle;
-  const bool sawPortalCss = true;
+  const bool sawPortalCss = portalHtmlSawGlobalCss(html);
   html += portalSemanticDarkStyle;
   html += portalThemeScript;
   html += portalHeadNavScript;
