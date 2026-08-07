@@ -8,11 +8,11 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.26.1] - 2026-08-06
+
 ### Added
 
 - **Spa Website → firmware portal navigation** ([`balboa-spa`](balboa-spa) submodule): compact **Gateway** menu on the Vue SPA (login + top bar) links to `/status`, `/config`, `/state`, and `/logs`. PWA service worker denylist so those routes are not intercepted as SPA navigations. Requires LittleFS **`uploadfs`** after submodule update (firmware OTA alone does not ship SPA assets).
-
-## [2.26.1] - 2026-08-06
 
 ### Fixed
 
@@ -1103,7 +1103,13 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.21.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.1...HEAD
+[2.26.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.0...v2.26.1
+[2.26.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.25.0...v2.26.0
+[2.25.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.24.0...v2.25.0
+[2.24.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.23.0...v2.24.0
+[2.23.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.22.0...v2.23.0
+[2.22.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.21.1...v2.22.0
 [2.21.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.21.0...v2.21.1
 [2.21.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.1...v2.21.0
 [2.20.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.20.0...v2.20.1
