@@ -8,13 +8,19 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **Spa Website → firmware portal navigation** ([`balboa-spa`](balboa-spa) submodule): compact **Gateway** menu on the Vue SPA (login + top bar) links to `/status`, `/config`, `/state`, and `/logs`. PWA service worker denylist so those routes are not intercepted as SPA navigations. Requires LittleFS **`uploadfs`** after submodule update (firmware OTA alone does not ship SPA assets).
+
+## [2.26.1] - 2026-08-06
+
 ### Fixed
 
 - **/status, /config, and /state HTML truncation on Atom Lite** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Large portal pages were assembled into one Arduino `String` and could stop growing under heap fragmentation (no PSRAM), leaving mid-document corruption. Those handlers now assemble into small **RAM slabs** (`PortalHtmlChunks`, 4 KiB) and stream with the existing ETag callback path — **no LittleFS spool** (TempHist write panic remains parked). Failed slab alloc returns HTTP **503** instead of truncated HTML. Delivery uses a POD slot-index filler (libstdc++ `std::function` SBO), plus max-alloc headroom and `nothrow` `AsyncCallbackResponse` / **304** so low-heap send also **503**s instead of aborting under `-fno-exceptions` (ETag hits clear slabs before the 304 alloc). `/logs` still uses `String` pending size bench.
 
-### Added
+### Version bump
 
-- **Spa Website → firmware portal navigation** ([`balboa-spa`](balboa-spa) submodule): compact **Gateway** menu on the Vue SPA (login + top bar) links to `/status`, `/config`, `/state`, and `/logs`. PWA service worker denylist so those routes are not intercepted as SPA navigations. Requires LittleFS **`uploadfs`** after submodule update (firmware OTA alone does not ship SPA assets).
+- Firmware **`VERSION`** is **`2.26.1`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.26.0] - 2026-07-29
 
