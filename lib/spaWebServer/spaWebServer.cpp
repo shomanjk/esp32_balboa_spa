@@ -20,8 +20,10 @@
 
 #include <tinyxml2.h>
 #include <cmath>
+#include <cstring>
 #include <ctime>
 #include <memory>
+#include <new>
 #include <spaMessage.h>
 #include <tempHistory.h>
 #include <spaUtilities.h>
@@ -80,7 +82,10 @@ String parseBody(String body);
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
 String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
 
-static bool sendNotModifiedIfEtagMatches(AsyncWebServerRequest *request, const String &etag)
+/** Contiguous heap needed for a small Async*Response + a couple of addHeader Strings. */
+static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
+
+static bool ifNoneMatchHits(AsyncWebServerRequest *request, const String &etag)
 {
   if (!request || etag.length() == 0 || !request->hasHeader("If-None-Match"))
   {
@@ -91,12 +96,36 @@ static bool sendNotModifiedIfEtagMatches(AsyncWebServerRequest *request, const S
   {
     return false;
   }
+  // Header value copy is small; avoid holding large page bodies while allocating the 304.
   const String matchValue = matchHeader->value();
-  if (matchValue.indexOf(etag) < 0)
+  return matchValue.indexOf(etag) >= 0;
+}
+
+/**
+ * Send HTTP 304 with nothrow response alloc. Caller must free large page bodies first so slabs
+ * are not still consuming heap under -fno-exceptions. Returns true if 304 was queued; false if
+ * a 503 was sent instead.
+ */
+static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String &etag)
+{
+  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  if (maxAlloc < kPortalHtmlResponseHeadroom)
   {
+    Log.error("[Web]: portal HTML 304 headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
+              static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
+              static_cast<unsigned>(ESP.getFreeHeap()));
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
     return false;
   }
-  AsyncWebServerResponse *notModified = request->beginResponse(304);
+
+  AsyncBasicResponse *notModified = new (std::nothrow) AsyncBasicResponse(304);
+  if (notModified == nullptr)
+  {
+    Log.error("[Web]: portal HTML 304 alloc failed freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return false;
+  }
   notModified->addHeader("ETag", etag);
   notModified->addHeader("Cache-Control", "no-cache");
   request->send(notModified);
@@ -112,8 +141,10 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
   {
     return;
   }
-  if (sendNotModifiedIfEtagMatches(request, etag))
+  if (ifNoneMatchHits(request, etag))
   {
+    html = String();
+    (void)sendNotModified304Soft(request, etag);
     return;
   }
   const size_t bodyLen = html.length();
@@ -134,6 +165,405 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
         memcpy(buffer, sharedBody->c_str() + index, n);
         return n;
       });
+  response->addHeader("ETag", etag);
+  response->addHeader("Cache-Control", "no-cache");
+  request->send(response);
+}
+
+/**
+ * Assemble large portal HTML as small RAM slabs so Arduino `String` never needs one contiguous
+ * ~70–90KB heap block (Atom Lite has no PSRAM; fragmentation truncates mid-document). Streamed
+ * with the same ETag callback pattern as `sendHtmlWithEtag`. No LittleFS writes.
+ *
+ * Fixed slab table (not std::vector) so metadata growth cannot throw/abort under -fno-exceptions;
+ * only nothrow payload allocs feed the healthy_/503 path.
+ */
+struct PortalHtmlChunkBody
+{
+  static constexpr size_t kMaxSlabs = 40; // 40 × 4 KiB = 160 KiB max page
+
+  std::unique_ptr<uint8_t[]> slabs[kMaxSlabs];
+  size_t slabLens[kMaxSlabs] = {};
+  size_t usedSlabs = 0;
+  size_t totalLen = 0;
+  size_t cursorSlab = 0;
+  size_t cursorOff = 0;
+  size_t cursorAbs = 0;
+};
+
+/** Single nothrow malloc for delivery state (no std::shared_ptr control block). */
+struct PortalHtmlChunkHold
+{
+  PortalHtmlChunkBody body;
+
+  static PortalHtmlChunkHold *create()
+  {
+    void *mem = ::operator new(sizeof(PortalHtmlChunkHold), std::nothrow);
+    if (mem == nullptr)
+    {
+      return nullptr;
+    }
+    return new (mem) PortalHtmlChunkHold();
+  }
+
+  void destroy()
+  {
+    this->~PortalHtmlChunkHold();
+    ::operator delete(this, std::nothrow);
+  }
+};
+
+/**
+ * AwsResponseFiller is std::function; libstdc++ SBO requires a trivially-copyable callable.
+ * Capture only a slot index (POD). Holds live in this table until request disconnect.
+ */
+static constexpr size_t kPortalHtmlHoldSlots = 4;
+static PortalHtmlChunkHold *s_portalHtmlHoldSlots[kPortalHtmlHoldSlots] = {};
+
+static int portalHtmlHoldAcquire(PortalHtmlChunkHold *hold)
+{
+  if (hold == nullptr)
+  {
+    return -1;
+  }
+  for (size_t i = 0; i < kPortalHtmlHoldSlots; i++)
+  {
+    if (s_portalHtmlHoldSlots[i] == nullptr)
+    {
+      s_portalHtmlHoldSlots[i] = hold;
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+static void portalHtmlHoldReleaseSlot(uint8_t slot)
+{
+  if (slot >= kPortalHtmlHoldSlots)
+  {
+    return;
+  }
+  PortalHtmlChunkHold *hold = s_portalHtmlHoldSlots[slot];
+  if (hold == nullptr)
+  {
+    return;
+  }
+  s_portalHtmlHoldSlots[slot] = nullptr;
+  hold->destroy();
+}
+
+/** Stream one chunk from a hold slot. Kept free of captures so callers can wrap a POD slot index. */
+static size_t portalHtmlChunkFill(uint8_t slotU8, uint8_t *buffer, size_t maxLen, size_t index)
+{
+  PortalHtmlChunkHold *slotHold = s_portalHtmlHoldSlots[slotU8];
+  if (slotHold == nullptr)
+  {
+    return 0;
+  }
+  PortalHtmlChunkBody &body = slotHold->body;
+  if (index >= body.totalLen || maxLen == 0 || body.usedSlabs == 0)
+  {
+    return 0;
+  }
+  if (index != body.cursorAbs)
+  {
+    size_t remaining = index;
+    body.cursorSlab = 0;
+    body.cursorOff = 0;
+    while (body.cursorSlab < body.usedSlabs && remaining >= body.slabLens[body.cursorSlab])
+    {
+      remaining -= body.slabLens[body.cursorSlab];
+      body.cursorSlab++;
+    }
+    body.cursorOff = remaining;
+    body.cursorAbs = index;
+  }
+
+  size_t written = 0;
+  while (written < maxLen && body.cursorAbs < body.totalLen)
+  {
+    if (body.cursorSlab >= body.usedSlabs)
+    {
+      break;
+    }
+    const size_t slabLen = body.slabLens[body.cursorSlab];
+    if (body.cursorOff >= slabLen)
+    {
+      body.cursorSlab++;
+      body.cursorOff = 0;
+      continue;
+    }
+    const size_t avail = slabLen - body.cursorOff;
+    size_t n = maxLen - written;
+    if (n > avail)
+    {
+      n = avail;
+    }
+    memcpy(buffer + written, body.slabs[body.cursorSlab].get() + body.cursorOff, n);
+    written += n;
+    body.cursorOff += n;
+    body.cursorAbs += n;
+    if (body.cursorOff >= slabLen)
+    {
+      body.cursorSlab++;
+      body.cursorOff = 0;
+    }
+  }
+  return written;
+}
+
+class PortalHtmlChunks
+{
+public:
+  static constexpr size_t kMaxSlabs = PortalHtmlChunkBody::kMaxSlabs;
+
+  void clear()
+  {
+    for (size_t i = 0; i < usedSlabs_; i++)
+    {
+      slabs_[i].reset();
+      slabLens_[i] = 0;
+    }
+    usedSlabs_ = 0;
+    totalLen_ = 0;
+    healthy_ = true;
+  }
+
+  void reserve(size_t)
+  {
+    // Per-slab growth; ignore large contiguous reserves from page builders.
+  }
+
+  PortalHtmlChunks &operator=(const __FlashStringHelper *s)
+  {
+    clear();
+    return (*this += s);
+  }
+
+  PortalHtmlChunks &operator+=(const char *s)
+  {
+    if (s == nullptr)
+    {
+      return *this;
+    }
+    return appendBytes(s, strlen(s));
+  }
+
+  PortalHtmlChunks &operator+=(const String &s)
+  {
+    return appendBytes(s.c_str(), s.length());
+  }
+
+  PortalHtmlChunks &operator+=(const __FlashStringHelper *s)
+  {
+    if (!healthy_ || s == nullptr)
+    {
+      return *this;
+    }
+    PGM_P p = reinterpret_cast<PGM_P>(s);
+    char tmp[128];
+    while (true)
+    {
+      size_t i = 0;
+      while (i < sizeof(tmp) - 1)
+      {
+        const char c = static_cast<char>(pgm_read_byte(p++));
+        if (c == '\0')
+        {
+          if (i > 0)
+          {
+            appendBytes(tmp, i);
+          }
+          return *this;
+        }
+        tmp[i++] = c;
+      }
+      appendBytes(tmp, i);
+    }
+  }
+
+  PortalHtmlChunks &operator+=(char c)
+  {
+    return appendBytes(&c, 1);
+  }
+
+  size_t length() const
+  {
+    return totalLen_;
+  }
+
+  bool healthy() const
+  {
+    return healthy_;
+  }
+
+  size_t slabCount() const
+  {
+    return usedSlabs_;
+  }
+
+  void releaseTo(PortalHtmlChunkBody &out)
+  {
+    for (size_t i = 0; i < usedSlabs_; i++)
+    {
+      out.slabs[i] = std::move(slabs_[i]);
+      out.slabLens[i] = slabLens_[i];
+    }
+    out.usedSlabs = usedSlabs_;
+    out.totalLen = totalLen_;
+    out.cursorSlab = 0;
+    out.cursorOff = 0;
+    out.cursorAbs = 0;
+    usedSlabs_ = 0;
+    totalLen_ = 0;
+    healthy_ = true;
+  }
+
+private:
+  static constexpr size_t kSlabCap = 4096;
+
+  bool pushSlab()
+  {
+    if (usedSlabs_ >= kMaxSlabs)
+    {
+      healthy_ = false;
+      Log.error("[Web]: portal HTML slab count exhausted (%u) freeHeap=%u maxAlloc=%u" CR,
+                static_cast<unsigned>(kMaxSlabs), static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(ESP.getMaxAllocHeap()));
+      return false;
+    }
+    std::unique_ptr<uint8_t[]> slab(new (std::nothrow) uint8_t[kSlabCap]);
+    if (!slab)
+    {
+      healthy_ = false;
+      Log.error("[Web]: portal HTML slab alloc failed freeHeap=%u maxAlloc=%u" CR,
+                static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(ESP.getMaxAllocHeap()));
+      return false;
+    }
+    slabs_[usedSlabs_] = std::move(slab);
+    slabLens_[usedSlabs_] = 0;
+    usedSlabs_++;
+    return true;
+  }
+
+  PortalHtmlChunks &appendBytes(const char *p, size_t n)
+  {
+    if (!healthy_ || p == nullptr || n == 0)
+    {
+      return *this;
+    }
+    size_t off = 0;
+    while (off < n)
+    {
+      if (usedSlabs_ == 0 || slabLens_[usedSlabs_ - 1] >= kSlabCap)
+      {
+        if (!pushSlab())
+        {
+          return *this;
+        }
+      }
+      const size_t idx = usedSlabs_ - 1;
+      const size_t room = kSlabCap - slabLens_[idx];
+      size_t take = n - off;
+      if (take > room)
+      {
+        take = room;
+      }
+      memcpy(slabs_[idx].get() + slabLens_[idx], p + off, take);
+      slabLens_[idx] += take;
+      totalLen_ += take;
+      off += take;
+    }
+    return *this;
+  }
+
+  std::unique_ptr<uint8_t[]> slabs_[kMaxSlabs];
+  size_t slabLens_[kMaxSlabs] = {};
+  size_t usedSlabs_ = 0;
+  size_t totalLen_ = 0;
+  bool healthy_ = true;
+};
+
+static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChunks &html, const String &etag)
+{
+  if (!request)
+  {
+    return;
+  }
+  if (!html.healthy())
+  {
+    Log.error("[Web]: portal HTML assemble unhealthy len=%u slabs=%u freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
+              static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    html.clear();
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+  if (ifNoneMatchHits(request, etag))
+  {
+    // Free slabs before allocating the 304 response (throwing beginResponse(304) raced slabs).
+    html.clear();
+    (void)sendNotModified304Soft(request, etag);
+    return;
+  }
+
+  // Delivery hold: one nothrow alloc. Callback/onDisconnect capture only a POD slot index so
+  // AwsResponseFiller / ArDisconnectHandler (std::function) stay in libstdc++ SBO — a nontrivial
+  // capture (HoldPtr/shared_ptr) forces throwing operator new under -fno-exceptions.
+  PortalHtmlChunkHold *hold = PortalHtmlChunkHold::create();
+  if (hold == nullptr)
+  {
+    Log.error("[Web]: portal HTML body hold alloc failed len=%u slabs=%u freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
+              static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    html.clear();
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+  html.releaseTo(hold->body);
+  const int slot = portalHtmlHoldAcquire(hold);
+  if (slot < 0)
+  {
+    Log.error("[Web]: portal HTML hold slots exhausted freeHeap=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()));
+    hold->destroy();
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+  const uint8_t slotU8 = static_cast<uint8_t>(slot);
+  const size_t bodyLen = hold->body.totalLen;
+  // beginResponse uses throwing `new AsyncCallbackResponse`. After slabs + hold have consumed
+  // heap, require headroom and construct with nothrow so this path can 503 instead of abort.
+  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  if (maxAlloc < kPortalHtmlResponseHeadroom)
+  {
+    Log.error("[Web]: portal HTML response headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
+              static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
+              static_cast<unsigned>(ESP.getFreeHeap()));
+    portalHtmlHoldReleaseSlot(slotU8);
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+
+  AsyncCallbackResponse *response = new (std::nothrow) AsyncCallbackResponse(
+      "text/html; charset=utf-8", bodyLen,
+      [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+        return portalHtmlChunkFill(slotU8, buffer, maxLen, index);
+      });
+  if (response == nullptr)
+  {
+    Log.error("[Web]: portal HTML AsyncCallbackResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    portalHtmlHoldReleaseSlot(slotU8);
+    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    return;
+  }
+
+  // Idempotent free when the TCP client drops (request teardown); POD capture for SBO.
+  request->onDisconnect([slotU8]() { portalHtmlHoldReleaseSlot(slotU8); });
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
@@ -333,7 +763,8 @@ static void appendGatewayChipTempJson(JsonDocument &doc)
   }
 }
 
-static void appendGatewayChipTempStateSubCard(String &html)
+template <typename HtmlOut>
+static void appendGatewayChipTempStateSubCard(HtmlOut &html)
 {
   const GatewayChipTempStatus chip = gatewayChipTempSnapshot();
   html += "<div class='sub-card'><p class='sub-card-title'>Chip temperature</p>";
@@ -356,7 +787,8 @@ static void appendGatewayChipTempStateSubCard(String &html)
   html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>ESP32 die sensor — approximate; not cabinet ambient.</p></div>";
 }
 
-static void appendWifiStateSection(String &html)
+template <typename HtmlOut>
+static void appendWifiStateSection(HtmlOut &html)
 {
   wl_status_t st = WiFi.status();
   bool ok = (st == WL_CONNECTED);
@@ -636,8 +1068,21 @@ void handleepdpanel(AsyncWebServerRequest *request)
 
 #define portalLogsHeadExtraStyle "<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--panel);color:var(--text)}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px;background:var(--panel);color:var(--text)}</style>"
 
-/** Append shared portal `<head>` with sequential writes (no chained `String` temporaries). */
-static void appendPortalHead(String &html, const char *title, const char *viewportExtra = "",
+/** True when portal global CSS marker is present (String: buffer scan; chunks: append stayed healthy). */
+static bool portalHtmlSawGlobalCss(const String &html)
+{
+  return html.indexOf(F(":root{--bg:#f4f7f8")) >= 0;
+}
+
+static bool portalHtmlSawGlobalCss(const PortalHtmlChunks &html)
+{
+  return html.healthy();
+}
+
+/** Append shared portal `<head>` with sequential writes (no chained `String` temporaries).
+ *  Returns whether portal global CSS is present after the base-style append. */
+template <typename HtmlOut>
+static bool appendPortalHead(HtmlOut &html, const char *title, const char *viewportExtra = "",
                              const char *extraHeadStyle = nullptr)
 {
   const size_t want = html.length() + 20000u;
@@ -652,6 +1097,7 @@ static void appendPortalHead(String &html, const char *title, const char *viewpo
   html += F("</title>");
   html += portalHeadIcon;
   html += portalBaseStyle;
+  const bool sawPortalCss = portalHtmlSawGlobalCss(html);
   html += portalSemanticDarkStyle;
   html += portalThemeScript;
   html += portalHeadNavScript;
@@ -660,16 +1106,17 @@ static void appendPortalHead(String &html, const char *title, const char *viewpo
     html += extraHeadStyle;
   }
   html += F("</head>");
+  return sawPortalCss;
 }
 
-static void logPortalHtmlMissingGlobalCss(const String &html, const char *pageTag)
+static void logPortalHtmlMissingGlobalCss(bool sawPortalCss, size_t len, const char *pageTag)
 {
-  if (html.indexOf(F(":root{--bg:#f4f7f8")) >= 0)
+  if (sawPortalCss)
   {
     return;
   }
   Log.error("[Web]: %s missing portal global CSS len=%u — sending without repair" CR, pageTag,
-            static_cast<unsigned>(html.length()));
+            static_cast<unsigned>(len));
 }
 
 #define webMenuStatus "<nav aria-label='Portal navigation' class='portal-nav'><div class='portal-nav-bar'><div class='top-nav'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a></div><div class='portal-nav-util'>" portalThemeToggleBtn "</div></div><details class='top-nav-mobile'><summary class='top-nav-mobile__summary'><span class='top-nav-mobile__summary-inner'><span class='top-nav-mobile__context'>Spa Status</span><span class='top-nav-mobile__menu'><span class='top-nav-mobile__chev' aria-hidden='true'></span><span class='top-nav-mobile__menu-text'>Menu</span></span></span></summary><div class='top-nav-mobile__panel' role='group' aria-label='Portal pages'><a class='active' aria-current='page' href='/status'>Spa Status</a><a href='/config'>Spa Config</a><a href='/state'>ESP State</a><a href='/logs'>Logs</a><a href='/index.html'>Spa Website</a>" portalThemeToggleBtn "</div></details></nav><div class='portal-nav-scroll-sentinel' aria-hidden='true'></div>"
@@ -771,7 +1218,8 @@ static String webWallClockDisplayHtml(time_t t)
   return statusLastUpdateDisplayHtml(static_cast<unsigned long>(t));
 }
 
-static void appendStatusKvRow(String &html, const char *label, const String &value, const char *ddId = nullptr, const char *ddTitle = nullptr)
+template <typename HtmlOut>
+static void appendStatusKvRow(HtmlOut &html, const char *label, const String &value, const char *ddId = nullptr, const char *ddTitle = nullptr)
 {
   html += "<div class=\"kv-row\"><dt>";
   html += label;
@@ -996,7 +1444,8 @@ static String spaConfigLoadInstallLabel(bool present)
   return present ? String("Installed") : String("Not installed");
 }
 
-static void appendConfigEquipRow(String &html, const char *load, const String &status, bool absent)
+template <typename HtmlOut>
+static void appendConfigEquipRow(HtmlOut &html, const char *load, const String &status, bool absent)
 {
   html += "<tr";
   if (absent)
@@ -1010,7 +1459,8 @@ static void appendConfigEquipRow(String &html, const char *load, const String &s
   html += "</td></tr>";
 }
 
-static void appendStatusEquipCell(String &html, const char *label, const String &value, bool configuredAbsent)
+template <typename HtmlOut>
+static void appendStatusEquipCell(HtmlOut &html, const char *label, const String &value, bool configuredAbsent)
 {
   if (configuredAbsent)
   {
@@ -1026,7 +1476,8 @@ static void appendStatusEquipCell(String &html, const char *label, const String 
   html += "</div></div>";
 }
 
-static void appendStatusControlCell(String &html, const char *label, const char *equipKey, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState, const char *equipStateClass)
+template <typename HtmlOut>
+static void appendStatusControlCell(HtmlOut &html, const char *label, const char *equipKey, const String &value, bool configuredAbsent, int buttonCode, const char *desiredState, const char *equipStateClass)
 {
   if (configuredAbsent)
   {
@@ -1177,7 +1628,8 @@ static void appendMergedDailySecondsHistory(JsonArray &arr, const float *history
   arr.add(static_cast<float>(todaySeconds));
 }
 
-static void appendStatusHistoriesSection(String &html)
+template <typename HtmlOut>
+static void appendStatusHistoriesSection(HtmlOut &html)
 {
   const unsigned long heatTodaySec = spaStatusData.heatOn ? spaStatusData.heatOn->today() : spaStatusData.heaterOnTimeToday;
   const unsigned long filterTodaySec = spaStatusData.filterOn ? spaStatusData.filterOn->today() : spaStatusData.filterOnTimeToday;
@@ -1209,8 +1661,7 @@ static void appendStatusHistoriesSection(String &html)
 void handleStatus(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
-  String html;
-  html.reserve(82000);
+  PortalHtmlChunks html;
   const char *statusStyle =
       "<style>"
       "html{scroll-behavior:smooth;}"
@@ -1340,7 +1791,8 @@ void handleStatus(AsyncWebServerRequest *request)
 
   // Build `<head>` with sequential appends (see `appendPortalHead`).
   html = F("<html>");
-  appendPortalHead(html, "Spa Status");
+  const bool wroteOpeningTag = html.healthy() && html.length() >= 6;
+  const bool sawPortalCss = appendPortalHead(html, "Spa Status");
   html += statusStyle;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuStatus;
@@ -1908,16 +2360,19 @@ void handleStatus(AsyncWebServerRequest *request)
           "</script>";
   html += "</div></main></div></body></html>";
   String etag = String("W/\"status-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
-  logPortalHtmlMissingGlobalCss(html, "/status");
+  logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/status");
   const size_t statusOutLen = html.length();
-  if (!html.startsWith("<html>"))
+  if (!wroteOpeningTag)
   {
     Log.error("[Web]: /status assemble missing <html> prefix len=%u from %p" CR,
               static_cast<unsigned>(statusOutLen), request->client()->remoteIP());
   }
-  sendHtmlWithEtag(request, html, etag);
+  Log.verbose(F("[Web]: /status assembled len=%u slabs=%u freeHeap=%u maxAlloc=%u healthy=%u" CR),
+              static_cast<unsigned>(statusOutLen), static_cast<unsigned>(html.slabCount()),
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
+              html.healthy() ? 1u : 0u);
+  sendHtmlChunksWithEtag(request, html, etag);
   // Never log full `html` here: /status payload is ~40KB+; printf-style verbose would blow stack/heap.
-  // `html` is moved into the response callback; log length captured before `sendHtmlWithEtag`.
   Log.verbose(F("[Web]: /status sent len=%u" CR), static_cast<unsigned>(statusOutLen));
 }
 
@@ -2031,7 +2486,8 @@ static const char *configFaultSeverityClass(const char *severity)
   return "config-fault-sev--info";
 }
 
-static void appendConfigFaultSeverityBadge(String &html, uint8_t faultCode)
+template <typename HtmlOut>
+static void appendConfigFaultSeverityBadge(HtmlOut &html, uint8_t faultCode)
 {
   const char *severity = spaFaultLogSeverityText(faultCode);
   html += "<span class=\"config-fault-sev ";
@@ -2098,10 +2554,9 @@ void handleConfig(AsyncWebServerRequest *request)
       ".config-layout details{margin-top:10px;}"
       "</style>";
 
-  String html;
-  html.reserve(54000);
+  PortalHtmlChunks html;
   html = F("<html>");
-  appendPortalHead(html, "Spa Config");
+  const bool sawPortalCss = appendPortalHead(html, "Spa Config");
   html += configEnhancements;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuConfig;
@@ -2502,8 +2957,12 @@ void handleConfig(AsyncWebServerRequest *request)
               String(spaInformationData.lastUpdate) + "-" +
               String(spaPreferencesData.lastUpdate) + "-" + String(spaSettings0x04Data.lastUpdate) + "-" +
               String(spaFaultLogData.lastUpdate) + "\"";
-  logPortalHtmlMissingGlobalCss(html, "/config");
-  sendHtmlWithEtag(request, html, etag);
+  logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/config");
+  Log.verbose(F("[Web]: /config assembled len=%u slabs=%u freeHeap=%u maxAlloc=%u healthy=%u" CR),
+              static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
+              html.healthy() ? 1u : 0u);
+  sendHtmlChunksWithEtag(request, html, etag);
   Log.verbose("[Web]: handleConfig %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 }
 
@@ -2512,11 +2971,12 @@ time_t testLastCheckedTime = getTime();
 void handleState(AsyncWebServerRequest *request)
 {
   // Log.verbose(F("[Web]: handleStatus()" CR));
-  String stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:start;}@media (max-width:560px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:var(--surface-2);color:var(--text);}.fw-pill-current{background:#edf7ff;color:var(--heading);border-color:#b7d6f2;}.fw-pill-latest{background:var(--surface-2);color:var(--muted);}.fw-pill-branch{background:#fffbeb;color:#92400e;border-style:dashed;border-color:#fcd34d;}.sub-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.fw-repo-links{display:flex;flex-wrap:nowrap;align-items:center;gap:0 6px;margin-top:8px;font-size:13px;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}.fw-repo-links a{flex:0 0 auto;}.fw-repo-sep{color:var(--muted);opacity:.7;flex:0 0 auto;user-select:none;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
-  String html;
-  html.reserve(44000);
+  // Keep CSS as a flash/rodata literal and append through PortalHtmlChunks (do not heap-allocate
+  // a large Arduino String first — that can fail under fragmentation while slabs still succeed).
+  const char *stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:start;}@media (max-width:560px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:var(--surface-2);color:var(--text);}.fw-pill-current{background:#edf7ff;color:var(--heading);border-color:#b7d6f2;}.fw-pill-latest{background:var(--surface-2);color:var(--muted);}.fw-pill-branch{background:#fffbeb;color:#92400e;border-style:dashed;border-color:#fcd34d;}.sub-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.fw-repo-links{display:flex;flex-wrap:nowrap;align-items:center;gap:0 6px;margin-top:8px;font-size:13px;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}.fw-repo-links a{flex:0 0 auto;}.fw-repo-sep{color:var(--muted);opacity:.7;flex:0 0 auto;user-select:none;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
+  PortalHtmlChunks html;
   html = F("<html>");
-  appendPortalHead(html, "ESP State");
+  const bool sawPortalCss = appendPortalHead(html, "ESP State");
   html += stateEnhancements;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuState;
@@ -2719,9 +3179,13 @@ void handleState(AsyncWebServerRequest *request)
           "});})();</script></main></div></body></html>";
 
   String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
-  logPortalHtmlMissingGlobalCss(html, "/state");
-  sendHtmlWithEtag(request, html, etag);
-  Log.verbose("[Web]: handleStatus %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
+  logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/state");
+  Log.verbose(F("[Web]: /state assembled len=%u slabs=%u freeHeap=%u maxAlloc=%u healthy=%u" CR),
+              static_cast<unsigned>(html.length()), static_cast<unsigned>(html.slabCount()),
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
+              html.healthy() ? 1u : 0u);
+  sendHtmlChunksWithEtag(request, html, etag);
+  Log.verbose("[Web]: handleState %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
 
   // Log.verbose(F("[Web]: Response sent %s" CR), html.c_str());
 }
@@ -2795,7 +3259,7 @@ void handleLogsPage(AsyncWebServerRequest *request)
   String html;
   html.reserve(40000);
   html = F("<html class=\"logs-portal\">");
-  appendPortalHead(html, "Spa Logs", ",viewport-fit=cover", portalLogsHeadExtraStyle);
+  const bool sawPortalCss = appendPortalHead(html, "Spa Logs", ",viewport-fit=cover", portalLogsHeadExtraStyle);
   html += F("<body class=\"logs-portal\"><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page logs-page'>");
   html += webMenuLogs;
   html += F("<main id='mainContent'><section class='panel logs-panel'><div class='logs-stack'><h1>Device logs</h1>");
@@ -2929,7 +3393,7 @@ if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 })();)JS";
   html += "</script></body></html>";
   String etag = String("W/\"logs-") + String(VERSION) + "-" + String(BUILD) + "\"";
-  logPortalHtmlMissingGlobalCss(html, "/logs");
+  logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/logs");
   sendHtmlWithEtag(request, html, etag);
   Log.verbose("[Web]: handleLogsPage %p" CR, request->client()->remoteIP());
 }
