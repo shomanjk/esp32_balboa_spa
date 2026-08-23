@@ -12,11 +12,11 @@ where version numbers are used.
 
 ### Added
 
-- **HTTP liveness watchdog + portal page gate** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/config-example.h`](src/config-example.h)): When Wi‑Fi is connected and at least one HTTP request has been handled, restart after **10 minutes** with no further HTTP activity (`HTTP liveness watchdog` — recovers connected-but-unreachable stacks). **`/status`**, **`/config`**, and **`/state`** allow only **one** large portal assembly at a time; concurrent requests get **503** `portal page busy`. Optional **`HTTP_LIVENESS_*`** overrides in `config.h`. **`DIAG_FAULT_CAPTURE`** logs heap snapshot before liveness restart.
+- **HTTP liveness watchdog + portal page gate** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/config-example.h`](src/config-example.h)): Periodic loopback **GET `/api/version`** probes; restart after **3** consecutive failures (`HTTP liveness watchdog` — recovers connected-but-unreachable stacks without rebooting idle gateways). **`/status`**, **`/config`**, and **`/state`** allow only **one** large portal assembly at a time; concurrent requests get **503** `portal page busy`. Optional **`HTTP_LIVENESS_*`** overrides in `config.h`. **`DIAG_FAULT_CAPTURE`** logs heap snapshot before liveness restart.
 
 ### Fixed
 
-- **HTTP liveness activity tracking** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Snapshot last-activity state under a critical section so AsyncTCP handlers and the main loop cannot race stale reads. Suppress the watchdog while **`/logs`** WebSocket clients are connected; touch activity on WS connect and log broadcast deltas.
+- **HTTP liveness semantics** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Replace idle-since-last-request restarts with failed loopback probes so a one-off portal visit does not schedule a firmware reboot.
 
 ## [2.26.1] - 2026-08-06
 

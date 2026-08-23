@@ -5,6 +5,7 @@
 #include <ArduinoLog.h>
 #include <webLogBuffer.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
 #include <ArduinoJson.h>
 #include <AsyncJson.h>
 #include <base64.hpp>
@@ -28,7 +29,6 @@
 #include <tempHistory.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
-#include <freertos/portmacro.h>
 #include <faultCapture.h>
 #include <rs485.h>
 #include <mqttModule.h>
@@ -86,9 +86,14 @@ String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
 /** Contiguous heap needed for a small Async*Response + a couple of addHeader Strings. */
 static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
 
-#ifndef HTTP_LIVENESS_RESTART_TIMEOUT_MS
-/** Wi-Fi up but no HTTP handled this long → restart (connected-but-dead stack recovery). */
-#define HTTP_LIVENESS_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
+#ifndef HTTP_LIVENESS_PROBE_INTERVAL_MS
+#define HTTP_LIVENESS_PROBE_INTERVAL_MS (2UL * 60UL * 1000UL)
+#endif
+#ifndef HTTP_LIVENESS_PROBE_TIMEOUT_MS
+#define HTTP_LIVENESS_PROBE_TIMEOUT_MS 5000UL
+#endif
+#ifndef HTTP_LIVENESS_PROBE_FAIL_MAX
+#define HTTP_LIVENESS_PROBE_FAIL_MAX 3
 #endif
 #ifndef HTTP_LIVENESS_MIN_UPTIME_MS
 #define HTTP_LIVENESS_MIN_UPTIME_MS (3UL * 60UL * 1000UL)
@@ -97,35 +102,16 @@ static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
 #define HTTP_LIVENESS_WATCHDOG 1
 #endif
 
-static unsigned long s_lastHttpActivityMs = 0;
-static bool s_httpActivitySeen = false;
-static portMUX_TYPE s_httpActivityMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t s_portalLargePageInFlight = 0;
+static unsigned long s_lastHttpProbeMs = 0;
+static uint8_t s_httpProbeFailStreak = 0;
 extern bool serverSetup;
 
 using SpaWebHandlerFn = void (*)(AsyncWebServerRequest *);
 
 static void spaWebTouchHttpActivity()
 {
-  const unsigned long nowMs = millis();
-  portENTER_CRITICAL(&s_httpActivityMux);
-  s_lastHttpActivityMs = nowMs;
-  s_httpActivitySeen = true;
-  portEXIT_CRITICAL(&s_httpActivityMux);
-}
-
-static void spaWebHttpActivitySnapshot(unsigned long *lastMsOut, bool *seenOut)
-{
-  portENTER_CRITICAL(&s_httpActivityMux);
-  if (lastMsOut)
-  {
-    *lastMsOut = s_lastHttpActivityMs;
-  }
-  if (seenOut)
-  {
-    *seenOut = s_httpActivitySeen;
-  }
-  portEXIT_CRITICAL(&s_httpActivityMux);
+  /* Reserved for future diagnostics; liveness uses loopback probes, not idle time. */
 }
 
 static void spaWebDispatch(SpaWebHandlerFn handler, AsyncWebServerRequest *request)
@@ -157,6 +143,68 @@ static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *
 }
 
 static void spaWebHttpLivenessTick();
+
+/** Loopback GET /api/version — false when the local web stack cannot serve HTTP. */
+static bool spaWebHttpLivenessProbeOnce()
+{
+  const IPAddress ip = WiFi.localIP();
+  if (ip == IPAddress(0, 0, 0, 0))
+  {
+    return true;
+  }
+
+  WiFiClient client;
+  client.setTimeout(static_cast<uint16_t>((HTTP_LIVENESS_PROBE_TIMEOUT_MS + 999UL) / 1000UL));
+  if (!client.connect(ip, 80))
+  {
+    Log.warning(F("[Web]: HTTP liveness probe connect failed" CR));
+    return false;
+  }
+
+  client.print(F("GET /api/version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"));
+
+  const unsigned long deadlineMs = millis() + HTTP_LIVENESS_PROBE_TIMEOUT_MS;
+  char lineBuf[64];
+  size_t lineLen = 0;
+  bool saw200 = false;
+
+  while (millis() < deadlineMs && !saw200)
+  {
+    while (client.available())
+    {
+      const int ch = client.read();
+      if (ch < 0)
+      {
+        break;
+      }
+      if (ch == '\n')
+      {
+        lineBuf[lineLen] = '\0';
+        if (strstr(lineBuf, "200") != nullptr)
+        {
+          saw200 = true;
+          break;
+        }
+        lineLen = 0;
+      }
+      else if (ch != '\r' && lineLen + 1 < sizeof(lineBuf))
+      {
+        lineBuf[lineLen++] = static_cast<char>(ch);
+      }
+    }
+    if (!client.connected() && !client.available())
+    {
+      break;
+    }
+    delay(1);
+  }
+  client.stop();
+  if (!saw200)
+  {
+    Log.warning(F("[Web]: HTTP liveness probe missing HTTP 200" CR));
+  }
+  return saw200;
+}
 
 static bool ifNoneMatchHits(AsyncWebServerRequest *request, const String &etag)
 {
@@ -1057,24 +1105,30 @@ static void spaWebHttpLivenessTick()
   {
     return;
   }
-  if (wsLog.count() > 0)
-  {
-    return;
-  }
-  unsigned long lastActivityMs = 0;
-  bool activitySeen = false;
-  spaWebHttpActivitySnapshot(&lastActivityMs, &activitySeen);
-  if (!activitySeen)
-  {
-    return;
-  }
   const unsigned long nowMs = millis();
   if (nowMs < HTTP_LIVENESS_MIN_UPTIME_MS)
   {
     return;
   }
-  const unsigned long idleMs = nowMs - lastActivityMs;
-  if (idleMs < HTTP_LIVENESS_RESTART_TIMEOUT_MS)
+  if (nowMs - s_lastHttpProbeMs < HTTP_LIVENESS_PROBE_INTERVAL_MS)
+  {
+    return;
+  }
+  s_lastHttpProbeMs = nowMs;
+
+  if (spaWebHttpLivenessProbeOnce())
+  {
+    s_httpProbeFailStreak = 0;
+    return;
+  }
+  if (s_httpProbeFailStreak < 255)
+  {
+    s_httpProbeFailStreak++;
+  }
+  Log.warning(F("[Web]: HTTP liveness probe failed (%u/%u)" CR),
+              static_cast<unsigned>(s_httpProbeFailStreak),
+              static_cast<unsigned>(HTTP_LIVENESS_PROBE_FAIL_MAX));
+  if (s_httpProbeFailStreak < HTTP_LIVENESS_PROBE_FAIL_MAX)
   {
     return;
   }
@@ -1085,14 +1139,14 @@ static void spaWebHttpLivenessTick()
   }
   restartArmed = false;
 #if defined(DIAG_FAULT_CAPTURE)
-  faultCaptureAppendf("[fault] HTTP liveness idleMs=%lu freeHeap=%u maxAlloc=%u",
-                      static_cast<unsigned long>(idleMs),
+  faultCaptureAppendf("[fault] HTTP liveness probe fail streak=%u freeHeap=%u maxAlloc=%u",
+                      static_cast<unsigned>(s_httpProbeFailStreak),
                       static_cast<unsigned>(ESP.getFreeHeap()),
                       static_cast<unsigned>(ESP.getMaxAllocHeap()));
 #endif
   setLastRestartReason("HTTP liveness watchdog");
-  Log.error(F("[Web]: No HTTP activity for %lums (limit %lums), restarting" CR),
-            idleMs, static_cast<unsigned long>(HTTP_LIVENESS_RESTART_TIMEOUT_MS));
+  Log.error(F("[Web]: HTTP liveness probe failed %u times, restarting" CR),
+            static_cast<unsigned>(HTTP_LIVENESS_PROBE_FAIL_MAX));
   delay(50);
   ESP.restart();
 #endif
