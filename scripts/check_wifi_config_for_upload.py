@@ -8,7 +8,11 @@ Compile-only (`pio run`) is unaffected so CI can keep using config-example.h.
 Override for intentional bench tests: SPA_ALLOW_PLACEHOLDER_WIFI=1
 """
 
-Import("env")  # noqa: F821 — PlatformIO injects env
+try:
+    Import("env")  # noqa: F821 — PlatformIO injects env
+except NameError:
+    env = None  # allow direct python unit tests outside PlatformIO
+
 import os
 import re
 import sys
@@ -27,6 +31,13 @@ _PLACEHOLDER_VALUES = {
     "hotspot",
 }
 
+_DEFINE_RE = re.compile(r'^\s*#\s*define\s+(WIFI_SSID|WIFI_PASSWORD)\s+"([^"]*)"')
+_UNDEF_RE = re.compile(r"^\s*#\s*undef\s+(WIFI_SSID|WIFI_PASSWORD)\b")
+_IF_RE = re.compile(r"^\s*#\s*if(n?def)?\b(.*)$")
+_ELSE_RE = re.compile(r"^\s*#\s*else\b")
+_ELIF_RE = re.compile(r"^\s*#\s*elif\b(.*)$")
+_ENDIF_RE = re.compile(r"^\s*#\s*endif\b")
+
 
 def _config_paths(project_dir):
     return [
@@ -35,24 +46,188 @@ def _config_paths(project_dir):
     ]
 
 
-def _read_define(path, name):
-    if not os.path.isfile(path):
-        return None
+def _strip_line_comment(line):
+    in_str = False
+    i = 0
+    while i < len(line) - 1:
+        c = line[i]
+        if c == '"' and (i == 0 or line[i - 1] != "\\"):
+            in_str = not in_str
+        elif not in_str and c == "/" and line[i + 1] == "/":
+            return line[:i]
+        i += 1
+    return line
+
+
+def _if_condition_state(kind, rest):
+    """Return ('active'|'inactive'|'unknown') for a #if / #ifdef / #ifndef / #elif."""
+    expr = (rest or "").strip()
+    if kind in ("def", "ndef"):
+        # Depends on -D / other headers; treat as ambiguous for credential defines.
+        return "unknown"
+    # Plain #if / #elif: only resolve trivial constants.
+    if re.fullmatch(r"0+|false", expr, flags=re.IGNORECASE):
+        return "inactive"
+    if re.fullmatch(r"1+|true", expr, flags=re.IGNORECASE):
+        return "active"
+    return "unknown"
+
+
+def _frame_active(parent_active, branch_state, taken_known_active):
+    """Whether the current #if/#else/#elif arm is active for credential scanning."""
+    if not parent_active:
+        return False
+    if branch_state == "inactive":
+        return False
+    if branch_state == "active":
+        return not taken_known_active
+    # unknown: still "active" for scanning so we can detect ambiguous defines
+    return True
+
+
+class _IfFrame(object):
+    __slots__ = ("parent_active", "branch_state", "taken_known_active", "arm_active")
+
+    def __init__(self, parent_active, branch_state):
+        self.parent_active = parent_active
+        self.branch_state = branch_state
+        self.taken_known_active = branch_state == "active"
+        self.arm_active = _frame_active(parent_active, branch_state, False)
+
+
+def _read_wifi_defines(path):
+    """Return (ssid, password) from active regions, or raise SystemExit on ambiguity.
+
+    Skips inactive arms such as #if 0. Rejects WIFI_SSID / WIFI_PASSWORD that appear
+    under #if/#ifdef/#ifndef/#elif conditions we cannot resolve without full cpp.
+    """
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             text = fh.read()
     except OSError as exc:
         print("ERROR: cannot read %s: %s" % (path, exc))
         sys.exit(1)
-    # Last #define wins (allows #undef + redefine patterns).
-    matches = re.findall(
-        r'^\s*#\s*define\s+%s\s+"([^"]*)"' % re.escape(name),
-        text,
-        flags=re.MULTILINE,
-    )
-    if not matches:
-        return None
-    return matches[-1]
+
+    values = {"WIFI_SSID": None, "WIFI_PASSWORD": None}
+    stack = []
+    in_block_comment = False
+    line_no = 0
+
+    for raw in text.splitlines():
+        line_no += 1
+        line = raw
+
+        if in_block_comment:
+            end = line.find("*/")
+            if end < 0:
+                continue
+            line = line[end + 2 :]
+            in_block_comment = False
+
+        while True:
+            start = line.find("/*")
+            if start < 0:
+                break
+            end = line.find("*/", start + 2)
+            if end < 0:
+                line = line[:start]
+                in_block_comment = True
+                break
+            line = line[:start] + " " + line[end + 2 :]
+
+        line = _strip_line_comment(line).rstrip()
+        if not line.strip():
+            continue
+
+        parent_active = stack[-1].arm_active if stack else True
+
+        m_if = _IF_RE.match(line)
+        if m_if:
+            kind = m_if.group(1) if m_if.group(1) else "if"
+            state = _if_condition_state(kind, m_if.group(2))
+            stack.append(_IfFrame(parent_active, state))
+            continue
+
+        if _ELSE_RE.match(line):
+            if not stack:
+                print("ERROR: %s:%d: #else without #if" % (path, line_no))
+                sys.exit(1)
+            fr = stack[-1]
+            if fr.branch_state == "active":
+                next_state = "inactive"
+            elif fr.branch_state == "inactive":
+                next_state = "active"
+            else:
+                next_state = "unknown"
+            fr.branch_state = next_state
+            fr.arm_active = _frame_active(fr.parent_active, next_state, fr.taken_known_active)
+            if next_state == "active":
+                fr.taken_known_active = True
+            continue
+
+        m_elif = _ELIF_RE.match(line)
+        if m_elif:
+            if not stack:
+                print("ERROR: %s:%d: #elif without #if" % (path, line_no))
+                sys.exit(1)
+            fr = stack[-1]
+            state = _if_condition_state("if", m_elif.group(1))
+            if fr.taken_known_active and state == "active":
+                state = "inactive"
+            elif fr.branch_state == "unknown" or state == "unknown":
+                state = "unknown"
+            elif fr.taken_known_active:
+                state = "inactive"
+            fr.branch_state = state
+            fr.arm_active = _frame_active(fr.parent_active, state, False)
+            if state == "active":
+                fr.taken_known_active = True
+            continue
+
+        if _ENDIF_RE.match(line):
+            if not stack:
+                print("ERROR: %s:%d: #endif without #if" % (path, line_no))
+                sys.exit(1)
+            stack.pop()
+            continue
+
+        region_active = stack[-1].arm_active if stack else True
+        region_unknown = any(fr.branch_state == "unknown" and fr.arm_active for fr in stack)
+
+        m_undef = _UNDEF_RE.match(line)
+        if m_undef:
+            name = m_undef.group(1)
+            if region_unknown:
+                print(
+                    "ERROR: refusing upload — ambiguous %s under unresolved #if/#ifdef in %s:%d"
+                    % (name, path, line_no)
+                )
+                print("       Put WIFI_SSID / WIFI_PASSWORD in unconditional #define lines only.")
+                sys.exit(1)
+            if region_active:
+                values[name] = None
+            continue
+
+        m_def = _DEFINE_RE.match(line)
+        if m_def:
+            name, value = m_def.group(1), m_def.group(2)
+            if region_unknown:
+                print(
+                    "ERROR: refusing upload — ambiguous %s under unresolved #if/#ifdef in %s:%d"
+                    % (name, path, line_no)
+                )
+                print("       Put WIFI_SSID / WIFI_PASSWORD in unconditional #define lines only.")
+                print("       (Or use SPA_ALLOW_PLACEHOLDER_WIFI=1 for intentional bench tests.)")
+                sys.exit(1)
+            if region_active:
+                values[name] = value
+            continue
+
+    if stack:
+        print("ERROR: %s: unclosed #if before EOF" % path)
+        sys.exit(1)
+
+    return values["WIFI_SSID"], values["WIFI_PASSWORD"]
 
 
 def _is_placeholder(value):
@@ -74,8 +249,7 @@ def check_wifi_before_upload(source, target, env):
     for path in _config_paths(project_dir):
         if os.path.isfile(path):
             config_path = path
-            ssid = _read_define(path, "WIFI_SSID")
-            password = _read_define(path, "WIFI_PASSWORD")
+            ssid, password = _read_wifi_defines(path)
             break
 
     if config_path is None:
@@ -103,4 +277,5 @@ def check_wifi_before_upload(source, target, env):
 
 
 # Runs for firmware upload (USB esptool and espota). Does not run on compile-only.
-env.AddPreAction("upload", check_wifi_before_upload)
+if env is not None:
+    env.AddPreAction("upload", check_wifi_before_upload)
