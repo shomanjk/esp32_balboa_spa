@@ -47,6 +47,11 @@
 // #define WIFI_OFFLINE_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
 // Optional guard to avoid reboot churn during early boot.
 // #define WIFI_OFFLINE_RESTART_MIN_UPTIME_MS (2UL * 60UL * 1000UL)
+// HTTP liveness: when Wi-Fi is up and at least one HTTP request was handled, restart if
+// nothing is handled for this long (recovers connected-but-unreachable web stack). Omitted → on.
+// #define HTTP_LIVENESS_WATCHDOG 0
+// #define HTTP_LIVENESS_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
+// #define HTTP_LIVENESS_MIN_UPTIME_MS (3UL * 60UL * 1000UL)
 
 #define GMT_OFFSET -14400
 #define DAYLIGHT_OFFSET 0

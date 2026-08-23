@@ -85,6 +85,95 @@ String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
 /** Contiguous heap needed for a small Async*Response + a couple of addHeader Strings. */
 static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
 
+#ifndef HTTP_LIVENESS_RESTART_TIMEOUT_MS
+/** Wi-Fi up but no HTTP handled this long → restart (connected-but-dead stack recovery). */
+#define HTTP_LIVENESS_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
+#endif
+#ifndef HTTP_LIVENESS_MIN_UPTIME_MS
+#define HTTP_LIVENESS_MIN_UPTIME_MS (3UL * 60UL * 1000UL)
+#endif
+#ifndef HTTP_LIVENESS_WATCHDOG
+#define HTTP_LIVENESS_WATCHDOG 1
+#endif
+
+static unsigned long s_lastHttpActivityMs = 0;
+static bool s_httpActivitySeen = false;
+static volatile uint8_t s_portalLargePageInFlight = 0;
+extern bool serverSetup;
+
+using SpaWebHandlerFn = void (*)(AsyncWebServerRequest *);
+
+static void spaWebTouchHttpActivity()
+{
+  s_lastHttpActivityMs = millis();
+  s_httpActivitySeen = true;
+}
+
+static void spaWebDispatch(SpaWebHandlerFn handler, AsyncWebServerRequest *request)
+{
+  spaWebTouchHttpActivity();
+  handler(request);
+}
+
+static void portalLargePageRelease()
+{
+  if (s_portalLargePageInFlight > 0)
+  {
+    s_portalLargePageInFlight = 0;
+  }
+}
+
+/** Gate /status, /config, /state assembly — one large portal page at a time. */
+static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *pageTag)
+{
+  if (s_portalLargePageInFlight != 0)
+  {
+    Log.warning("[Web]: %s rejected — portal page busy" CR, pageTag);
+    spaWebTouchHttpActivity();
+    request->send(503, "text/plain", "portal page busy (try again shortly)");
+    return false;
+  }
+  s_portalLargePageInFlight = 1;
+  return true;
+}
+
+static void spaWebHttpLivenessTick()
+{
+#if HTTP_LIVENESS_WATCHDOG
+  if (!serverSetup || WiFi.status() != WL_CONNECTED || !s_httpActivitySeen)
+  {
+    return;
+  }
+  const unsigned long nowMs = millis();
+  if (nowMs < HTTP_LIVENESS_MIN_UPTIME_MS)
+  {
+    return;
+  }
+  const unsigned long idleMs = nowMs - s_lastHttpActivityMs;
+  if (idleMs < HTTP_LIVENESS_RESTART_TIMEOUT_MS)
+  {
+    return;
+  }
+  static bool restartArmed = true;
+  if (!restartArmed)
+  {
+    return;
+  }
+  restartArmed = false;
+#if defined(DIAG_FAULT_CAPTURE)
+  faultCaptureAppendf("[fault] HTTP liveness idleMs=%lu freeHeap=%u maxAlloc=%u",
+                      static_cast<unsigned long>(idleMs),
+                      static_cast<unsigned>(ESP.getFreeHeap()),
+                      static_cast<unsigned>(ESP.getMaxAllocHeap()));
+#endif
+  setLastRestartReason("HTTP liveness watchdog");
+  Log.error(F("[Web]: No HTTP activity for %lums (limit %lums), restarting" CR),
+            idleMs, static_cast<unsigned long>(HTTP_LIVENESS_RESTART_TIMEOUT_MS));
+  delay(50);
+  ESP.restart();
+#endif
+}
+
 static bool ifNoneMatchHits(AsyncWebServerRequest *request, const String &etag)
 {
   if (!request || etag.length() == 0 || !request->hasHeader("If-None-Match"))
@@ -114,7 +203,9 @@ static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String 
     Log.error("[Web]: portal HTML 304 headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
               static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
               static_cast<unsigned>(ESP.getFreeHeap()));
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return false;
   }
 
@@ -123,12 +214,16 @@ static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String 
   {
     Log.error("[Web]: portal HTML 304 alloc failed freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return false;
   }
   notModified->addHeader("ETag", etag);
   notModified->addHeader("Cache-Control", "no-cache");
   request->send(notModified);
+  spaWebTouchHttpActivity();
+  portalLargePageRelease();
   return true;
 }
 
@@ -168,6 +263,7 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
+  spaWebTouchHttpActivity();
 }
 
 /**
@@ -489,6 +585,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
 {
   if (!request)
   {
+    portalLargePageRelease();
     return;
   }
   if (!html.healthy())
@@ -498,7 +595,9 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getFreeHeap()),
               static_cast<unsigned>(ESP.getMaxAllocHeap()));
     html.clear();
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return;
   }
   if (ifNoneMatchHits(request, etag))
@@ -520,7 +619,9 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getFreeHeap()),
               static_cast<unsigned>(ESP.getMaxAllocHeap()));
     html.clear();
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return;
   }
   html.releaseTo(hold->body);
@@ -530,7 +631,9 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     Log.error("[Web]: portal HTML hold slots exhausted freeHeap=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()));
     hold->destroy();
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return;
   }
   const uint8_t slotU8 = static_cast<uint8_t>(slot);
@@ -544,7 +647,9 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
               static_cast<unsigned>(ESP.getFreeHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return;
   }
 
@@ -558,15 +663,21 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     Log.error("[Web]: portal HTML AsyncCallbackResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
+    spaWebTouchHttpActivity();
     request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    portalLargePageRelease();
     return;
   }
 
   // Idempotent free when the TCP client drops (request teardown); POD capture for SBO.
-  request->onDisconnect([slotU8]() { portalHtmlHoldReleaseSlot(slotU8); });
+  request->onDisconnect([slotU8]() {
+    portalHtmlHoldReleaseSlot(slotU8);
+    portalLargePageRelease();
+  });
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
+  spaWebTouchHttpActivity();
 }
 
 static const char *wifiStatusName(wl_status_t s)
@@ -893,6 +1004,27 @@ static AsyncWebSocket wsLog("/api/logs/ws");
 static uint32_t wsLogBroadcastSeq = 0;
 bool serverSetup = false;
 
+static void spaWebRegisterGet(const char *path, SpaWebHandlerFn handler)
+{
+  server.on(path, HTTP_GET, [handler](AsyncWebServerRequest *request) {
+    spaWebDispatch(handler, request);
+  });
+}
+
+static void spaWebRegisterPost(const char *path, SpaWebHandlerFn handler)
+{
+  server.on(path, HTTP_POST, [handler](AsyncWebServerRequest *request) {
+    spaWebDispatch(handler, request);
+  });
+}
+
+static void spaWebRegisterPostWithBody(const char *path, SpaWebHandlerFn handler)
+{
+  server.on(path, HTTP_POST, [handler](AsyncWebServerRequest *request) {
+    spaWebDispatch(handler, request);
+  }, NULL, handleBody);
+}
+
 static void onWsLogEvent(AsyncWebSocket *wsServer, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
 {
   (void)arg;
@@ -967,46 +1099,47 @@ void spaWebServerLoop()
 {
   if (!serverSetup)
   {
-    server.on("/", HTTP_GET, handleStatus);
-    server.on("/state", HTTP_GET, handleState);
-    server.on("/config", HTTP_GET, handleConfig);
-    server.on("/status", HTTP_GET, handleStatus);
-    server.on("/api/version", HTTP_GET, handleVersion);
-    server.on("/api/diagnostics", HTTP_GET, handleDiagnostics);
-    server.on("/api/wifi", HTTP_GET, handleWifi);
-    server.on("/api/mqtt", HTTP_GET, handleMqtt);
-    server.on("/api/status/controls", HTTP_GET, handleStatusControlsApi);
-    server.on("/api/status/summary", HTTP_GET, handleStatusSummaryApi);
-    server.on("/api/status/histories", HTTP_GET, handleStatusHistoriesApi);
-    server.on("/api/state/littlefs", HTTP_GET, handleStateLittleFsApi);
-    server.on("/api/diag/toggle", HTTP_GET, handleDiagToggleApi);
-    server.on("/api/diag/toggle_sequence", HTTP_GET, handleDiagToggleSequenceApi);
-    server.on("/api/diag/light1_next_cts", HTTP_GET, handleDiagLight1NextCtsApi);
-    server.on("/api/diag/light1_next_cts_window", HTTP_GET, handleDiagLight1NextCtsWindowApi);
-    server.on("/api/rs485/raw", HTTP_GET, handleRs485Raw);
-    server.on("/api/rs485/history", HTTP_GET, handleRs485History);
-    server.on("/api/rs485/retry", HTTP_POST, handleRs485Retry);
-    server.on("/api/rs485", HTTP_GET, handleRs485);
-    server.on("/api/logs", HTTP_GET, handleLogsApi);
-    server.on("/api/logs/config", HTTP_GET, handleLogsConfigGet);
-    server.on("/api/logs/config", HTTP_POST, handleLogsConfigPost, NULL, handleBody);
-    server.on("/api/config/filter", HTTP_GET, handleConfigFilterGet);
-    server.on("/api/config/filter", HTTP_POST, handleConfigFilterPost, NULL, handleBody);
-    server.on("/api/config/preferences", HTTP_GET, handleConfigPreferencesGet);
-    server.on("/api/config/preferences", HTTP_POST, handleConfigPreferencesPost, NULL, handleBody);
-    server.on("/api/config/fault-log/history", HTTP_GET, handleConfigFaultLogHistoryGet);
-    server.on("/api/config/fault-log/history", HTTP_POST, handleConfigFaultLogHistoryPost, NULL, handleBody);
-    server.on("/api/config/fault-log", HTTP_GET, handleConfigFaultLogGet);
-    server.on("/api/config/export", HTTP_GET, handleConfigExport);
-    server.on("/api/config/import", HTTP_POST, handleConfigImportPost, NULL, handleBody);
-    server.on("/logs", HTTP_GET, handleLogsPage);
+    spaWebRegisterGet("/", handleStatus);
+    spaWebRegisterGet("/state", handleState);
+    spaWebRegisterGet("/config", handleConfig);
+    spaWebRegisterGet("/status", handleStatus);
+    spaWebRegisterGet("/api/version", handleVersion);
+    spaWebRegisterGet("/api/diagnostics", handleDiagnostics);
+    spaWebRegisterGet("/api/wifi", handleWifi);
+    spaWebRegisterGet("/api/mqtt", handleMqtt);
+    spaWebRegisterGet("/api/status/controls", handleStatusControlsApi);
+    spaWebRegisterGet("/api/status/summary", handleStatusSummaryApi);
+    spaWebRegisterGet("/api/status/histories", handleStatusHistoriesApi);
+    spaWebRegisterGet("/api/state/littlefs", handleStateLittleFsApi);
+    spaWebRegisterGet("/api/diag/toggle", handleDiagToggleApi);
+    spaWebRegisterGet("/api/diag/toggle_sequence", handleDiagToggleSequenceApi);
+    spaWebRegisterGet("/api/diag/light1_next_cts", handleDiagLight1NextCtsApi);
+    spaWebRegisterGet("/api/diag/light1_next_cts_window", handleDiagLight1NextCtsWindowApi);
+    spaWebRegisterGet("/api/rs485/raw", handleRs485Raw);
+    spaWebRegisterGet("/api/rs485/history", handleRs485History);
+    spaWebRegisterPost("/api/rs485/retry", handleRs485Retry);
+    spaWebRegisterGet("/api/rs485", handleRs485);
+    spaWebRegisterGet("/api/logs", handleLogsApi);
+    spaWebRegisterGet("/api/logs/config", handleLogsConfigGet);
+    spaWebRegisterPostWithBody("/api/logs/config", handleLogsConfigPost);
+    spaWebRegisterGet("/api/config/filter", handleConfigFilterGet);
+    spaWebRegisterPostWithBody("/api/config/filter", handleConfigFilterPost);
+    spaWebRegisterGet("/api/config/preferences", handleConfigPreferencesGet);
+    spaWebRegisterPostWithBody("/api/config/preferences", handleConfigPreferencesPost);
+    spaWebRegisterGet("/api/config/fault-log/history", handleConfigFaultLogHistoryGet);
+    spaWebRegisterPostWithBody("/api/config/fault-log/history", handleConfigFaultLogHistoryPost);
+    spaWebRegisterGet("/api/config/fault-log", handleConfigFaultLogGet);
+    spaWebRegisterGet("/api/config/export", handleConfigExport);
+    spaWebRegisterPostWithBody("/api/config/import", handleConfigImportPost);
+    spaWebRegisterGet("/logs", handleLogsPage);
     wsLog.onEvent(onWsLogEvent);
     server.addHandler(&wsLog);
 #ifdef spaEpaper
-    server.on("/panel.jpg", HTTP_GET, handleepdpanel);
+    spaWebRegisterGet("/panel.jpg", handleepdpanel);
 #endif
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
               {
+      spaWebTouchHttpActivity();
       Log.notice(F("[Web]: Restart requested by %p" CR), request->client()->remoteIP());
       setLastRestartReason("Web restart");
       AsyncWebServerResponse *response = request->beginResponse(302);
@@ -1017,13 +1150,22 @@ void spaWebServerLoop()
 
     // Balboa cloud emulation
 
-    server.on("/devices/sci", HTTP_OPTIONS, handleOptionsData);
-    server.on("/devices/sci", HTTP_POST, handleData, NULL, handleBody);
+    server.on("/devices/sci", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
+      spaWebTouchHttpActivity();
+      handleOptionsData(request);
+    });
+    spaWebRegisterPostWithBody("/devices/sci", handleData);
 
-    server.on("/users/login", HTTP_OPTIONS, handleOptionsLoginData);
-    server.on("/users/login", HTTP_POST, handleLoginData, NULL, handleBody);
+    server.on("/users/login", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
+      spaWebTouchHttpActivity();
+      handleOptionsLoginData(request);
+    });
+    spaWebRegisterPostWithBody("/users/login", handleLoginData);
 
-    server.onNotFound(handleNotFound);
+    server.onNotFound([](AsyncWebServerRequest *request) {
+      spaWebTouchHttpActivity();
+      handleNotFound(request);
+    });
 
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
@@ -1033,6 +1175,7 @@ void spaWebServerLoop()
     serverSetup = true;
     Log.notice(F("[Web]: Web server started at http://%p/" CR), WiFi.localIP());
   }
+  spaWebHttpLivenessTick();
   spaWebServerLogPoll();
 }
 
@@ -1660,6 +1803,10 @@ static void appendStatusHistoriesSection(HtmlOut &html)
 
 void handleStatus(AsyncWebServerRequest *request)
 {
+  if (!portalLargePageTryBegin(request, "/status"))
+  {
+    return;
+  }
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
   PortalHtmlChunks html;
   const char *statusStyle =
@@ -2499,6 +2646,10 @@ static void appendConfigFaultSeverityBadge(HtmlOut &html, uint8_t faultCode)
 
 void handleConfig(AsyncWebServerRequest *request)
 {
+  if (!portalLargePageTryBegin(request, "/config"))
+  {
+    return;
+  }
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
 
   const char *configEnhancements =
@@ -2970,6 +3121,10 @@ time_t testLastCheckedTime = getTime();
 
 void handleState(AsyncWebServerRequest *request)
 {
+  if (!portalLargePageTryBegin(request, "/state"))
+  {
+    return;
+  }
   // Log.verbose(F("[Web]: handleStatus()" CR));
   // Keep CSS as a flash/rodata literal and append through PortalHtmlChunks (do not heap-allocate
   // a large Arduino String first — that can fail under fragmentation while slabs still succeed).

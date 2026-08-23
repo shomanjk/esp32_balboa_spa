@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **HTTP liveness watchdog + portal page gate** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/config-example.h`](src/config-example.h)): When Wi‑Fi is connected and at least one HTTP request has been handled, restart after **10 minutes** with no further HTTP activity (`HTTP liveness watchdog` — recovers connected-but-unreachable stacks). **`/status`**, **`/config`**, and **`/state`** allow only **one** large portal assembly at a time; concurrent requests get **503** `portal page busy`. Optional **`HTTP_LIVENESS_*`** overrides in `config.h`. **`DIAG_FAULT_CAPTURE`** logs heap snapshot before liveness restart.
+
 ## [2.26.1] - 2026-08-06
 
 ### Added
