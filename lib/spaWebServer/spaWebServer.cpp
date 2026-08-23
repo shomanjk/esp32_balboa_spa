@@ -128,7 +128,7 @@ static void portalLargePageRelease()
   }
 }
 
-/** Gate /status, /config, /state assembly — one large portal page at a time. */
+/** Gate /status, /config, /state, /logs assembly — one large portal page at a time. */
 static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *pageTag)
 {
   if (s_portalLargePageInFlight != 0)
@@ -262,10 +262,15 @@ static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String 
 /** Send HTML with ETag. Uses callback body delivery so ESPAsyncWebServer does not keep a second
  *  full copy of the page in `AsyncBasicResponse::_content` (which can peak at ~2–3× RAM for
  *  large `/status` and reset TCP mid-transfer on ESP32). */
-static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const String &etag)
+static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const String &etag,
+                             bool releasePortalGateOnDisconnect = false)
 {
   if (!request)
   {
+    if (releasePortalGateOnDisconnect)
+    {
+      portalLargePageRelease();
+    }
     return;
   }
   if (ifNoneMatchHits(request, etag))
@@ -276,6 +281,12 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
   }
   const size_t bodyLen = html.length();
   auto sharedBody = std::make_shared<String>(std::move(html));
+  if (releasePortalGateOnDisconnect)
+  {
+    request->onDisconnect([]() {
+      portalLargePageRelease();
+    });
+  }
   AsyncWebServerResponse *response = request->beginResponse(
       "text/html; charset=utf-8",
       bodyLen,
@@ -3499,6 +3510,10 @@ void handleLogsConfigPost(AsyncWebServerRequest *request)
 
 void handleLogsPage(AsyncWebServerRequest *request)
 {
+  if (!portalLargePageTryBegin(request, "/logs"))
+  {
+    return;
+  }
   String html;
   html.reserve(40000);
   html = F("<html class=\"logs-portal\">");
@@ -3637,7 +3652,7 @@ if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
   html += "</script></body></html>";
   String etag = String("W/\"logs-") + String(VERSION) + "-" + String(BUILD) + "\"";
   logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/logs");
-  sendHtmlWithEtag(request, html, etag);
+  sendHtmlWithEtag(request, html, etag, true);
   Log.verbose("[Web]: handleLogsPage %p" CR, request->client()->remoteIP());
 }
 

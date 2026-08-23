@@ -17,6 +17,7 @@ where version numbers are used.
 ### Fixed
 
 - **HTTP liveness semantics** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Replace idle-since-last-request restarts with failed loopback probes so a one-off portal visit does not schedule a firmware reboot.
+- **Portal page gate includes `/logs`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `/logs` joins **`/status`**, **`/config`**, and **`/state`** under the one-at-a-time large-page gate (503 when busy).
 
 ## [2.26.1] - 2026-08-06
 
