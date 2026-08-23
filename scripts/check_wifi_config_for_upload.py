@@ -153,7 +153,10 @@ def _read_wifi_defines(path):
                 print("ERROR: %s:%d: #else without #if" % (path, line_no))
                 sys.exit(1)
             fr = stack[-1]
-            if fr.branch_state == "active":
+            # A prior known-true arm (#if 1 / taken #elif) makes #else unreachable.
+            if fr.taken_known_active:
+                next_state = "inactive"
+            elif fr.branch_state == "active":
                 next_state = "inactive"
             elif fr.branch_state == "inactive":
                 next_state = "active"
@@ -172,12 +175,12 @@ def _read_wifi_defines(path):
                 sys.exit(1)
             fr = stack[-1]
             state = _if_condition_state("if", m_elif.group(1))
-            if fr.taken_known_active and state == "active":
+            # Once a known-true arm has been taken, later #elif/#else are inactive even
+            # if their condition is unresolved (cpp never evaluates them).
+            if fr.taken_known_active:
                 state = "inactive"
             elif fr.branch_state == "unknown" or state == "unknown":
                 state = "unknown"
-            elif fr.taken_known_active:
-                state = "inactive"
             fr.branch_state = state
             fr.arm_active = _frame_active(fr.parent_active, state, False)
             if state == "active":
