@@ -28,6 +28,7 @@
 #include <tempHistory.h>
 #include <spaUtilities.h>
 #include <restartReason.h>
+#include <freertos/portmacro.h>
 #include <faultCapture.h>
 #include <rs485.h>
 #include <mqttModule.h>
@@ -98,6 +99,7 @@ static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
 
 static unsigned long s_lastHttpActivityMs = 0;
 static bool s_httpActivitySeen = false;
+static portMUX_TYPE s_httpActivityMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t s_portalLargePageInFlight = 0;
 extern bool serverSetup;
 
@@ -105,8 +107,25 @@ using SpaWebHandlerFn = void (*)(AsyncWebServerRequest *);
 
 static void spaWebTouchHttpActivity()
 {
-  s_lastHttpActivityMs = millis();
+  const unsigned long nowMs = millis();
+  portENTER_CRITICAL(&s_httpActivityMux);
+  s_lastHttpActivityMs = nowMs;
   s_httpActivitySeen = true;
+  portEXIT_CRITICAL(&s_httpActivityMux);
+}
+
+static void spaWebHttpActivitySnapshot(unsigned long *lastMsOut, bool *seenOut)
+{
+  portENTER_CRITICAL(&s_httpActivityMux);
+  if (lastMsOut)
+  {
+    *lastMsOut = s_lastHttpActivityMs;
+  }
+  if (seenOut)
+  {
+    *seenOut = s_httpActivitySeen;
+  }
+  portEXIT_CRITICAL(&s_httpActivityMux);
 }
 
 static void spaWebDispatch(SpaWebHandlerFn handler, AsyncWebServerRequest *request)
@@ -137,42 +156,7 @@ static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *
   return true;
 }
 
-static void spaWebHttpLivenessTick()
-{
-#if HTTP_LIVENESS_WATCHDOG
-  if (!serverSetup || WiFi.status() != WL_CONNECTED || !s_httpActivitySeen)
-  {
-    return;
-  }
-  const unsigned long nowMs = millis();
-  if (nowMs < HTTP_LIVENESS_MIN_UPTIME_MS)
-  {
-    return;
-  }
-  const unsigned long idleMs = nowMs - s_lastHttpActivityMs;
-  if (idleMs < HTTP_LIVENESS_RESTART_TIMEOUT_MS)
-  {
-    return;
-  }
-  static bool restartArmed = true;
-  if (!restartArmed)
-  {
-    return;
-  }
-  restartArmed = false;
-#if defined(DIAG_FAULT_CAPTURE)
-  faultCaptureAppendf("[fault] HTTP liveness idleMs=%lu freeHeap=%u maxAlloc=%u",
-                      static_cast<unsigned long>(idleMs),
-                      static_cast<unsigned>(ESP.getFreeHeap()),
-                      static_cast<unsigned>(ESP.getMaxAllocHeap()));
-#endif
-  setLastRestartReason("HTTP liveness watchdog");
-  Log.error(F("[Web]: No HTTP activity for %lums (limit %lums), restarting" CR),
-            idleMs, static_cast<unsigned long>(HTTP_LIVENESS_RESTART_TIMEOUT_MS));
-  delay(50);
-  ESP.restart();
-#endif
-}
+static void spaWebHttpLivenessTick();
 
 static bool ifNoneMatchHits(AsyncWebServerRequest *request, const String &etag)
 {
@@ -1032,6 +1016,7 @@ static void onWsLogEvent(AsyncWebSocket *wsServer, AsyncWebSocketClient *client,
   (void)len;
   if (type == WS_EVT_CONNECT)
   {
+    spaWebTouchHttpActivity();
     String hist;
     webLogBufferBuildJsonFull(hist);
     client->text(hist);
@@ -1059,9 +1044,58 @@ static void spaWebServerLogPoll()
   webLogBufferAppendJsonDelta(wsLogBroadcastSeq, newest, delta);
   if (delta.length() > 0)
   {
+    spaWebTouchHttpActivity();
     wsLog.textAll(delta);
   }
   wsLogBroadcastSeq = newest;
+}
+
+static void spaWebHttpLivenessTick()
+{
+#if HTTP_LIVENESS_WATCHDOG
+  if (!serverSetup || WiFi.status() != WL_CONNECTED)
+  {
+    return;
+  }
+  if (wsLog.count() > 0)
+  {
+    return;
+  }
+  unsigned long lastActivityMs = 0;
+  bool activitySeen = false;
+  spaWebHttpActivitySnapshot(&lastActivityMs, &activitySeen);
+  if (!activitySeen)
+  {
+    return;
+  }
+  const unsigned long nowMs = millis();
+  if (nowMs < HTTP_LIVENESS_MIN_UPTIME_MS)
+  {
+    return;
+  }
+  const unsigned long idleMs = nowMs - lastActivityMs;
+  if (idleMs < HTTP_LIVENESS_RESTART_TIMEOUT_MS)
+  {
+    return;
+  }
+  static bool restartArmed = true;
+  if (!restartArmed)
+  {
+    return;
+  }
+  restartArmed = false;
+#if defined(DIAG_FAULT_CAPTURE)
+  faultCaptureAppendf("[fault] HTTP liveness idleMs=%lu freeHeap=%u maxAlloc=%u",
+                      static_cast<unsigned long>(idleMs),
+                      static_cast<unsigned>(ESP.getFreeHeap()),
+                      static_cast<unsigned>(ESP.getMaxAllocHeap()));
+#endif
+  setLastRestartReason("HTTP liveness watchdog");
+  Log.error(F("[Web]: No HTTP activity for %lums (limit %lums), restarting" CR),
+            idleMs, static_cast<unsigned long>(HTTP_LIVENESS_RESTART_TIMEOUT_MS));
+  delay(50);
+  ESP.restart();
+#endif
 }
 
 void spaWebServerSetup()

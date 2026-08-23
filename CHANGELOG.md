@@ -8,9 +8,15 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.26.2] - 2026-08-23
+
 ### Added
 
 - **HTTP liveness watchdog + portal page gate** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/config-example.h`](src/config-example.h)): When Wi‑Fi is connected and at least one HTTP request has been handled, restart after **10 minutes** with no further HTTP activity (`HTTP liveness watchdog` — recovers connected-but-unreachable stacks). **`/status`**, **`/config`**, and **`/state`** allow only **one** large portal assembly at a time; concurrent requests get **503** `portal page busy`. Optional **`HTTP_LIVENESS_*`** overrides in `config.h`. **`DIAG_FAULT_CAPTURE`** logs heap snapshot before liveness restart.
+
+### Fixed
+
+- **HTTP liveness activity tracking** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Snapshot last-activity state under a critical section so AsyncTCP handlers and the main loop cannot race stale reads. Suppress the watchdog while **`/logs`** WebSocket clients are connected; touch activity on WS connect and log broadcast deltas.
 
 ## [2.26.1] - 2026-08-06
 
@@ -1107,7 +1113,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.2...HEAD
+[2.26.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.1...v2.26.2
 [2.26.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.0...v2.26.1
 [2.26.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.25.0...v2.26.0
 [2.25.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.24.0...v2.25.0
