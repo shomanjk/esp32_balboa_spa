@@ -107,4 +107,11 @@ uint8_t wifiLastDisconnectReasonCode();
 /** App-started connect attempts since boot. */
 unsigned long wifiConnectAttemptCount();
 
+/** Running OTA app partition label (e.g. app0) when rollback is enabled; else empty. */
+const char *otaRunningPartitionLabel();
+/** Running OTA app partition state (valid, pending_verify, …); else empty. */
+const char *otaRunningPartitionState();
+/** True after this boot marked a pending-verify OTA image valid (or none was pending). */
+bool otaBootVerifiedThisRun();
+
 #endif

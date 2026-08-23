@@ -3,6 +3,7 @@
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
 #include <ArduinoLog.h>
+#include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 #include <TelnetStream.h>
 #include <time.h>
@@ -22,6 +23,9 @@ static unsigned long wifiOfflineLastLogMs = 0;
 static bool wifiOfflineRestartArmed = true;
 
 static bool wifiOtaStarted = false;
+static bool wifiOtaBootVerified = false;
+static char wifiOtaRunningPartitionLabel[17] = "";
+static char wifiOtaRunningPartitionState[20] = "";
 static bool wifiTelnetStarted = false;
 static bool wifiNtpConfigured = false;
 static bool wifiTimeLogged = false;
@@ -41,6 +45,99 @@ static volatile uint8_t wifiLastDisconnectReason = 0;
 static bool wifiBssidLock = false;
 static uint8_t wifiBssidBytes[6] = {0};
 static char wifiBssidLockStr[18] = "";
+
+#if CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+static const char *otaImgStateName(esp_ota_img_states_t state)
+{
+  switch (state)
+  {
+  case ESP_OTA_IMG_VALID:
+    return "valid";
+  case ESP_OTA_IMG_UNDEFINED:
+    return "undefined";
+  case ESP_OTA_IMG_INVALID:
+    return "invalid";
+  case ESP_OTA_IMG_ABORTED:
+    return "aborted";
+  case ESP_OTA_IMG_NEW:
+    return "new";
+  case ESP_OTA_IMG_PENDING_VERIFY:
+    return "pending_verify";
+  default:
+    return "unknown";
+  }
+}
+
+static void otaRefreshRunningPartitionState()
+{
+  wifiOtaRunningPartitionLabel[0] = '\0';
+  wifiOtaRunningPartitionState[0] = '\0';
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  if (!running)
+  {
+    strncpy(wifiOtaRunningPartitionState, "missing", sizeof(wifiOtaRunningPartitionState) - 1);
+    return;
+  }
+  strncpy(wifiOtaRunningPartitionLabel, running->label, sizeof(wifiOtaRunningPartitionLabel) - 1);
+  esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+  if (esp_ota_get_state_partition(running, &state) != ESP_OK)
+  {
+    strncpy(wifiOtaRunningPartitionState, "unknown", sizeof(wifiOtaRunningPartitionState) - 1);
+    return;
+  }
+  strncpy(wifiOtaRunningPartitionState, otaImgStateName(state), sizeof(wifiOtaRunningPartitionState) - 1);
+}
+
+static void otaLogRunningPartitionState()
+{
+  otaRefreshRunningPartitionState();
+  if (wifiOtaRunningPartitionLabel[0] != '\0')
+  {
+    Log.notice(F("[WiFi]: OTA running partition %s state=%s" CR),
+               wifiOtaRunningPartitionLabel, wifiOtaRunningPartitionState);
+  }
+  else
+  {
+    Log.notice(F("[WiFi]: OTA running partition state=%s" CR), wifiOtaRunningPartitionState);
+  }
+}
+
+static void otaBootVerifyMarkValidIfPending()
+{
+  if (wifiOtaBootVerified)
+  {
+    return;
+  }
+  otaRefreshRunningPartitionState();
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  if (!running)
+  {
+    return;
+  }
+  esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+  if (esp_ota_get_state_partition(running, &state) != ESP_OK)
+  {
+    return;
+  }
+  if (state != ESP_OTA_IMG_PENDING_VERIFY)
+  {
+    wifiOtaBootVerified = true;
+    return;
+  }
+  const esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
+  otaRefreshRunningPartitionState();
+  if (err == ESP_OK)
+  {
+    wifiOtaBootVerified = true;
+    Log.notice(F("[WiFi]: OTA boot verified — marked app valid (rollback cancelled)" CR));
+  }
+  else
+  {
+    Log.error(F("[WiFi]: OTA boot verify failed (%d); partition state=%s" CR),
+              static_cast<int>(err), wifiOtaRunningPartitionState);
+  }
+}
+#endif
 
 static const __FlashStringHelper *otaErrorString(ota_error_t error)
 {
@@ -215,6 +312,12 @@ static void applyConnectedSideEffects()
   {
     otaSetup();
     wifiOtaStarted = true;
+#if CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+    // Query/mark only after Wi‑Fi + ArduinoOTA are up. Calling esp_ota_* in
+    // wifiModuleSetup() can hang setup on some boards (observed AtomS3 USB CDC).
+    otaLogRunningPartitionState();
+    otaBootVerifyMarkValidIfPending();
+#endif
   }
 
 #ifdef TELNET_LOG
@@ -520,4 +623,39 @@ uint8_t wifiLastDisconnectReasonCode()
 unsigned long wifiConnectAttemptCount()
 {
   return wifiConnectAttempts;
+}
+
+const char *otaRunningPartitionLabel()
+{
+#if CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+  if (wifiOtaRunningPartitionLabel[0] == '\0')
+  {
+    otaRefreshRunningPartitionState();
+  }
+  return wifiOtaRunningPartitionLabel;
+#else
+  return "";
+#endif
+}
+
+const char *otaRunningPartitionState()
+{
+#if CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+  if (wifiOtaRunningPartitionState[0] == '\0')
+  {
+    otaRefreshRunningPartitionState();
+  }
+  return wifiOtaRunningPartitionState;
+#else
+  return "";
+#endif
+}
+
+bool otaBootVerifiedThisRun()
+{
+#if CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+  return wifiOtaBootVerified;
+#else
+  return false;
+#endif
 }

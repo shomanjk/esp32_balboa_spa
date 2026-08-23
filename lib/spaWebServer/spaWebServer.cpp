@@ -3690,6 +3690,9 @@ void handleDiagnostics(AsyncWebServerRequest *request)
   root["version"] = VERSION;
   root["hostname"] = WiFi.getHostname();
   root["ip"] = WiFi.localIP().toString();
+  root["otaRunningPartition"] = otaRunningPartitionLabel();
+  root["otaPartitionState"] = otaRunningPartitionState();
+  root["otaBootVerified"] = otaBootVerifiedThisRun();
 #ifdef LOCAL_CLIENT
   root["uartBegun"] = rs485UartBegun();
   root["rs485SafeMode"] = rs485SafeModeActive();
