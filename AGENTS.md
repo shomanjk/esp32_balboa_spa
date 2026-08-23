@@ -94,7 +94,7 @@ Planned and deferred **product** direction lives in the README so it stays visib
 ## Flashing (PlatformIO CLI)
 
 1. **`PATH`:** If `pio` is not found, use `~/.platformio/penv/bin/pio` or add `export PATH="$HOME/.platformio/penv/bin:$PATH"` to `~/.zshrc`.
-2. **Local config:** Copy [`src/config-example.h`](src/config-example.h) → `src/config.h` (Wi‑Fi/MQTT/RS485 pins) and [`platformio_local.ini.example`](platformio_local.ini.example) → `platformio_local.ini` (USB/OTA ports; gitignored).
+2. **Local config:** Copy [`src/config-example.h`](src/config-example.h) → `src/config.h` (Wi‑Fi/MQTT/RS485 pins) and [`platformio_local.ini.example`](platformio_local.ini.example) → `platformio_local.ini` (USB/OTA ports; gitignored). **Replace the example `WIFI_SSID` / `WIFI_PASSWORD` (`xxxxxx`) with real credentials before any USB/OTA upload** — the flashed image embeds those strings. Placeholder uploads are refused by [`scripts/check_wifi_config_for_upload.py`](scripts/check_wifi_config_for_upload.py) (override only for bench: `SPA_ALLOW_PLACEHOLDER_WIFI=1`).
 3. **Build:** `pio run -e M5AtomLite-tub` (first build may fetch toolchains and run the LittleFS `balboa-spa` pre-build — requires Node/npm if the web bundle is built).
 4. **USB upload:** Connect the Atom; then `pio run -e M5AtomLite-tub -t upload` (ports from `platformio_local.ini` or `pio run ... -t upload --upload-port /dev/cu.…` if needed).
 5. **Filesystem (web UI):** `pio run -e M5AtomLite-tub -t uploadfs` after firmware, if you use the bundled web assets.
@@ -113,7 +113,7 @@ Planned and deferred **product** direction lives in the README so it stays visib
 - **Testing:** Prefer **`pio run -e M5AtomLite-tub`** (and **`ESP32ota`** when changing shared build flags) locally before asking for a PR; CI mirrors those compile checks.
 - Prefer **small, focused changes**; match existing style and naming.
 - **Never commit `.claude/`** (local Claude / agent worktrees) or **`.cursor/`** (local Cursor rules); both are **gitignored**. Accidental gitlinks under `.claude/` broke `git submodule update` ([issue #6](https://github.com/shomanjk/esp32_balboa_spa/issues/6)).
-- **`config.h`** secrets: never commit; use **`config-example.h`** for templates only.
+- **`config.h`** secrets: never commit; use **`config-example.h`** for templates only. **Before any USB/OTA upload**, confirm `WIFI_SSID` / `WIFI_PASSWORD` are real (not `xxxxxx` / example placeholders). PlatformIO upload refuses placeholders via [`scripts/check_wifi_config_for_upload.py`](scripts/check_wifi_config_for_upload.py).
 - When changing SPA behavior, update both places intentionally:
   - SPA source in submodule: `balboa-spa/src/...` (commit/push in SPA fork)
   - Firmware/API compatibility in parent repo: `lib/spaWebServer/...`, docs/changelog as needed

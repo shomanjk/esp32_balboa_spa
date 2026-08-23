@@ -8,6 +8,10 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **Upload Wi‑Fi credential gate** ([`scripts/check_wifi_config_for_upload.py`](scripts/check_wifi_config_for_upload.py), [`platformio.ini`](platformio.ini)): `pio … -t upload` (USB or OTA) refuses to flash when `src/config.h` still has placeholder `WIFI_SSID` / `WIFI_PASSWORD` (e.g. `xxxxxx` from `config-example.h`), so a working device cannot be overwritten with an image that will not join Wi‑Fi. Compile-only builds are unaffected. Override for intentional bench tests: `SPA_ALLOW_PLACEHOLDER_WIFI=1`.
+
 ## [2.26.2] - 2026-08-23
 
 ### Added

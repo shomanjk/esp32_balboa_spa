@@ -17,6 +17,8 @@
 
 #define WIFI_SSID "xxxxxx"
 #define WIFI_PASSWORD "xxxxxx"
+// Replace both before any USB/OTA upload. PlatformIO refuses placeholder credentials on
+// `pio run … -t upload` (see scripts/check_wifi_config_for_upload.py). Compile-only is fine.
 // Optional: lock STA to one mesh AP (BSSID). Omit for strongest-AP selection on connect/reconnect.
 // First remote OTA of the mesh STA build should leave this undefined until /api/wifi confirms the desired AP.
 // #define WIFI_BSSID "aa:bb:cc:dd:ee:ff"
