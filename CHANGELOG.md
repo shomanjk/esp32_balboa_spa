@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.26.2] - 2026-08-23
+
+### Added
+
+- **HTTP liveness watchdog + portal page gate** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`src/config-example.h`](src/config-example.h)): Periodic loopback **GET `/api/version`** probes; restart after **3** consecutive failures (`HTTP liveness watchdog` — recovers connected-but-unreachable stacks without rebooting idle gateways). **`/status`**, **`/config`**, and **`/state`** allow only **one** large portal assembly at a time; concurrent requests get **503** `portal page busy`. Optional **`HTTP_LIVENESS_*`** overrides in `config.h`. **`DIAG_FAULT_CAPTURE`** logs heap snapshot before liveness restart.
+
+### Fixed
+
+- **HTTP liveness semantics** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Replace idle-since-last-request restarts with failed loopback probes so a one-off portal visit does not schedule a firmware reboot.
+- **Portal page gate includes `/logs`** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): `/logs` joins **`/status`**, **`/config`**, and **`/state`** under the one-at-a-time large-page gate (503 when busy).
+
 ## [2.26.1] - 2026-08-06
 
 ### Added
@@ -1103,7 +1114,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.2...HEAD
+[2.26.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.1...v2.26.2
 [2.26.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.0...v2.26.1
 [2.26.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.25.0...v2.26.0
 [2.25.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.24.0...v2.25.0

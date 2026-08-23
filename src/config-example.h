@@ -47,6 +47,14 @@
 // #define WIFI_OFFLINE_RESTART_TIMEOUT_MS (10UL * 60UL * 1000UL)
 // Optional guard to avoid reboot churn during early boot.
 // #define WIFI_OFFLINE_RESTART_MIN_UPTIME_MS (2UL * 60UL * 1000UL)
+// HTTP liveness: periodic loopback GET /api/version; restart after consecutive probe
+// failures (recovers connected-but-unreachable web stack without rebooting idle gateways).
+// Omitted → on.
+// #define HTTP_LIVENESS_WATCHDOG 0
+// #define HTTP_LIVENESS_PROBE_INTERVAL_MS (2UL * 60UL * 1000UL)
+// #define HTTP_LIVENESS_PROBE_TIMEOUT_MS 5000UL
+// #define HTTP_LIVENESS_PROBE_FAIL_MAX 3
+// #define HTTP_LIVENESS_MIN_UPTIME_MS (3UL * 60UL * 1000UL)
 
 #define GMT_OFFSET -14400
 #define DAYLIGHT_OFFSET 0
