@@ -10,7 +10,7 @@ This page lists **supported** boards (matching a checked-in PlatformIO **`[env:�
 
 | Board / stack | MCU / flash (typical) | PlatformIO env | Status |
 |---------------|------------------------|----------------|--------|
-| Generic ESP32 dev board (tub-side RS485) | ESP32 · varies | `ESP32ota`, `ESP32prodOta`, etc. | **Supported** — pins in `config.h` |
+| Generic ESP32 dev board (tub-side RS485) | ESP32 · varies | **`ESP32usb`** (first USB), **`ESP32ota`** / **`ESP32prodOta`** (OTA) | **Supported** — pins in `config.h` |
 | **M5 Atom Lite** + Atomic RS485 Base | ESP32-PICO-D4 · 4 MB | `M5AtomLite-tub`, `M5AtomLite-tub-ota` | **Supported** — env pins **RX 22 / TX 19** ([README — M5 section](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side)) |
 | **M5 Atom Lite** + alternate RS485 ([Tail485](https://docs.m5stack.com/en/atom/tail485), [Unit RS485](https://docs.m5stack.com/en/unit/rs485), …) | ESP32-PICO-D4 · 4 MB | `M5AtomLite-tub` + **`#undef` / 32/26 in `config.h`** | **Alternate** — [32/26 wiring](#atom-lite--alternate-rs485-3226-pins); issue #31 unverified on v2.28+ |
 | **M5 AtomS3 Lite** + Atomic RS485 Base (**not** display AtomS3) | ESP32-S3FN8 · 8 MB | `M5AtomS3Lite-tub`, `M5AtomS3Lite-tub-ota` | **Bring-up** — env pins **RX 5 / TX 6**; RGB via FastLED GPIO **35** |
@@ -24,11 +24,11 @@ This page lists **supported** boards (matching a checked-in PlatformIO **`[env:�
 |-----------|-----------------------------------------------|
 | **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`** | PlatformIO `build_flags` (**22 / 19**, `AUTO_TX`) — omit overrides in `config.h` |
 | **`M5AtomS3Lite-tub`**, **`M5AtomS3Lite-tub-ota`** (AtomS3 Lite) | PlatformIO `build_flags` (**5 / 6**, `AUTO_TX`) — omit overrides in `config.h` |
-| Generic (`ESP32ota`, …) | [`src/config.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) (`#ifndef`-guarded defaults **16 / 17**) |
+| Generic (`ESP32usb`, `ESP32ota`, …) | [`src/config.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) (`#ifndef`-guarded defaults **16 / 17**) |
 
 [`src/config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) wraps pin/`AUTO_TX` defines in `#ifndef` so env `-D` wins **when you omit overrides**. The alternate **32/26** block uses **`#undef` then `#define`**, which **does** override env pins on `M5AtomLite-tub` (see [alternate RS485](#atom-lite--alternate-rs485-3226-pins)). **Migration:** private `config.h` files that still `#define TX485_*` / `AUTO_TX` **unconditionally** will redefinition-warn/error on M5 envs until those lines are wrapped or removed.
 
-Nonstandard RS485 on **Atom Lite** (e.g. [Tail485](https://docs.m5stack.com/en/atom/tail485) tail stack or [Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove at **32/26**): stay on **`M5AtomLite-tub`** and enable the **`#undef` / 32/26 block** in `config.h`. Use a **generic** env (`ESP32ota`, …) only for **non-M5 ESP32 dev boards** (board profile `esp32dev`).
+Nonstandard RS485 on **Atom Lite** (e.g. [Tail485](https://docs.m5stack.com/en/atom/tail485) tail stack or [Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove at **32/26**): stay on **`M5AtomLite-tub`** and enable the **`#undef` / 32/26 block** in `config.h`. **`ESP32usb`** / **`ESP32ota`** are for **non-M5 ESP32 dev boards** (`board = esp32dev`) — not Atom Lite.
 
 ---
 
@@ -46,7 +46,7 @@ The [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) uses the **ESP3
 
 Tail485 and Unit RS485 share the **same Atom Lite UART pins** (**G32 = RX**, **G26 = TX**) but attach differently. On Atom Lite hardware, keep **`M5AtomLite-tub`** (correct `m5stack-atom` board, USB upload, status LED, pin guard) and **uncomment the `#undef` / 32/26 block** in [`config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h). **`#ifndef`-only** pin lines do **not** override the env; **`#undef` then `#define`** does.
 
-**Generic `ESP32ota`** is for **non-M5 ESP32 dev boards** (`board = esp32dev`). It is OTA-first (`upload_protocol = espota`); first USB flash: `pio run -e ESP32ota -t upload --upload-protocol esptool`.
+**Generic ESP32 dev board (`esp32dev`):** same tub-side firmware as **`ESP32ota`**, but first USB flash uses **`ESP32usb`** (`upload_protocol = esptool`). **`pio run` has no `--upload-protocol` flag** — pick the env instead. After the device is on Wi‑Fi, use **`ESP32ota`** for espota updates. Do not confuse **`ESP32serial`** — that builds **`REMOTE_CLIENT`** (kitchen TCP client), not tub RS485.
 
 **Common mistakes**
 

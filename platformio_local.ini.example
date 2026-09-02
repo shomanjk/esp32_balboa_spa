@@ -5,6 +5,10 @@
 upload_port = /dev/cu.usbserial-XXXX
 monitor_port = /dev/cu.usbserial-XXXX
 
+[env:ESP32usb]
+upload_port = /dev/cu.usbserial-XXXX
+monitor_port = /dev/cu.usbserial-XXXX
+
 [env:ESP32ota]
 upload_port = spa-XXXXXXXXXXXX.local
 

@@ -12,7 +12,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 
 | Target | PlatformIO env | Notes |
 |--------|----------------|--------|
-| Generic ESP32 dev board (tub-side RS485) | `ESP32prodOta`, `ESP32ota`, etc. | UART pins / **`AUTO_TX`** in `config.h` (`#ifndef` defaults RX **16**, TX **17** in [`config-example.h`](src/config-example.h)). |
+| Generic ESP32 dev board (tub-side RS485) | **`ESP32usb`** (USB), **`ESP32prodOta`**, **`ESP32ota`** (OTA), etc. | UART pins / **`AUTO_TX`** in `config.h` (`#ifndef` defaults RX **16**, TX **17** in [`config-example.h`](src/config-example.h)). **`ESP32serial`** is **`REMOTE_CLIENT`** only — not tub RS485. |
 | **M5 Atom Lite + Atomic RS485 Base** | **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`** | `board = m5stack-atom` (**ESP32-PICO-D4**). Env defaults **RX 22** / **TX 19** / **`AUTO_TX`** — omit pin overrides for Atomic base. **Tail485** / **Unit RS485** at **32/26**: same env + **`#undef` block** in `config.h`. Manual DE/RE GPIO / **`RS485_DIR_PIN`** not supported. Wiki: [alternate RS485 (32/26)](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets#atom-lite--alternate-rs485-3226-pins). |
 | **M5 AtomS3 Lite** + Atomic RS485 Base (not AtomS3) | **`M5AtomS3Lite-tub`**, **`M5AtomS3Lite-tub-ota`** | `board = esp32-s3-devkitc-1`, USB CDC. Env pins **RX 5** / **TX 6** / **`AUTO_TX`**. **`M5_STATUS_LED`**: FastLED WS2812 on GPIO **35** (same green/red/blue/yellow meaning as Atom Lite). Prefer `-ota` after first USB flash if CDC upload fails — [wiki · Hardware targets](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets). |
 | LilyGo T5 ePaper (remote display) | `ESP32-epd47` | `REMOTE_CLIENT` + `spaEpaper`; separate use case from tub RS485. |

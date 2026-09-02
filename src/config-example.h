@@ -71,7 +71,7 @@
 // Pin ownership:
 //   - M5AtomLite-tub / M5AtomLite-tub-ota: env sets TX485_Rx=22, TX485_Tx=19, AUTO_TX — omit overrides here.
 //   - M5AtomS3Lite-tub (AtomS3 Lite, not AtomS3): env sets TX485_Rx=5, TX485_Tx=6, AUTO_TX — omit overrides here.
-//   - Generic envs (ESP32ota, ESP32prodOta, …): set pins / AUTO_TX in this file (defaults below).
+//   - Generic envs (ESP32usb, ESP32ota, ESP32prodOta, …): set pins / AUTO_TX in this file (defaults below).
 // Migration: if your private config.h still #define's TX485_* / AUTO_TX unconditionally, M5 envs will
 // redefinition-warn/error until you wrap them in #ifndef (as below) or remove those lines.
 
@@ -120,7 +120,7 @@
 //
 // AUTO_TX true. Manual DE/RE from an ESP32 GPIO is NOT supported (no
 // RS485_DIR_PIN). Tail485 handles direction on-module; only TX/RX reach the Atom.
-// Generic ESP32ota is for esp32dev boards, not Atom Lite — see wiki Hardware-targets.
+// Generic ESP32usb / ESP32ota: esp32dev tub-side boards, not Atom Lite — see wiki Hardware-targets.
 //
 // Uncomment below for Tail485 / Unit RS485 on Atom Lite:
 // #undef TX485_Rx

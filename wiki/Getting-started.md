@@ -48,7 +48,7 @@ Edit at minimum:
 | **Tail485** | Tail stack (**not** Grove) | `M5AtomLite-tub` | **32 / 26** — enable **`#undef` block** in `config.h` |
 | **Unit RS485** | Grove cable | `M5AtomLite-tub` | **32 / 26** — enable **`#undef` block** in `config.h` |
 
-See [Hardware targets — alternate 32/26](Hardware-targets#atom-lite--alternate-rs485-3226-pins). **Generic `ESP32ota`** is for **non-M5 ESP32 dev boards** only (`board = esp32dev`).
+See [Hardware targets — alternate 32/26](Hardware-targets#atom-lite--alternate-rs485-3226-pins). **Generic tub-side ESP32 dev boards** use **`ESP32usb`** (first USB) then **`ESP32ota`** (OTA) — not **`ESP32serial`** (remote client).
 
 Do not use **GPIO 16/17** on Atom Lite (PICO flash). The **`#undef` block** overrides env `-D` pins; **`#ifndef`-only** lines do not.
 
@@ -72,11 +72,18 @@ pio run -e M5AtomLite-tub -t upload
 pio run -e M5AtomLite-tub -t upload
 ```
 
-**Generic ESP32 dev board** (not Atom Lite — `ESP32ota`, pins in `config.h`; OTA is default upload protocol):
+**Generic ESP32 dev board** (tub-side RS485 — not Atom Lite; pins in `config.h`):
 
 ```bash
-pio run -e ESP32ota -t upload --upload-protocol esptool
+# First USB flash
+pio run -e ESP32usb -t upload
+pio run -e ESP32usb -t uploadfs
+
+# Later updates (Wi-Fi / espota)
+pio run -e ESP32ota -t upload
 ```
+
+Do not use **`ESP32serial`** for tub-side — that env builds **`REMOTE_CLIENT`** (TCP to a gateway), not RS485.
 
 Set `upload_port` / `monitor_port` in **`platformio_local.ini`** (copy from [`platformio_local.ini.example`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/platformio_local.ini.example)) or pass `--upload-port /dev/cu.…` if PlatformIO does not auto-detect USB.
 
