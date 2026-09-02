@@ -224,6 +224,23 @@ static void spaWebSendPortalAsset(AsyncWebServerRequest *request, const char *co
   request->send(response);
 }
 
+/** JSON response stream with the nothrow contract made explicit: beginResponseStream returns
+ *  nullptr under OOM (vendored patch). On failure a 503 is sent here so the SPA's fetch
+ *  retries; every caller must bail out on nullptr instead of serializing into *nullptr
+ *  during the exact low-memory window this is meant to survive. */
+static AsyncResponseStream *spaWebBeginJsonStream(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  if (response == nullptr)
+  {
+    Log.error("[Web]: JSON stream alloc failed freeHeap=%u usableMaxAlloc=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(portalUsableLargestBlock()));
+    request->send(503, "text/plain", "low memory, retry");
+  }
+  return response;
+}
+
 static void spaWebHttpLivenessTick();
 
 /** Loopback GET /api/version — false when the local web stack cannot serve HTTP. */
@@ -387,6 +404,12 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
         memcpy(buffer, sharedBody->c_str() + index, n);
         return n;
       });
+  if (response == nullptr)
+  {
+    request->send(503, "text/plain", "low memory, retry");
+    spaWebTouchHttpActivity();
+    return;
+  }
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
@@ -1562,8 +1585,11 @@ void spaWebServerLoop()
       Log.notice(F("[Web]: Restart requested by %p" CR), request->client()->remoteIP());
       setLastRestartReason("Web restart");
       AsyncWebServerResponse *response = request->beginResponse(302);
-      response->addHeader("Location", "/");
-      request->send(response);
+      if (response != nullptr)
+      {
+        response->addHeader("Location", "/");
+        request->send(response);
+      }
       delay(1000);
       ESP.restart(); });
 
@@ -1629,6 +1655,11 @@ void handleepdpanel(AsyncWebServerRequest *request)
   {
     // Send the BMP image as a response
     AsyncWebServerResponse *response = request->beginResponse_P(200, "image/jpeg", jpegBuffer, jpegSize);
+    if (response == nullptr)
+    {
+      request->send(503, "text/plain", "low memory, retry");
+      return;
+    }
     response->addHeader("Content-Disposition", "inline; filename=\"framebuffer.jpeg\"");
     request->send(response);
   }
@@ -3272,7 +3303,11 @@ void handleLogsPage(AsyncWebServerRequest *request)
 
 void handleVersion(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(1024);
   doc["version"] = VERSION;
   doc["build"] = BUILD;
@@ -3294,7 +3329,11 @@ void handleVersion(AsyncWebServerRequest *request)
 
 void handleDiagnostics(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(10240);
   // Use to<> once — a second to<JsonObject>() clears the document (ArduinoJson 6).
   JsonObject root = doc.to<JsonObject>();
@@ -3324,7 +3363,11 @@ void handleDiagnostics(AsyncWebServerRequest *request)
 
 void handleWifi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(1024);
   wl_status_t st = WiFi.status();
   const bool ok = (st == WL_CONNECTED);
@@ -3377,7 +3420,11 @@ void handleWifi(AsyncWebServerRequest *request)
 
 void handleMqtt(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(1024);
   const int stateCode = mqtt.state();
   const bool connected = mqtt.connected();
@@ -3478,7 +3525,11 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
 
 void handleStatusControlsApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2560);
   fillStatusSnapshotDoc(doc);
   serializeJson(doc, *response);
@@ -3487,7 +3538,11 @@ void handleStatusControlsApi(AsyncWebServerRequest *request)
 
 void handleStatusSummaryApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2560);
   fillStatusSnapshotDoc(doc);
   wl_status_t st = WiFi.status();
@@ -3560,7 +3615,11 @@ void handleStatusHistoriesApi(AsyncWebServerRequest *request)
 
 void handleStateLittleFsApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(6144);
   doc["html"] = listDirToString(LittleFS, "/", 3);
   serializeJson(doc, *response);
@@ -3569,7 +3628,11 @@ void handleStateLittleFsApi(AsyncWebServerRequest *request)
 
 void handleDiagToggleApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(768);
 
   if (!request->hasParam("item"))
@@ -3632,7 +3695,11 @@ void handleDiagToggleApi(AsyncWebServerRequest *request)
 
 void handleDiagToggleSequenceApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(4096);
 
   if (!request->hasParam("item"))
@@ -3764,7 +3831,11 @@ void handleDiagToggleSequenceApi(AsyncWebServerRequest *request)
 
 void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2048);
 
   int observeMs = 2500;
@@ -3855,7 +3926,11 @@ void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request)
 
 void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(16384);
 
   int observeMs = 6000;
@@ -3957,7 +4032,11 @@ void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request)
 
 void handleRs485(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2048);
   doc["rxGpio"] = rs485RxGpio();
   doc["txGpio"] = rs485TxGpio();
@@ -4010,7 +4089,11 @@ void handleRs485(AsyncWebServerRequest *request)
 void handleRs485Retry(AsyncWebServerRequest *request)
 {
   rs485RequestRetry();
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(512);
   doc["ok"] = true;
   doc["retryPending"] = rs485RetryPending();
@@ -4039,7 +4122,11 @@ void handleRs485Raw(AsyncWebServerRequest *request)
   Rs485RawByte bytes[RS485_RAW_CAPTURE_SIZE];
   const int count = rs485GetRawRecent(bytes, limit);
 
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   response->print("{\"count\":");
   response->print(count);
   response->print(",\"limit\":");
@@ -4101,7 +4188,11 @@ void handleRs485History(AsyncWebServerRequest *request)
   Rs485Snapshot snapshots[RS485_HISTORY_SIZE];
   const int count = rs485GetHistoryNewestFirst(snapshots, limit);
 
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(16384);
   doc["count"] = count;
   doc["limit"] = limit;
@@ -4364,6 +4455,11 @@ void handleConfigExport(AsyncWebServerRequest *request)
   String filename = "spa-config-" + hostname + "-" + String(ts) + ".json";
 
   AsyncWebServerResponse *response = request->beginResponse(200, "application/json", body);
+  if (response == nullptr)
+  {
+    request->send(503, "text/plain", "low memory, retry");
+    return;
+  }
   response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   request->send(response);
 }
@@ -4741,7 +4837,11 @@ void handleLoginData(AsyncWebServerRequest *request)
     // data.device.device_id
     // data.token
 
-    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    AsyncResponseStream *response = spaWebBeginJsonStream(request);
+    if (response == nullptr)
+    {
+      return;
+    }
     DynamicJsonDocument doc(128);
 
     doc["username"] = WiFi.getHostname();
@@ -4776,6 +4876,10 @@ void handleSlash(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: handleSlash %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
   AsyncWebServerResponse *response = request->beginResponse(302); // Sends 302 Weiterleitung
+  if (response == nullptr)
+  {
+    return; // OOM: the parser's null-response guard completes the request
+  }
   response->addHeader("Location", "index.html");
   request->send(response);
 }
