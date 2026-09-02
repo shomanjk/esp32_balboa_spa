@@ -40,7 +40,16 @@ Edit at minimum:
 | `TX485_Rx` / `TX485_Tx` | **M5\*‑tub envs:** set by PlatformIO (Atom Lite **22/19**, AtomS3 Lite **5/6**) — omit in `config.h`. **Generic envs:** set here (e.g. **16/17**) |
 | `AUTO_TX` | Prefer **`true`** unless your transceiver needs explicit DE/RE |
 
-Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pins.
+**Which env for your RS485 module?**
+
+| RS485 on Atom Lite | PlatformIO env | Pins |
+|--------------------|----------------|------|
+| **Atomic RS485 Base** (stacked) | `M5AtomLite-tub` | **22 / 19** (env-owned) |
+| **Grove** (Unit RS485, Tail485, …) | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** typical |
+
+Do not use `M5AtomLite-tub` with Grove wiring — that env ignores `config.h` pin overrides. See [Hardware targets — Grove alternate](Hardware-targets#atom-lite--grove-rs485-alternate).
+
+Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pins (16/17 are unsafe on Atom Lite / PICO-D4).
 
 Also copy local upload/monitor ports (gitignored):
 

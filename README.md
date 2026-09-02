@@ -328,7 +328,7 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
 
 **Panel clock auto-sync:** New `config-example.h` sets **`AUTO_SYNC_PANEL_CLOCK 1`** so the gateway can set the spa panel time once per boot after Wi‑Fi/NTP (when drift exceeds 2 minutes). Existing **`config.h`** files without this line keep auto-sync **off** until you add it. Requires correct **`GMT_OFFSET`** / **`DAYLIGHT_OFFSET`**.
 
-**Alternate wiring:** On a **generic** env, set pins in `config.h` (defaults **16/17**, or [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove example **32/26** in [`src/config-example.h`](src/config-example.h)). Do not expect `config.h` pin overrides to win on `M5*-tub` envs.
+**Alternate wiring:** On a **generic** env, set pins in `config.h` (defaults **16/17**, or [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove example **32/26** in [`src/config-example.h`](src/config-example.h)). Do not expect `config.h` pin overrides to win on `M5*-tub` envs. The Atom Lite MCU is **ESP32-PICO-D4** — Grove modules such as **Unit RS485** or **Tail485** use the same board with a different transceiver: pick a **generic** env and **32/26** pins, not `M5AtomLite-tub` (which hard-codes **22/19** for the Atomic base). **`RS485_DIR_PIN` is not supported** — use `AUTO_TX` only. See wiki **[Hardware targets — Atom Lite + Grove RS485](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets#atom-lite--grove-rs485-alternate)**.
 
 ### M5 AtomS3 Lite (bench / bring-up)
 

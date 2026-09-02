@@ -104,11 +104,20 @@
 // ---------------------------------------------------------------------------
 // Alternate wiring on a generic env (not an M5*-tub env — those own pins via build_flags)
 // ---------------------------------------------------------------------------
+// M5 Atom Lite MCU is ESP32-PICO-D4 ("ESP32 Pico" in community posts = this board).
+// Grove RS485 modules (Unit RS485, Tail485, similar) on Atom Lite:
+//   - Use a GENERIC PlatformIO env (ESP32ota, ESP32prodOta, …), NOT M5AtomLite-tub.
+//   - M5AtomLite-tub always uses RX=22 / TX=19; config.h overrides are ignored there.
+//   - RS485_DIR_PIN is NOT a firmware define — use AUTO_TX true first; if direction fails,
+//     try AUTO_TX false and verify DE/RE wiring per your module datasheet.
+//
 // M5 Unit RS485 on Grove (example for Atom Lite Grove pinout):
 //   Black=GND, Red=5V, Yellow=G26, White=G32
 //   https://docs.m5stack.com/en/unit/rs485
 // Wire: ESP TX (G26) -> module RX (yellow); ESP RX (G32) -> module TX (white).
 // If you see no frames, swap those two TTL wires.
+// Tail485 and similar Grove transceivers: same 32/26 pattern if wired like Unit RS485.
+//   wiki: Hardware-targets — Atom Lite + Grove RS485 (alternate)
 //
 // Uncomment below to override the defaults above. Use #undef first — a second
 // #ifndef TX485_Rx after the defaults would silently keep 16/17.

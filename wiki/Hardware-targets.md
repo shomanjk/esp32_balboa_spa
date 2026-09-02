@@ -12,6 +12,7 @@ This page lists **supported** boards (matching a checked-in PlatformIO **`[env:�
 |---------------|------------------------|----------------|--------|
 | Generic ESP32 dev board (tub-side RS485) | ESP32 · varies | `ESP32ota`, `ESP32prodOta`, etc. | **Supported** — pins in `config.h` |
 | **M5 Atom Lite** + Atomic RS485 Base | ESP32-PICO-D4 · 4 MB | `M5AtomLite-tub`, `M5AtomLite-tub-ota` | **Supported** — env pins **RX 22 / TX 19** ([README — M5 section](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#m5-atom-lite--atomic-rs485-base-tub-side)) |
+| **M5 Atom Lite** + Grove RS485 (Unit RS485, Tail485, …) | ESP32-PICO-D4 · 4 MB | Generic env + `config.h` (e.g. `ESP32ota`) | **Alternate** — community reports only; typical pins **RX 32 / TX 26** ([Grove wiring](#atom-lite--grove-rs485-alternate)) |
 | **M5 AtomS3 Lite** + Atomic RS485 Base (**not** display AtomS3) | ESP32-S3FN8 · 8 MB | `M5AtomS3Lite-tub`, `M5AtomS3Lite-tub-ota` | **Bring-up** — env pins **RX 5 / TX 6**; RGB via FastLED GPIO **35** |
 | LilyGo T5 ePaper | ESP32-S3 · varies | `ESP32-epd47` | **Supported** (remote display; `REMOTE_CLIENT` + `spaEpaper`) |
 
@@ -28,6 +29,25 @@ This page lists **supported** boards (matching a checked-in PlatformIO **`[env:�
 [`src/config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h) wraps pin/`AUTO_TX` defines in `#ifndef` so env `-D` wins. **Migration:** private `config.h` files that still `#define TX485_*` / `AUTO_TX` **unconditionally** will redefinition-warn/error on M5 envs until those lines are wrapped or removed.
 
 Nonstandard wiring (e.g. Unit RS485 on Grove) belongs on a **generic** env with pins in `config.h`, not on an `M5*-tub` env (env pins would win).
+
+---
+
+## Atom Lite + Grove RS485 (alternate)
+
+The [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) uses the **ESP32-PICO-D4** (4 MB flash). Issues or posts that say **“ESP32 Pico”** usually mean this same MCU — not a different ESP32 variant. Portal and memory limits apply equally whether you use the stacked Atomic base or a Grove transceiver.
+
+| Path | RS485 module | PlatformIO env | UART pins |
+|------|--------------|----------------|-----------|
+| **Recommended (tub-side)** | [Atomic RS485 Base](https://docs.m5stack.com/en/atom/Atomic%20RS485%20Base) (stacked) | `M5AtomLite-tub` / `-ota` | **RX 22 / TX 19** (env-owned) |
+| **Alternate** | Grove module — [Unit RS485](https://docs.m5stack.com/en/unit/rs485), Tail485, similar | **Generic** env (`ESP32ota`, `ESP32prodOta`, …) + pins in `config.h` | **RX 32 / TX 26** typical (see [`config-example.h`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/config-example.h)) |
+
+**Common mistakes**
+
+1. **Wrong env** — `M5AtomLite-tub` always uses **22/19**. If your transceiver is on Grove **32/26**, `config.h` pin overrides are **ignored** on that env. Use a generic env instead.
+2. **Unsafe pins on generic env** — default **GPIO 16/17** in `config-example.h` are tied to PICO flash and trigger **RS485 safe mode** on Atom Lite. Use **32/26** (Grove) or another safe pair.
+3. **`RS485_DIR_PIN` is not supported** — this firmware has no such define. Prefer **`AUTO_TX true`**. If your module needs manual DE/RE, try **`AUTO_TX false`** and verify wiring against the module datasheet (direction is toggled via existing `AUTO_TX false` behavior, not a separate pin define).
+
+Community report (unverified on **v2.28+**): [Issue #31](https://github.com/shomanjk/esp32_balboa_spa/issues/31) — Atom Lite + Tail485; RS485 worked initially; web portal hung on firmware before **2.28** portal fixes. See [Hardware field notes](Hardware-field-notes).
 
 ---
 

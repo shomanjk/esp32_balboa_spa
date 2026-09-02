@@ -20,6 +20,41 @@ Short **symptom → checks** guide. For release-accurate API and flag lists, use
 
 ---
 
+## Portal hangs, 503, or unstyled pages
+
+Symptoms: `/status` or other portal pages freeze, show raw CSS as text, return **503** (`portal page busy` or low-memory retry), or the device drops off the LAN mid-page load.
+
+**Checks (in order):**
+
+1. **Firmware version** — Upgrade to **[v2.28.0](https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v2.28.0)** or newer. On **ESP32-PICO-D4** (M5 Atom Lite), releases before **2.28** could exhaust DRAM assembling large portal pages. Overview: [Discussions #33](https://github.com/shomanjk/esp32_balboa_spa/discussions/33).
+2. **`GET /api/version`** — Confirm the running version matches what you expect after OTA.
+3. **Auto-refresh page** — A tiny “retry in 2 seconds” page means low-memory guard triggered; wait for the refresh or close extra browser tabs hitting the gateway at once.
+4. **503 `portal page busy`** — Only one large portal page assembles at a time; retry after the other request finishes.
+5. **Still broken on 2.28+?** — Open an Issue with firmware version, browser, and whether RS485 was connected; optional serial excerpt.
+
+Atom Lite users on **Grove RS485** (not Atomic base): also see [Wrong env / Grove pins](#wrong-env--grove-pins-on-atom-lite) below — portal symptoms can overlap with RS485 retry floods on older firmware.
+
+---
+
+## Wrong env / Grove pins on Atom Lite
+
+Symptom: no spa frames despite “correct” pins in `config.h`, or RS485 safe mode with GPIO **16/17**.
+
+**Cause:** [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) is **ESP32-PICO-D4**. Two wiring paths exist:
+
+| RS485 module | Use env | Pins |
+|--------------|---------|------|
+| **Atomic RS485 Base** (stacked) | `M5AtomLite-tub` | **22 / 19** (env-owned — omit in `config.h`) |
+| **Grove** (Unit RS485, Tail485, …) | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** typical |
+
+`M5AtomLite-tub` **ignores** `config.h` pin overrides. Grove wiring on **32/26** with that env talks to the wrong GPIOs.
+
+**Also:** default generic pins **16/17** are unsafe on Atom Lite (PICO flash) → RS485 safe mode. Do not use them on this board.
+
+Detail: [Hardware targets — Atom Lite + Grove RS485](Hardware-targets#atom-lite--grove-rs485-alternate).
+
+---
+
 ## Wi‑Fi won’t connect
 
 1. **`config.h`** — Correct `WIFI_SSID` and `WIFI_PASSWORD` (rebuild after edits).
