@@ -130,15 +130,48 @@ static inline bool _init_async_event_queue() {
 // with wait = portMAX_DELAY a full queue blocked the tcpip task while the async task (this
 // queue's only consumer) was itself blocked in tcpip_api_call waiting for the tcpip task —
 // a permanent AB-BA deadlock: device off the network (no ping/HTTP), no WDT, loop() running.
-// Reproduced on the bench within ~15 chunked 73KB transfers with one slow client. A bounded
-// wait lets the consumer drain during a collision; on timeout the event is dropped and the
-// caller's existing failure path returns ERR_TIMEOUT to lwIP (which re-delivers recv data).
+// Reproduced on the bench within ~15 chunked 73KB transfers with one slow client.
+//
+// Events fall into two classes with different loss semantics:
+//  - RECV and POLL are retryable: refusing RECV makes lwIP hold the segment as refused_data
+//    and redeliver it; POLL repeats on its own. These get a short bounded wait and must leave
+//    CONFIG_ASYNC_TCP_QUEUE_RESERVE slots free, so a data flood can never fill the queue.
+//  - SENT/FIN/ERROR/CONNECTED/DNS/ACCEPT/CLEAR are NOT redelivered by lwIP. Dropping one
+//    permanently wedges accounting (_in_flight/ack credits), loses a disconnect notification,
+//    or leaks a connection. These may consume the reserved slots and wait longer; with the
+//    reserve in place a timeout means the consumer task has been dead for the whole wait,
+//    at which point the firmware's network watchdogs are the remaining safety net.
 #ifndef CONFIG_ASYNC_TCP_EVENT_WAIT_MS
 #define CONFIG_ASYNC_TCP_EVENT_WAIT_MS 100
 #endif
+#ifndef CONFIG_ASYNC_TCP_CONTROL_EVENT_WAIT_MS
+#define CONFIG_ASYNC_TCP_CONTROL_EVENT_WAIT_MS 1000
+#endif
+#ifndef CONFIG_ASYNC_TCP_QUEUE_RESERVE
+#define CONFIG_ASYNC_TCP_QUEUE_RESERVE 32
+#endif
+
+// Free a queued event wrapper together with any payload it owns: a discarded LWIP_TCP_RECV
+// still owns its pbuf chain (only _handle_async_event hands it to the client), and freeing
+// just the wrapper leaked the pbufs — under queue churn that bled the lwIP pools dry.
+static void _free_event(lwip_tcp_event_packet_t *e) {
+  if (e->event == LWIP_TCP_RECV && e->recv.pb) {
+    pbuf_free(e->recv.pb);
+  }
+  free((void *)e);
+}
+
+// Retryable events must not eat into the slots reserved for control events.
+static inline bool _queue_has_retryable_headroom() {
+  return _async_queue && uxQueueSpacesAvailable(_async_queue) > CONFIG_ASYNC_TCP_QUEUE_RESERVE;
+}
 
 static inline bool _send_async_event(lwip_tcp_event_packet_t **e, TickType_t wait = pdMS_TO_TICKS(CONFIG_ASYNC_TCP_EVENT_WAIT_MS)) {
   return _async_queue && xQueueSend(_async_queue, e, wait) == pdPASS;
+}
+
+static inline bool _send_async_control_event(lwip_tcp_event_packet_t **e) {
+  return _async_queue && xQueueSend(_async_queue, e, pdMS_TO_TICKS(CONFIG_ASYNC_TCP_CONTROL_EVENT_WAIT_MS)) == pdPASS;
 }
 
 static inline bool _prepend_async_event(lwip_tcp_event_packet_t **e, TickType_t wait = pdMS_TO_TICKS(CONFIG_ASYNC_TCP_EVENT_WAIT_MS)) {
@@ -223,15 +256,16 @@ static bool _remove_events_with_arg(void *arg) {
     if (xQueueReceive(_async_queue, &first_packet, 0) != pdPASS) {
       return false;
     }
-    // discard packet if matching
+    // discard packet if matching (must free owned payloads too — see _free_event)
     if ((uintptr_t)first_packet->arg == (uintptr_t)arg) {
-      free(first_packet);
+      _free_event(first_packet);
       first_packet = NULL;
     } else if (xQueueSend(_async_queue, &first_packet, 0) != pdPASS) {
       // try to return first packet to the back of the queue
       // we can't wait here if queue is full, because this call has been done from the only consumer task of this queue
       // otherwise it would deadlock, we have to discard the event
-      free(first_packet);
+      log_e("requeue failed during purge, dropping unrelated event %d", (int)first_packet->event);
+      _free_event(first_packet);
       first_packet = NULL;
       return false;
     }
@@ -243,13 +277,14 @@ static bool _remove_events_with_arg(void *arg) {
     }
     if ((uintptr_t)packet->arg == (uintptr_t)arg) {
       // remove matching event
-      free(packet);
+      _free_event(packet);
       packet = NULL;
       // otherwise try to requeue it
     } else if (xQueueSend(_async_queue, &packet, 0) != pdPASS) {
       // we can't wait here if queue is full, because this call has been done from the only consumer task of this queue
       // otherwise it would deadlock, we have to discard the event
-      free(packet);
+      log_e("requeue failed during purge, dropping unrelated event %d", (int)packet->event);
+      _free_event(packet);
       packet = NULL;
       return false;
     }
@@ -356,6 +391,18 @@ static bool _start_async_task() {
  * */
 
 static int8_t _tcp_clear_events(void *arg) {
+  // Local patch: close() reaches here from two different task contexts, which need different
+  // handling to keep queue manipulation serialized on the consumer task:
+  //  - On the async task itself (close inside an event callback): purge synchronously. We ARE
+  //    the only consumer, so the rotation cannot race a dequeue; prepending a CLEAR marker
+  //    here could self-deadlock on a full queue (nobody else drains it).
+  //  - On any other task (loop(), user code): hand the purge to the consumer via a CLEAR
+  //    marker at the queue front, so it runs before any stale event for this client. Rotating
+  //    the queue from an external task would race the consumer's dequeues.
+  if (xTaskGetCurrentTaskHandle() == _async_service_task_handle) {
+    _remove_events_with_arg(arg);
+    return ERR_OK;
+  }
   lwip_tcp_event_packet_t *e = (lwip_tcp_event_packet_t *)malloc(sizeof(lwip_tcp_event_packet_t));
   if (!e) {
     log_e("Failed to allocate event packet");
@@ -363,13 +410,12 @@ static int8_t _tcp_clear_events(void *arg) {
   }
   e->event = LWIP_TCP_CLEAR;
   e->arg = arg;
-  // Local patch: this runs on the async task (AsyncClient close/destructor) — the queue's only
-  // consumer. Blocking here on a full queue can never succeed (self-deadlock), so try without
-  // waiting and on failure purge the stale events synchronously instead.
-  if (!_prepend_async_event(&e, 0)) {
-    free((void *)(e));
+  if (!_prepend_async_event(&e, pdMS_TO_TICKS(CONFIG_ASYNC_TCP_CONTROL_EVENT_WAIT_MS))) {
+    _free_event(e);
+    // Consumer unresponsive for the whole wait. Last resort: racy synchronous purge beats
+    // leaving events that reference a client about to be deleted.
+    log_e("CLEAR marker enqueue timed out, purging from external task");
     _remove_events_with_arg(arg);
-    return ERR_OK;
   }
   return ERR_OK;
 }
@@ -385,7 +431,8 @@ static int8_t _tcp_connected(void *arg, tcp_pcb *pcb, int8_t err) {
   e->arg = arg;
   e->connected.pcb = pcb;
   e->connected.err = err;
-  if (!_prepend_async_event(&e)) {
+  // Control event: not redelivered by lwIP, so use the reserved slots + longer wait.
+  if (!_prepend_async_event(&e, pdMS_TO_TICKS(CONFIG_ASYNC_TCP_CONTROL_EVENT_WAIT_MS))) {
     free((void *)(e));
     return ERR_TIMEOUT;
   }
@@ -395,7 +442,8 @@ static int8_t _tcp_connected(void *arg, tcp_pcb *pcb, int8_t err) {
 static int8_t _tcp_poll(void *arg, struct tcp_pcb *pcb) {
   // throttle polling events queueing when event queue is getting filled up, let it handle _onack's
   // log_d("qs:%u", uxQueueMessagesWaiting(_async_queue));
-  if (uxQueueMessagesWaiting(_async_queue) > (rand() % CONFIG_ASYNC_TCP_QUEUE_SIZE / 2 + CONFIG_ASYNC_TCP_QUEUE_SIZE / 4)) {
+  // Local patch: also stay out of the slots reserved for control events; polls repeat anyway.
+  if (!_queue_has_retryable_headroom() || uxQueueMessagesWaiting(_async_queue) > (rand() % CONFIG_ASYNC_TCP_QUEUE_SIZE / 2 + CONFIG_ASYNC_TCP_QUEUE_SIZE / 4)) {
     log_d("throttling");
     return ERR_OK;
   }
@@ -430,15 +478,24 @@ static int8_t _tcp_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *pb, int8_t 
     e->recv.pcb = pcb;
     e->recv.pb = pb;
     e->recv.err = err;
-  } else {
-    // ets_printf("+F: 0x%08x\n", pcb);
-    e->event = LWIP_TCP_FIN;
-    e->fin.pcb = pcb;
-    e->fin.err = err;
-    // close the PCB in LwIP thread
-    AsyncClient::_s_lwip_fin(e->arg, e->fin.pcb, e->fin.err);
+    // Retryable: on refusal lwIP keeps ownership of pb (refused_data) and redelivers, so free
+    // only the wrapper here — NOT via _free_event, which would free the pbuf we don't own yet.
+    if (!_queue_has_retryable_headroom() || !_send_async_event(&e)) {
+      free((void *)(e));
+      return ERR_TIMEOUT;
+    }
+    return ERR_OK;
   }
-  if (!_send_async_event(&e)) {
+  // ets_printf("+F: 0x%08x\n", pcb);
+  e->event = LWIP_TCP_FIN;
+  e->fin.pcb = pcb;
+  e->fin.err = err;
+  // close the PCB in LwIP thread
+  AsyncClient::_s_lwip_fin(e->arg, e->fin.pcb, e->fin.err);
+  // Control event: lwIP never redelivers a FIN, and the pcb teardown above already happened.
+  // Losing it would silently orphan the connection object, so use the reserved slots + wait.
+  if (!_send_async_control_event(&e)) {
+    log_e("FIN event lost, connection object may leak");
     free((void *)(e));
     return ERR_TIMEOUT;
   }
@@ -456,7 +513,9 @@ static int8_t _tcp_sent(void *arg, struct tcp_pcb *pcb, uint16_t len) {
   e->arg = arg;
   e->sent.pcb = pcb;
   e->sent.len = len;
-  if (!_send_async_event(&e)) {
+  // Control event: a dropped SENT permanently strands in-flight/ack accounting upstream.
+  if (!_send_async_control_event(&e)) {
+    log_e("SENT event lost, ack accounting will stall");
     free((void *)(e));
     return ERR_TIMEOUT;
   }
@@ -487,7 +546,10 @@ void AsyncClient::_tcp_error(void *arg, int8_t err) {
   e->event = LWIP_TCP_ERROR;
   e->arg = arg;
   e->error.err = err;
-  if (!_send_async_event(&e)) {
+  // Control event: the pcb is already detached above; losing this loses the error/disconnect
+  // callback and leaks the client object.
+  if (!_send_async_control_event(&e)) {
+    log_e("ERROR event lost, client callbacks skipped");
     ::free((void *)(e));
   }
 }
@@ -507,7 +569,9 @@ static void _tcp_dns_found(const char *name, struct ip_addr *ipaddr, void *arg) 
   } else {
     memset(&e->dns.addr, 0, sizeof(e->dns.addr));
   }
-  if (!_send_async_event(&e)) {
+  // Control event: DNS results are one-shot; a drop strands the pending connect.
+  if (!_send_async_control_event(&e)) {
+    log_e("DNS event lost, pending connect stranded");
     free((void *)(e));
   }
 }
@@ -522,7 +586,9 @@ static int8_t _tcp_accept(void *arg, AsyncClient *client) {
   e->event = LWIP_TCP_ACCEPT;
   e->arg = arg;
   e->accept.client = client;
-  if (!_prepend_async_event(&e)) {
+  // Control event: a dropped ACCEPT leaks the freshly created client and its pcb.
+  if (!_prepend_async_event(&e, pdMS_TO_TICKS(CONFIG_ASYNC_TCP_CONTROL_EVENT_WAIT_MS))) {
+    log_e("ACCEPT event lost, new connection dropped");
     free((void *)(e));
     return ERR_TIMEOUT;
   }

@@ -22,6 +22,7 @@
   #include <rom/ets_sys.h>
 #endif
 #include "AsyncEventSource.h"
+#include <new>
 
 #define ASYNC_SSE_NEW_LINE_CHAR (char)0xa
 
@@ -429,7 +430,8 @@ bool AsyncEventSource::canHandle(AsyncWebServerRequest* request) const {
 }
 
 void AsyncEventSource::handleRequest(AsyncWebServerRequest* request) {
-  request->send(new AsyncEventSourceResponse(this));
+  // Local patch: nothrow; send() and the parser's null-response guard tolerate null.
+  request->send(new (std::nothrow) AsyncEventSourceResponse(this));
 }
 
 void AsyncEventSource::_adjust_inflight_window() {

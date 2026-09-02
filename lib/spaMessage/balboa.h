@@ -14,7 +14,11 @@
 #define RETRY_TIME 10 * 60
 
 #define staleData(key) (key.lastUpdate == 0 || key.lastUpdate + STALE_TIME < getTime())
-#define retryRequest(key) (key.lastRequest == 0 || key.lastRequest + RETRY_TIME < getTime())
+// Retry pacing runs on millis(), not wall clock: getTime() is 0 until NTP syncs, and a request
+// stamped during that window could never satisfy lastRequest + RETRY_TIME < 0 — one lost frame
+// froze that dataset until NTP appeared. Unsigned subtraction stays correct across millis()
+// wraparound. lastRequest (wall clock) is kept purely for diagnostics.
+#define retryRequest(key) (key.lastRequestMs == 0 || (millis() - key.lastRequestMs) > (RETRY_TIME)*1000UL)
 
 #define New_Client_Clear_to_Send_Type 0x00
 #define Channel_Assignment_Request_Type 0x01
@@ -190,6 +194,7 @@ struct SpaConfigurationData
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
   uint8_t rawData[BALBOA_MESSAGE_SIZE];
   uint8_t rawDataLength;
@@ -215,6 +220,7 @@ struct SpaFilterSettingsData
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
   uint8_t rawData[BALBOA_MESSAGE_SIZE];
   uint8_t rawDataLength;
@@ -235,6 +241,7 @@ struct SpaFaultLogData
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
   uint8_t rawData[BALBOA_MESSAGE_SIZE];
   uint8_t rawDataLength;
@@ -253,6 +260,7 @@ struct SpaInformationData
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
   uint8_t rawData[BALBOA_MESSAGE_SIZE];
   uint8_t rawDataLength;
@@ -270,6 +278,7 @@ struct WiFiModuleConfigurationData
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
 
   char macAddress[18];
@@ -280,6 +289,7 @@ struct SpaSettings0x04Data
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
   uint8_t rawData[BALBOA_MESSAGE_SIZE];
   uint8_t rawDataLength;
@@ -290,6 +300,7 @@ struct SpaPreferencesData
   uint8_t crc;
   unsigned long lastUpdate;
   unsigned long lastRequest;
+  unsigned long lastRequestMs; // millis() of last request (0 = never); before magicNumber so the layout shift reinits RTC_NOINIT data post-OTA
   u_int32_t magicNumber;
   uint8_t rawData[BALBOA_MESSAGE_SIZE];
   uint8_t rawDataLength;

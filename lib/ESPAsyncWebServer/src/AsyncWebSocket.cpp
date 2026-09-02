@@ -24,6 +24,7 @@
 #include <cstring>
 
 #include <libb64/cencode.h>
+#include <new>
 
 #if defined(ESP32)
   #if ESP_IDF_VERSION_MAJOR < 5
@@ -1148,13 +1149,21 @@ void AsyncWebSocket::handleRequest(AsyncWebServerRequest* request) {
   }
   const AsyncWebHeader* version = request->getHeader(WS_STR_VERSION);
   if (version->value().toInt() != 13) {
+    // Local patch: beginResponse is nothrow and may return null under OOM; the parser's
+    // null-response guard completes the request if we bail here.
     AsyncWebServerResponse* response = request->beginResponse(400);
+    if (!response) {
+      return;
+    }
     response->addHeader(WS_STR_VERSION, T_13);
     request->send(response);
     return;
   }
   const AsyncWebHeader* key = request->getHeader(WS_STR_KEY);
-  AsyncWebServerResponse* response = new AsyncWebSocketResponse(key->value(), this);
+  AsyncWebServerResponse* response = new (std::nothrow) AsyncWebSocketResponse(key->value(), this);
+  if (!response) {
+    return;
+  }
   if (request->hasHeader(WS_STR_PROTOCOL)) {
     const AsyncWebHeader* protocol = request->getHeader(WS_STR_PROTOCOL);
     // ToDo: check protocol

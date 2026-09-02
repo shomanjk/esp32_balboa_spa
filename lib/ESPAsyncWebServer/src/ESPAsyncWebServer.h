@@ -140,16 +140,67 @@ class AsyncWebHeader {
     String _value;
 
   public:
+    AsyncWebHeader() = default; // Local patch: for the fixed-capacity response header store
     AsyncWebHeader(const AsyncWebHeader&) = default;
+    AsyncWebHeader(AsyncWebHeader&&) = default;
     AsyncWebHeader(const char* name, const char* value) : _name(name), _value(value) {}
     AsyncWebHeader(const String& name, const String& value) : _name(name), _value(value) {}
     AsyncWebHeader(const String& data);
 
     AsyncWebHeader& operator=(const AsyncWebHeader&) = default;
+    AsyncWebHeader& operator=(AsyncWebHeader&&) = default;
 
     const String& name() const { return _name; }
     const String& value() const { return _value; }
     String toString() const;
+};
+
+// Local patch: fixed-capacity header store for responses. The std::list it replaces allocates
+// its nodes with throwing new — under -fno-exceptions a failed ~32B node allocation aborted
+// the firmware even after response objects moved to new (std::nothrow). Response headers are
+// bounded by our own code (worst realistic case ~13: defaults + standard + CORS + custom), so
+// a fixed array removes the entire allocation class; emplace_back reports overflow instead of
+// growing. Header name/value contents are Arduino Strings, which fail soft and never throw.
+class AsyncResponseHeaders {
+  public:
+    static constexpr size_t kCapacity = 16;
+    AsyncWebHeader* begin() { return _items; }
+    AsyncWebHeader* end() { return _items + _size; }
+    const AsyncWebHeader* begin() const { return _items; }
+    const AsyncWebHeader* end() const { return _items + _size; }
+    size_t size() const { return _size; }
+    bool emplace_back(const char* name, const char* value) {
+      if (_size >= kCapacity)
+        return false;
+      _items[_size] = AsyncWebHeader(name, value);
+      ++_size;
+      return true;
+    }
+    bool emplace_back(const String& name, const String& value) { return emplace_back(name.c_str(), value.c_str()); }
+    bool emplace_back(const AsyncWebHeader& header) {
+      if (_size >= kCapacity)
+        return false;
+      _items[_size] = header;
+      ++_size;
+      return true;
+    }
+    AsyncWebHeader* erase(AsyncWebHeader* pos) {
+      for (AsyncWebHeader* p = pos; p + 1 < end(); ++p)
+        *p = std::move(*(p + 1));
+      if (_size) {
+        _items[--_size] = AsyncWebHeader();
+      }
+      return pos;
+    }
+    void clear() {
+      for (size_t i = 0; i < _size; ++i)
+        _items[i] = AsyncWebHeader();
+      _size = 0;
+    }
+
+  private:
+    AsyncWebHeader _items[kCapacity];
+    size_t _size = 0;
 };
 
 /*
@@ -759,7 +810,7 @@ typedef enum {
 class AsyncWebServerResponse {
   protected:
     int _code;
-    std::list<AsyncWebHeader> _headers;
+    AsyncResponseHeaders _headers; // Local patch: fixed-capacity, no throwing node allocations
     String _contentType;
     size_t _contentLength;
     bool _sendContentLength;
@@ -787,7 +838,7 @@ class AsyncWebServerResponse {
     bool addHeader(const String& name, long value, bool replaceExisting = true) { return addHeader(name.c_str(), value, replaceExisting); }
     bool removeHeader(const char* name);
     const AsyncWebHeader* getHeader(const char* name) const;
-    const std::list<AsyncWebHeader>& getHeaders() const { return _headers; }
+    const AsyncResponseHeaders& getHeaders() const { return _headers; }
 
 #ifndef ESP8266
     [[deprecated("Use instead: _assembleHead(String& buffer, uint8_t version)")]]

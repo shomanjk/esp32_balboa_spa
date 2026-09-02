@@ -97,6 +97,8 @@ static constexpr size_t kPortalResponseFillMax = 2048;
 #ifndef HTTP_LIVENESS_PROBE_FAIL_MAX
 #define HTTP_LIVENESS_PROBE_FAIL_MAX 3
 #endif
+#include "spaPortalAssets.h"
+
 #ifndef HTTP_LIVENESS_MIN_UPTIME_MS
 #define HTTP_LIVENESS_MIN_UPTIME_MS (3UL * 60UL * 1000UL)
 #endif
@@ -116,9 +118,34 @@ static void spaWebTouchHttpActivity()
   /* Reserved for future diagnostics; liveness uses loopback probes, not idle time. */
 }
 
+/** millis() of the last HTTP request that arrived over the radio. Corroborates Wi-Fi RX health
+ *  for the gateway-ping watchdog: an ICMP-dropping router must not look like the RX-death
+ *  failure while real traffic is flowing. The loopback liveness probe (device → its own IP)
+ *  never crosses the radio, so it is excluded. Written on the async_tcp task, read from loop();
+ *  an aligned 32-bit store is atomic on this target. */
+static volatile unsigned long s_lastRemoteHttpMs = 0;
+
+static void spaWebNoteRemoteActivity(const IPAddress &peer)
+{
+  if (peer != WiFi.localIP() && peer != IPAddress(0, 0, 0, 0))
+  {
+    s_lastRemoteHttpMs = millis();
+  }
+}
+
+static bool spaWebRecentRemoteHttp(unsigned long nowMs)
+{
+  const unsigned long last = s_lastRemoteHttpMs;
+  return last != 0 && nowMs - last < 30000UL;
+}
+
 static void spaWebDispatch(SpaWebHandlerFn handler, AsyncWebServerRequest *request)
 {
   spaWebTouchHttpActivity();
+  if (request->client() != nullptr)
+  {
+    spaWebNoteRemoteActivity(request->client()->remoteIP());
+  }
   handler(request);
 }
 
@@ -150,15 +177,22 @@ static const char kPortalRetryHtml[] PROGMEM =
 
 static void sendPortalBusyRetry(AsyncWebServerRequest *request)
 {
-  AsyncWebServerResponse *response = request->beginResponse_P(
+  // Emergency path — runs right after an allocation failure. beginResponse is nothrow
+  // (vendored patch) and no addHeader here: a header emplace is a throwing list-node
+  // allocation under -fno-exceptions, and the page's meta refresh already carries the
+  // retry hint a Retry-After header would duplicate.
+  AsyncWebServerResponse *response = request->beginResponse(
       503, "text/html", reinterpret_cast<const uint8_t *>(kPortalRetryHtml), sizeof(kPortalRetryHtml) - 1);
   if (response != nullptr)
   {
-    response->addHeader("Retry-After", "2");
     request->send(response);
     return;
   }
-  request->send(503, "text/plain", "portal busy, retry shortly");
+  // Not even the ~200B response object fit: drop the connection rather than allocate more.
+  if (request->client() != nullptr)
+  {
+    request->client()->close();
+  }
 }
 
 static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *pageTag)
@@ -172,6 +206,39 @@ static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *
   }
   s_portalLargePageInFlight = 1;
   return true;
+}
+
+
+/** Serve one flash-resident portal asset with immutable caching (URLs carry ?v=VERSION). */
+static void spaWebSendPortalAsset(AsyncWebServerRequest *request, const char *contentType,
+                                  const char *bodyData, size_t bodyLen)
+{
+  AsyncWebServerResponse *response =
+      request->beginResponse(200, contentType, reinterpret_cast<const uint8_t *>(bodyData), bodyLen);
+  if (response == nullptr)
+  {
+    request->send(503, "text/plain", "asset unavailable");
+    return;
+  }
+  response->addHeader("Cache-Control", "public, max-age=31536000, immutable");
+  request->send(response);
+}
+
+/** JSON response stream with the nothrow contract made explicit: beginResponseStream returns
+ *  nullptr under OOM (vendored patch). On failure a 503 is sent here so the SPA's fetch
+ *  retries; every caller must bail out on nullptr instead of serializing into *nullptr
+ *  during the exact low-memory window this is meant to survive. */
+static AsyncResponseStream *spaWebBeginJsonStream(AsyncWebServerRequest *request)
+{
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  if (response == nullptr)
+  {
+    Log.error("[Web]: JSON stream alloc failed freeHeap=%u usableMaxAlloc=%u" CR,
+              static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(portalUsableLargestBlock()));
+    request->send(503, "text/plain", "low memory, retry");
+  }
+  return response;
 }
 
 static void spaWebHttpLivenessTick();
@@ -337,6 +404,12 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
         memcpy(buffer, sharedBody->c_str() + index, n);
         return n;
       });
+  if (response == nullptr)
+  {
+    request->send(503, "text/plain", "low memory, retry");
+    spaWebTouchHttpActivity();
+    return;
+  }
   response->addHeader("ETag", etag);
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
@@ -740,14 +813,22 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
 
-  AsyncChunkedResponse *response = new (std::nothrow) AsyncChunkedResponse(
-      "text/html; charset=utf-8",
+  // Version-aware like beginChunkedResponse (bypassed only for nothrow construction):
+  // HTTP/1.0 clients get a close-delimited AsyncCallbackResponse — AsyncChunkedResponse
+  // would emit hex chunk framing that _assembleHead never declares for 1.0.
+  const AwsResponseFiller portalFiller =
       [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
         return portalHtmlChunkFill(slotU8, buffer, maxLen, index);
-      });
+      };
+  AsyncWebServerResponse *response =
+      request->version()
+          ? static_cast<AsyncWebServerResponse *>(
+                new (std::nothrow) AsyncChunkedResponse("text/html; charset=utf-8", portalFiller))
+          : static_cast<AsyncWebServerResponse *>(
+                new (std::nothrow) AsyncCallbackResponse("text/html; charset=utf-8", 0, portalFiller));
   if (response == nullptr)
   {
-    Log.error("[Web]: portal HTML AsyncChunkedResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
+    Log.error("[Web]: portal HTML response alloc failed freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
     spaWebTouchHttpActivity();
@@ -1044,44 +1125,7 @@ static void appendWifiStateSection(HtmlOut &html)
   html += "<div class='wifi-signal-row'><span class='wifi-signal-row__label'>5 min avg</span><span class='wifi-signal-row__value' id=\"wf-avg\">—</span></div>";
   html += "<p class='wifi-signal-caption'>RSSI over time (5s samples, ~5 min)</p>";
   html += "<div class='chart-wrap'><canvas id=\"wifiRssiChart\" height=\"120\"></canvas></div></div></div>";
-  html += "<script>";
-  html += "(function(){var pollMs=5000,maxPts=60,warnRssi=-75,badRssi=-80,chartH=120;var c=document.getElementById('wifiRssiChart');";
-  html += "if(!c)return;var x=c.getContext('2d'),d=[];";
-  html += "function set(t,v){var e=document.getElementById(t);if(e)e.textContent=v;}";
-  html += "function colorOf(v){if(v<=badRssi)return '#c62828';if(v<=warnRssi)return '#ef6c00';return '#04AA6D';}";
-  html += "function qualityOf(v){if(v<=badRssi)return 'Weak';if(v<=warnRssi)return 'Fair';if(v<=-67)return 'Good';return 'Excellent';}";
-  html += "function badgeBg(connected,status){if(connected)return '#04AA6D';if(status===0)return '#4b5563';if(status===4||status===5)return '#ef6c00';return '#c62828';}";
-  html += "function setBadge(connected,statusName,status){var b=document.getElementById('wf-status-badge');if(!b)return;b.textContent=statusName;b.style.background=badgeBg(connected,status);}";
-  html += "function yOf(v,lo,hi,h){return h-8-(v-lo)/(hi-lo)*(h-16);}";
-  html += "function resizeCanvas(){var p=c.parentElement;var cssW=p?Math.max(280,p.clientWidth-2):320;var cssH=chartH;var dpr=window.devicePixelRatio||1;c.width=Math.round(cssW*dpr);c.height=Math.round(cssH*dpr);c.style.width=cssW+'px';c.style.height=cssH+'px';x.setTransform(1,0,0,1,0,0);x.scale(dpr,dpr);draw();}";
-  html += "function draw(){var cc=window.portalChartColors?window.portalChartColors():{bg:'#fff',grid:'#ccc',fg:'#333'};var w=parseFloat(c.style.width)||320,h=parseFloat(c.style.height)||chartH;x.fillStyle=cc.bg;x.fillRect(0,0,w,h);";
-  html += "x.strokeStyle=cc.grid;x.strokeRect(0.5,0.5,w-1,h-1);x.fillStyle=cc.fg;x.font='12px sans-serif';";
-  html += "if(d.length<1){x.fillText('Collecting samples…',10,h/2);return;}";
-  html += "var lo=-100,hi=-30,i,m;";
-  html += "for(i=0;i<d.length;i++){m=d[i];if(m<lo)lo=m;if(m>hi)hi=m;}";
-  html += "if(warnRssi<lo)lo=warnRssi-2;if(warnRssi>hi)hi=warnRssi+2;if(badRssi<lo)lo=badRssi-2;if(badRssi>hi)hi=badRssi+2;";
-  html += "if(hi-lo<8){lo-=4;hi+=4;}";
-  html += "x.fillText(lo+' dBm',4,h-4);x.fillText(hi+' dBm',4,14);";
-  html += "x.strokeStyle='rgba(239,108,0,0.65)';x.setLineDash([4,4]);x.beginPath();x.moveTo(10,yOf(warnRssi,lo,hi,h));x.lineTo(w-10,yOf(warnRssi,lo,hi,h));x.stroke();";
-  html += "x.strokeStyle='rgba(198,40,40,0.75)';x.beginPath();x.moveTo(10,yOf(badRssi,lo,hi,h));x.lineTo(w-10,yOf(badRssi,lo,hi,h));x.stroke();x.setLineDash([]);";
-  html += "x.strokeStyle='#04AA6D';x.lineWidth=1.5;x.beginPath();";
-  html += "for(i=0;i<d.length;i++){var slot=maxPts-d.length+i;var px=10+slot*(w-20)/Math.max(1,maxPts-1);";
-  html += "var py=yOf(d[i],lo,hi,h);if(i===0)x.moveTo(px,py);else x.lineTo(px,py);}";
-  html += "x.stroke();}";
-  html += "function poll(){fetch('/api/wifi').then(function(r){return r.json();}).then(function(j){";
-  html += "setBadge(j.connected,j.statusName,j.status);set('wf-st',String(j.status));";
-  html += "set('wf-ssid',j.connected?j.ssid:'—');set('wf-host',j.hostname||'—');";
-  html += "set('wf-ip',j.connected?j.ip:'—');set('wf-gw',j.connected?j.gateway:'—');";
-  html += "set('wf-sn',j.connected?j.subnet:'—');set('wf-dns',j.connected?j.dns:'—');";
-  html += "set('wf-ch',j.connected?String(j.channel):'—');set('wf-mac',j.mac||'—');";
-  html += "set('wf-bssid',j.connected&&j.bssid?j.bssid:'—');";
-  html += "set('wf-bssid-lock',j.bssidLock?j.bssidLock:'— (strongest AP)');";
-  html += "if(j.connected&&typeof j.rssi==='number'){var q=qualityOf(j.rssi);set('wf-rssi',j.rssi+' dBm');set('wf-quality',q);set('wf-signal-now',j.rssi+' dBm '+q);";
-  html += "var rc=document.getElementById('wf-rssi'),qc=document.getElementById('wf-quality'),sc=document.getElementById('wf-signal-now');var col=colorOf(j.rssi);if(rc)rc.style.color=col;if(qc)qc.style.color=col;if(sc)sc.style.color=col;";
-  html += "d.push(j.rssi);if(d.length>maxPts)d.shift();var sum=0;for(var k=0;k<d.length;k++)sum+=d[k];set('wf-avg',(sum/d.length).toFixed(1)+' dBm');draw();}";
-  html += "else{set('wf-rssi','—');set('wf-quality','');set('wf-signal-now','—');set('wf-avg','—');var rc=document.getElementById('wf-rssi'),sc=document.getElementById('wf-signal-now');if(rc)rc.style.color='';if(sc)sc.style.color='';d=[];draw();}}).catch(function(){});}";
-  html += "window.addEventListener('resize',resizeCanvas);window.addEventListener('orientationchange',resizeCanvas);window.addEventListener('portal-theme-change',resizeCanvas);resizeCanvas();poll();setInterval(poll,pollMs);})();";
-  html += "</script>";
+
 
   html += "</section>";
 }
@@ -1120,6 +1164,7 @@ static void onWsLogEvent(AsyncWebSocket *wsServer, AsyncWebSocketClient *client,
   if (type == WS_EVT_CONNECT)
   {
     spaWebTouchHttpActivity();
+    spaWebNoteRemoteActivity(client->remoteIP());
     String hist;
     webLogBufferBuildJsonFull(hist);
     client->text(hist);
@@ -1163,13 +1208,17 @@ static void spaWebServerLogPoll()
  * come back, the stack is provably wedged and only a restart recovers it. Detection worst case
  * ~25s. Raw Serial for the fatal path so runtime log levels cannot mute it.
  */
-static volatile unsigned long s_lwipEchoMs = 0;
+// Sequence tokens, not timestamps: a beat only passes when the echo carries the seq of the
+// most recently sent beat. Timestamp comparison let a late echo from beat N mask a missing
+// echo for beat N+1 and misbehaved around millis() wraparound.
+static volatile uint32_t s_lwipEchoSeq = 0;
+static uint32_t s_lwipBeatSeq = 0; // 0 = no beat sent yet
 static unsigned long s_lwipBeatSentMs = 0;
 static uint8_t s_lwipBeatFailStreak = 0;
 
-static void spaWebLwipEcho(void *)
+static void spaWebLwipEcho(void *ctx)
 {
-  s_lwipEchoMs = millis();
+  s_lwipEchoSeq = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx));
 }
 
 static void spaWebLwipHeartbeatTick()
@@ -1184,7 +1233,7 @@ static void spaWebLwipHeartbeatTick()
     return;
   }
   // Evaluate the previous beat before sending the next one.
-  if (s_lwipBeatSentMs != 0 && s_lwipEchoMs < s_lwipBeatSentMs)
+  if (s_lwipBeatSeq != 0 && s_lwipEchoSeq != s_lwipBeatSeq)
   {
     s_lwipBeatFailStreak++;
     Serial.printf("[NetProbe] lwIP heartbeat missed (%u/2)\r\n",
@@ -1206,11 +1255,14 @@ static void spaWebLwipHeartbeatTick()
     ESP.restart();
   }
   s_lwipBeatSentMs = nowMs;
-  if (tcpip_try_callback(&spaWebLwipEcho, nullptr) != ERR_OK)
+  if (++s_lwipBeatSeq == 0)
   {
-    // Full tcpip mailbox counts as a missed beat: the echo can never be queued.
-    s_lwipEchoMs = 0;
+    s_lwipBeatSeq = 1; // skip the "no beat yet" sentinel on wrap
   }
+  // On a full tcpip mailbox the echo can never arrive; the stale echo seq will read as a
+  // missed beat at the next evaluation, which is exactly right.
+  (void)tcpip_try_callback(&spaWebLwipEcho,
+                           reinterpret_cast<void *>(static_cast<uintptr_t>(s_lwipBeatSeq)));
 }
 
 #include "ping/ping_sock.h"
@@ -1225,19 +1277,26 @@ static void spaWebLwipHeartbeatTick()
  * that drops ICMP can never cause a restart loop. Three consecutive misses while associated
  * (~30s) → restart. Raw Serial so runtime log levels cannot mute the fatal path.
  */
-static volatile uint8_t s_gwPingOutcome = 0; // 0 pending/none, 1 success, 2 timeout
+// Each probe carries its sequence number through cb_args; only the result whose seq matches
+// the last-launched probe is evaluated, so a delayed callback from an older probe (or from a
+// session predating a reconnect) can neither arm, clear, nor fail the current watchdog.
+// Result packing: (seq << 2) | outcome, outcome 1 = success, 2 = timeout.
+static volatile uint32_t s_gwPingResult = 0;
+static uint32_t s_gwPingSeq = 0; // 0 = no probe launched yet
 static uint8_t s_gwPingFailStreak = 0;
 static bool s_gwPingArmed = false;
+static bool s_gwPingReconnectTried = false;
+static unsigned long s_gwPingReconnectMs = 0;
 static unsigned long s_gwPingLastMs = 0;
 
-static void spaWebGwPingSuccess(esp_ping_handle_t, void *)
+static void spaWebGwPingSuccess(esp_ping_handle_t, void *args)
 {
-  s_gwPingOutcome = 1;
+  s_gwPingResult = (static_cast<uint32_t>(reinterpret_cast<uintptr_t>(args)) << 2) | 1u;
 }
 
-static void spaWebGwPingTimeout(esp_ping_handle_t, void *)
+static void spaWebGwPingTimeout(esp_ping_handle_t, void *args)
 {
-  s_gwPingOutcome = 2;
+  s_gwPingResult = (static_cast<uint32_t>(reinterpret_cast<uintptr_t>(args)) << 2) | 2u;
 }
 
 static void spaWebGwPingEnd(esp_ping_handle_t h, void *)
@@ -1245,46 +1304,89 @@ static void spaWebGwPingEnd(esp_ping_handle_t h, void *)
   esp_ping_delete_session(h);
 }
 
+static void spaWebWifiPathWatchdogRestart(const char *detail)
+{
+#if defined(DIAG_FAULT_CAPTURE)
+  faultCaptureAppendf("[fault] Wi-Fi path watchdog freeHeap=%u",
+                      static_cast<unsigned>(ESP.getFreeHeap()));
+#endif
+  setLastRestartReason("Wi-Fi path watchdog");
+  Serial.println(detail);
+  delay(50);
+  ESP.restart();
+}
+
 static void spaWebWifiPathWatchdogTick()
 {
+  const unsigned long nowMs = millis();
   if (!serverSetup || WiFi.status() != WL_CONNECTED)
   {
+    // Fail-safe for the reconnect escalation below: if we forced a reconnect after misses and
+    // the link never re-associates, the driver is in the RX-dead state a reconnect cannot fix
+    // (association needs working RX too) — restart, as the pre-escalation watchdog would have.
+    if (s_gwPingReconnectMs != 0 && nowMs - s_gwPingReconnectMs > 30000UL)
+    {
+      spaWebWifiPathWatchdogRestart("[NetProbe] Wi-Fi reconnect after lost pings never re-associated, restarting");
+    }
     s_gwPingArmed = false;
     s_gwPingFailStreak = 0;
-    s_gwPingOutcome = 0;
+    s_gwPingResult = 0;
+    s_gwPingSeq = 0;
     return;
   }
-  const unsigned long nowMs = millis();
   if (nowMs - s_gwPingLastMs < 10000UL)
   {
     return;
   }
   s_gwPingLastMs = nowMs;
+  // Associated again, so a forced reconnect — if any — did re-associate: disarm the
+  // never-re-associated fail-safe (a stale timestamp would otherwise fire during a later,
+  // unrelated AP outage). s_gwPingReconnectTried stays set until a ping succeeds so one miss
+  // episode forces at most one reconnect; a wedged driver that never even drops the
+  // association is still caught by the miss streak below.
+  s_gwPingReconnectMs = 0;
 
-  // Evaluate the previous probe before launching the next one.
-  if (s_gwPingOutcome == 1)
+  // Evaluate the previous probe before launching the next one; only its own seq counts.
+  const uint32_t result = s_gwPingResult;
+  if (s_gwPingSeq != 0 && (result >> 2) == s_gwPingSeq)
   {
-    s_gwPingArmed = true;
-    s_gwPingFailStreak = 0;
-  }
-  else if (s_gwPingOutcome == 2 && s_gwPingArmed)
-  {
-    s_gwPingFailStreak++;
-    Serial.printf("[NetProbe] gateway ping missed (%u/3)\r\n",
-                  static_cast<unsigned>(s_gwPingFailStreak));
-    if (s_gwPingFailStreak >= 3)
+    const uint8_t outcome = result & 3u;
+    if (outcome == 1)
     {
-#if defined(DIAG_FAULT_CAPTURE)
-      faultCaptureAppendf("[fault] Wi-Fi path watchdog freeHeap=%u",
-                          static_cast<unsigned>(ESP.getFreeHeap()));
-#endif
-      setLastRestartReason("Wi-Fi path watchdog");
-      Serial.println("[NetProbe] Wi-Fi RX path dead (3 gateway pings lost while associated), restarting");
-      delay(50);
-      ESP.restart();
+      s_gwPingArmed = true;
+      s_gwPingFailStreak = 0;
+      s_gwPingReconnectTried = false;
+      s_gwPingReconnectMs = 0;
+    }
+    else if (outcome == 2 && s_gwPingArmed)
+    {
+      s_gwPingFailStreak++;
+      Serial.printf("[NetProbe] gateway ping missed (%u/4)\r\n",
+                    static_cast<unsigned>(s_gwPingFailStreak));
+      if (spaWebRecentRemoteHttp(nowMs))
+      {
+        // ICMP is being dropped or rate-limited while real traffic still crosses the radio —
+        // not the RX-death failure this watchdog exists for. Never escalate while corroborated.
+        Serial.println("[NetProbe] ICMP lost but HTTP traffic alive - suppressing escalation");
+        s_gwPingFailStreak = 0;
+      }
+      else if (s_gwPingFailStreak == 2 && !s_gwPingReconnectTried)
+      {
+        // Cheaper first step than a reboot; covers gateway hiccups and driver states a
+        // re-association can clear. The fail-safe above reboots if this never comes back.
+        s_gwPingReconnectTried = true;
+        s_gwPingReconnectMs = nowMs;
+        Serial.println("[NetProbe] gateway unreachable twice, forcing Wi-Fi reconnect before restart");
+        WiFi.reconnect();
+        return; // let the reconnect settle; probing again this tick would race association
+      }
+      else if (s_gwPingFailStreak >= 4)
+      {
+        spaWebWifiPathWatchdogRestart(
+            "[NetProbe] Wi-Fi RX path dead (4 gateway pings lost while associated, reconnect did not help), restarting");
+      }
     }
   }
-  s_gwPingOutcome = 0;
 
   const IPAddress gw = WiFi.gatewayIP();
   if (gw == IPAddress(0, 0, 0, 0))
@@ -1300,6 +1402,11 @@ static void spaWebWifiPathWatchdogTick()
   cbs.on_ping_success = spaWebGwPingSuccess;
   cbs.on_ping_timeout = spaWebGwPingTimeout;
   cbs.on_ping_end = spaWebGwPingEnd;
+  if (++s_gwPingSeq == 0)
+  {
+    s_gwPingSeq = 1; // skip the "no probe yet" sentinel on wrap
+  }
+  cbs.cb_args = reinterpret_cast<void *>(static_cast<uintptr_t>(s_gwPingSeq));
   esp_ping_handle_t handle;
   if (esp_ping_new_session(&cfg, &cbs, &handle) == ESP_OK)
   {
@@ -1478,8 +1585,11 @@ void spaWebServerLoop()
       Log.notice(F("[Web]: Restart requested by %p" CR), request->client()->remoteIP());
       setLastRestartReason("Web restart");
       AsyncWebServerResponse *response = request->beginResponse(302);
-      response->addHeader("Location", "/");
-      request->send(response);
+      if (response != nullptr)
+      {
+        response->addHeader("Location", "/");
+        request->send(response);
+      }
       delay(1000);
       ESP.restart(); });
 
@@ -1496,6 +1606,26 @@ void spaWebServerLoop()
       handleOptionsLoginData(request);
     });
     spaWebRegisterPostWithBody("/users/login", handleLoginData);
+
+    // Flash-resident shared portal assets (see spaPortalAssets.h).
+    server.on("/assets/portal.css", HTTP_GET, [](AsyncWebServerRequest *request) {
+      spaWebSendPortalAsset(request, "text/css", kPortalCss, sizeof(kPortalCss) - 1);
+    });
+    server.on("/assets/portal-head.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      spaWebSendPortalAsset(request, "application/javascript", kPortalHeadJs, sizeof(kPortalHeadJs) - 1);
+    });
+    server.on("/assets/portal-status.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      spaWebSendPortalAsset(request, "application/javascript", kPortalStatusJs, sizeof(kPortalStatusJs) - 1);
+    });
+    server.on("/assets/portal-config.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      spaWebSendPortalAsset(request, "application/javascript", kPortalConfigJs, sizeof(kPortalConfigJs) - 1);
+    });
+    server.on("/assets/portal-state.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      spaWebSendPortalAsset(request, "application/javascript", kPortalStateJs, sizeof(kPortalStateJs) - 1);
+    });
+    server.on("/assets/portal-logs.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      spaWebSendPortalAsset(request, "application/javascript", kPortalLogsJs, sizeof(kPortalLogsJs) - 1);
+    });
 
     server.onNotFound([](AsyncWebServerRequest *request) {
       spaWebTouchHttpActivity();
@@ -1525,6 +1655,11 @@ void handleepdpanel(AsyncWebServerRequest *request)
   {
     // Send the BMP image as a response
     AsyncWebServerResponse *response = request->beginResponse_P(200, "image/jpeg", jpegBuffer, jpegSize);
+    if (response == nullptr)
+    {
+      request->send(503, "text/plain", "low memory, retry");
+      return;
+    }
     response->addHeader("Content-Disposition", "inline; filename=\"framebuffer.jpeg\"");
     request->send(response);
   }
@@ -1535,24 +1670,20 @@ void handleepdpanel(AsyncWebServerRequest *request)
 }
 #endif
 
-#define portalBaseStyle "<style>:root{--bg:#f4f7f8;--panel:#fff;--text:#1f2933;--muted:#5f6c7b;--brand:#037e52;--brandActive:#4b5563;--border:#d4dbe1;--focus:#0f4a87;--heading:#0f4a87;--surface-2:#fafbfc;--chart-bg:#fff;--chart-grid:#ccc;--chart-fg:#333;--chart-grid-line:#eef1f4;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;color-scheme:light;}@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141a1f;--panel:#1e262d;--text:#e8edf2;--muted:#9aa8b5;--brand:#04a86d;--brandActive:#6b7280;--border:#3a4550;--focus:#6eb3ff;--heading:#8ec5ff;--surface-2:#252e36;--chart-bg:#1e262d;--chart-grid:#3a4550;--chart-fg:#c8d4de;--chart-grid-line:#2a343c;color-scheme:dark;}}:root[data-theme=dark]{--bg:#141a1f;--panel:#1e262d;--text:#e8edf2;--muted:#9aa8b5;--brand:#04a86d;--brandActive:#6b7280;--border:#3a4550;--focus:#6eb3ff;--heading:#8ec5ff;--surface-2:#252e36;--chart-bg:#1e262d;--chart-grid:#3a4550;--chart-fg:#c8d4de;--chart-grid-line:#2a343c;color-scheme:dark;}:root[data-theme=light]{color-scheme:light;}*{box-sizing:border-box;}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}html,body{max-width:100%;overflow-x:hidden;}img,canvas{display:block;max-width:100%;height:auto;}.skip-link{position:absolute;left:10px;top:-48px;z-index:999;background:var(--focus);color:#fff;padding:10px 12px;border-radius:6px;text-decoration:none;}.skip-link:focus{top:10px;outline:3px solid #fff;outline-offset:2px;}.page{max-width:980px;margin:0 auto;padding:var(--space-3);}h1{color:var(--heading);font-size:1.05rem;margin:0 0 var(--space-2) 0;line-height:1.3;}.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:var(--space-3);margin-bottom:var(--space-3);box-shadow:0 1px 2px rgba(0,0,0,.04);}ul{list-style:none;margin:0;padding:0;}li{padding:var(--space-1) 0;border-bottom:1px dashed var(--border);overflow-wrap:anywhere;word-break:break-word;}li:last-child{border-bottom:none;}.spacer{height:8px;border-bottom:none;padding:0;}.portal-nav-bar{display:flex;align-items:stretch;gap:var(--space-1);margin-bottom:var(--space-3);}.top-nav{display:flex;flex-wrap:wrap;gap:var(--space-1);flex:1 1 auto;margin-bottom:0;min-width:0;}.portal-nav-util{flex:0 0 auto;display:flex;align-items:stretch;}.top-nav a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease}.top-nav a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav a:hover{background-color:var(--brandActive)}}.top-nav a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav a:active{transform:translateY(1px)}@media (prefers-reduced-motion:reduce){.top-nav a{transition:none}}.portal-theme-toggle{display:inline-flex!important;align-items:center;justify-content:center;gap:6px;flex:0 0 auto!important;width:auto!important;min-width:88px!important;padding:12px 14px!important;background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;font-size:14px!important;font-weight:600!important;cursor:pointer;border-radius:8px;min-height:44px;transition:background-color .15s ease,transform .15s ease;box-shadow:none!important}.portal-theme-toggle__icon{display:inline-flex;line-height:0;flex-shrink:0}.portal-theme-toggle__icon svg{display:block}@media (hover:hover){.portal-theme-toggle:hover{background:var(--surface-2)!important;color:var(--text)!important;transform:none!important}}.portal-theme-toggle:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.portal-theme-toggle:active{transform:translateY(1px)}@media (min-width:641px){.portal-nav-util .portal-theme-toggle{min-width:44px!important;width:44px!important;padding:10px!important;border-radius:999px}.portal-nav-util .portal-theme-toggle__label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}}.top-nav-mobile{display:none}.top-nav-mobile__summary{display:block;cursor:pointer;list-style:none;padding:0;margin:0}.top-nav-mobile__summary::-webkit-details-marker{display:none}.top-nav-mobile__summary::marker{content:''}.top-nav-mobile__summary-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:15px;line-height:1.2;box-shadow:0 1px 3px rgba(0,0,0,.06)}.top-nav-mobile__context{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.top-nav-mobile__menu{display:flex;align-items:center;gap:6px;color:var(--brand);font-weight:700;flex-shrink:0}.top-nav-mobile__chev{border:solid currentColor;border-width:0 2px 2px 0;display:inline-block;padding:3px;transform:rotate(45deg);transition:transform .15s ease;margin-top:-2px}.top-nav-mobile[open] .top-nav-mobile__chev{transform:rotate(225deg);margin-top:2px}.top-nav-mobile__panel{display:flex;flex-direction:column;gap:var(--space-1);margin-top:var(--space-2);padding:var(--space-2);background:var(--panel);border:1px solid var(--border);border-radius:8px}.top-nav-mobile__panel a{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;font-weight:600;width:100%;box-sizing:border-box;transition:background-color .15s ease,transform .15s ease}.top-nav-mobile__panel a.active{background-color:var(--brandActive);color:#fff}@media (hover:hover){.top-nav-mobile__panel a:hover{background-color:var(--brandActive)}}.top-nav-mobile__panel a:focus-visible{outline:3px solid var(--focus);outline-offset:2px}.top-nav-mobile__panel a:active{transform:translateY(1px)}.top-nav-mobile__panel .portal-theme-toggle{width:100%!important;box-sizing:border-box}.portal-nav-scroll-sentinel{height:1px;width:100%;margin:0;padding:0;border:0;pointer-events:none;opacity:0;position:relative}@media (prefers-reduced-motion:reduce){.top-nav-mobile__chev{transition:none}.top-nav-mobile__panel a{transition:none}.portal-theme-toggle{transition:none}}button{border:none;color:#fff;padding:12px 16px;text-align:center;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;font-size:15px;line-height:1.2;min-height:44px;cursor:pointer;background-color:var(--brand);border-radius:8px;flex:1 1 170px;font-weight:600;transition:background-color .15s ease,transform .15s ease;}.active{background-color:var(--brandActive);color:#fff;}@media (hover:hover){button:hover{background-color:var(--brandActive);}}button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}button:active{transform:translateY(1px);}.panel-image{width:100%;max-width:600px;margin:0 auto var(--space-3) auto;border-radius:8px;}.chart-title{margin:12px 0 6px 0;color:var(--muted);}.chart-wrap{width:100%;max-width:100%;overflow:hidden;border:1px solid var(--chart-grid);background:var(--chart-bg);border-radius:6px;}#wf-rssi,#wf-quality{font-weight:700;}@media (max-width:640px){.portal-nav-bar{display:none !important}.top-nav-mobile{display:block;margin-bottom:var(--space-3)}.top-nav-mobile__summary{position:sticky;top:0;z-index:50}.top-nav-mobile__summary .top-nav-mobile__summary-inner{background:var(--panel)}body.portal-nav-compact .top-nav-mobile__summary-inner{padding:6px 10px;font-size:0.88rem}body.portal-nav-compact .top-nav-mobile__menu-text{display:none}.page{padding:var(--space-2);}button{flex:1 1 100%;width:100%;}.log-controls button,.range-toggle button,.status-temp-units-toggle button,.equip-btn,.portal-theme-toggle{width:auto!important;flex:0 1 auto!important;min-width:0}.top-nav-mobile__panel .portal-theme-toggle{width:100%!important}.panel{padding:var(--space-2);}h1{font-size:1rem;}}@media (prefers-reduced-motion:reduce){button{transition:none;}}</style>"
 
 #define portalHeadIcon "<link rel='icon' href='/assets/style/hottubbing.webp' type='image/x-icon' />"
 
-#define portalThemeScript "<script>(function(){var KEY='portal-theme';var MODES=['system','light','dark'];var LABELS={system:'Auto',light:'Light',dark:'Dark'};var ICONS={system:'<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a10 10 0 0 0 0 20V2z\" fill=\"currentColor\" stroke=\"none\"/></svg>',light:'<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/></svg>',dark:'<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z\"/></svg>'};function getStored(){try{var v=localStorage.getItem(KEY);if(MODES.indexOf(v)>=0)return v;}catch(e){}return'system';}function syncToggles(mode){var lbl=LABELS[mode]||'Auto';var icon=ICONS[mode]||ICONS.system;document.querySelectorAll('[data-portal-theme-toggle]').forEach(function(b){var ic=b.querySelector('.portal-theme-toggle__icon');var lb=b.querySelector('.portal-theme-toggle__label');if(ic)ic.innerHTML=icon;if(lb)lb.textContent=lbl;b.setAttribute('aria-label','Theme: '+lbl+'. Click to change.');b.setAttribute('title','Theme: '+lbl+' (click to change)');});}function apply(mode){var r=document.documentElement;if(mode==='light'||mode==='dark')r.setAttribute('data-theme',mode);else r.removeAttribute('data-theme');syncToggles(mode);window.dispatchEvent(new Event('portal-theme-change'));}function setTheme(mode){if(MODES.indexOf(mode)<0)mode='system';try{localStorage.setItem(KEY,mode);}catch(e){}apply(mode);}window.portalCycleTheme=function(){var i=MODES.indexOf(getStored());setTheme(MODES[(i+1)%MODES.length]);};window.portalGetTheme=getStored;window.portalChartColors=function(){var s=getComputedStyle(document.documentElement);function g(n,d){var v=s.getPropertyValue(n);return(v&&v.trim())?v.trim():d;}return{bg:g('--chart-bg','#fff'),grid:g('--chart-grid','#ccc'),fg:g('--chart-fg','#333'),gridLine:g('--chart-grid-line','#eef1f4')};};apply(getStored());window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if(getStored()==='system')window.dispatchEvent(new Event('portal-theme-change'));});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){syncToggles(getStored());});else syncToggles(getStored());})();</script>"
 
-#define portalHeadNavScript "<script>(function(){var m=window.matchMedia('(max-width:640px)');var io=null;function setup(){document.body.classList.remove('portal-nav-compact');if(io){io.disconnect();io=null;}if(!m.matches)return;var s=document.querySelector('.portal-nav-scroll-sentinel');if(!s)return;io=new IntersectionObserver(function(e){e.forEach(function(x){document.body.classList.toggle('portal-nav-compact',!x.isIntersecting);});},{threshold:0});io.observe(s);}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();m.addEventListener('change',setup);})();</script>"
 
 #define portalThemeToggleBtn "<button type=\"button\" class=\"portal-theme-toggle\" data-portal-theme-toggle onclick=\"portalCycleTheme()\" aria-label=\"Theme: Auto. Click to change.\"><span class=\"portal-theme-toggle__icon\" aria-hidden=\"true\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a10 10 0 0 0 0 20V2z\" fill=\"currentColor\" stroke=\"none\"/></svg></span><span class=\"portal-theme-toggle__label\">Auto</span></button>"
 
-#define portalSemanticDarkStyle "<style>@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .heat-hero--ok{border-color:#4a7090;background:#1a2838;color:#c8dce8}:root:not([data-theme=light]) .heat-hero--ok .heat-hero-icon{color:#8ec5ff}:root:not([data-theme=light]) .heat-hero--init{border-color:#9a8530;background:#3a3218;color:#f5e6a8}:root:not([data-theme=light]) .heat-hero--init .heat-hero-icon{color:#e6c200}:root:not([data-theme=light]) .heat-hero--alert{border-color:#a05050;background:#3a2020;color:#ffcdd2}:root:not([data-theme=light]) .heat-hero--alert .heat-hero-icon{color:#ef9a9a}:root:not([data-theme=light]) .heat-hero--heat-idle{border-color:#4a5560;background:#2a3038;color:#b0bec5}:root:not([data-theme=light]) .heat-hero--heat-idle .heat-hero-icon{color:#9aa8b5}:root:not([data-theme=light]) .heat-hero--heat-on{border-color:#c06040;background:#3d2218;color:#ffccbc}:root:not([data-theme=light]) .heat-hero--heat-on .heat-hero-icon{color:#ffab91}:root:not([data-theme=light]) .heat-hero--heat-alt{border-color:#b89030;background:#3a3218;color:#fff8e1}:root:not([data-theme=light]) .heat-hero--heat-alt .heat-hero-icon{color:#ffe082}:root:not([data-theme=light]) .heat-hero--heat-reserved{border-color:#546e7a;background:#2a3238;color:#b0bec5}:root:not([data-theme=light]) .heat-hero--heat-reserved .heat-hero-icon{color:#90a4ae}:root:not([data-theme=light]) .status-reminder-banner--warn{border-color:#9a8530;background:#3a3218;color:#f5e6a8}:root:not([data-theme=light]) .status-reminder-banner--warn .status-reminder-banner-icon{color:#e6c200}:root:not([data-theme=light]) .status-reminder-banner--fault{border-color:#a05050;background:#3a2020;color:#ffcdd2}:root:not([data-theme=light]) .status-reminder-banner--fault .status-reminder-banner-icon{color:#ef9a9a}:root:not([data-theme=light]) .heat-chip{background:var(--surface-2);color:var(--text)}:root:not([data-theme=light]) .heat-chip--heat-idle{color:#b0bec5;background:#2a3038;border-color:#4a5560}:root:not([data-theme=light]) .heat-chip--heat-on{color:#ffab91;background:#3d2218;border-color:#8b4513}:root:not([data-theme=light]) .heat-chip--heat-alt{color:#ffe082;background:#3a3218;border-color:#8a7530}:root:not([data-theme=light]) .heat-chip--need-yes{color:#ef9a9a;background:#3d2020;border-color:#a05050}:root:not([data-theme=light]) .heat-chip--need-no{color:#90a4ae;background:#2a3238;border-color:#546e7a}:root:not([data-theme=light]) .equip-cell--off{background:#2a3038;border-color:#4a5560;color:var(--text)}:root:not([data-theme=light]) .equip-cell--low{background:#3a3218;border-color:#b89030;color:#f5e6a8}:root:not([data-theme=light]) .equip-cell--high,:root:not([data-theme=light]) .equip-cell--on{background:#1a3028;border-color:#4a9070;color:#a5d6a7}:root:not([data-theme=light]) .equip-cell.equip-absent{background:#252e36;border-color:#3a4550}:root:not([data-theme=light]) .equip-cell.equip-absent .equip-label{color:var(--muted)}:root:not([data-theme=light]) .equip-cell.equip-absent .equip-val{color:var(--text)}:root:not([data-theme=light]) .range-band-active-low{border-color:var(--focus);background:#1a2838;color:var(--text)}:root:not([data-theme=light]) .range-band-active-high{border-color:#ef5350;background:#3a2020;color:#ffcdd2}:root:not([data-theme=light]) .range-band-active-low .range-band-indicator,:root:not([data-theme=light]) .range-band-active-high .range-band-indicator{color:inherit}:root:not([data-theme=light]) .config-fault-sev--info{color:#a5d6a7;background:#1a3028}:root:not([data-theme=light]) .config-fault-sev--warning{color:#f5e6a8;background:#3a3218}:root:not([data-theme=light]) .config-fault-sev--alert{color:#ffcdd2;background:#3d2020}:root:not([data-theme=light]) .fw-pill-current{background:#1a2838;color:var(--heading);border-color:#4a7090}:root:not([data-theme=light]) .fw-pill-latest{background:var(--surface-2);color:var(--muted)}:root:not([data-theme=light]) .fw-pill-branch{background:#3a3218;color:#f5d090;border-color:#8a7530}:root:not([data-theme=light]) button.fw-danger-btn{color:#ffcdd2!important;border-color:#a05050!important;background:#3d2020!important}:root:not([data-theme=light]) .status-control-row input{background:var(--panel);color:var(--text)}:root:not([data-theme=light]) .config-filter-card input[type=time],:root:not([data-theme=light]) .config-filter-card input[type=number]{background:var(--panel);color:var(--text);border:1px solid var(--border)}:root:not([data-theme=light]) .kv-row--alert dt,:root:not([data-theme=light]) .kv-row--alert dd{color:#ef9a9a}:root:not([data-theme=light]) .kv-row--alert-warn dt,:root:not([data-theme=light]) .kv-row--alert-warn dd{color:#f5e6a8}}:root[data-theme=dark] .heat-hero--ok{border-color:#4a7090;background:#1a2838;color:#c8dce8}:root[data-theme=dark] .heat-hero--ok .heat-hero-icon{color:#8ec5ff}:root[data-theme=dark] .heat-hero--init{border-color:#9a8530;background:#3a3218;color:#f5e6a8}:root[data-theme=dark] .heat-hero--init .heat-hero-icon{color:#e6c200}:root[data-theme=dark] .heat-hero--alert{border-color:#a05050;background:#3a2020;color:#ffcdd2}:root[data-theme=dark] .heat-hero--alert .heat-hero-icon{color:#ef9a9a}:root[data-theme=dark] .heat-hero--heat-idle{border-color:#4a5560;background:#2a3038;color:#b0bec5}:root[data-theme=dark] .heat-hero--heat-idle .heat-hero-icon{color:#9aa8b5}:root[data-theme=dark] .heat-hero--heat-on{border-color:#c06040;background:#3d2218;color:#ffccbc}:root[data-theme=dark] .heat-hero--heat-on .heat-hero-icon{color:#ffab91}:root[data-theme=dark] .heat-hero--heat-alt{border-color:#b89030;background:#3a3218;color:#fff8e1}:root[data-theme=dark] .heat-hero--heat-alt .heat-hero-icon{color:#ffe082}:root[data-theme=dark] .heat-hero--heat-reserved{border-color:#546e7a;background:#2a3238;color:#b0bec5}:root[data-theme=dark] .heat-hero--heat-reserved .heat-hero-icon{color:#90a4ae}:root[data-theme=dark] .status-reminder-banner--warn{border-color:#9a8530;background:#3a3218;color:#f5e6a8}:root[data-theme=dark] .status-reminder-banner--warn .status-reminder-banner-icon{color:#e6c200}:root[data-theme=dark] .status-reminder-banner--fault{border-color:#a05050;background:#3a2020;color:#ffcdd2}:root[data-theme=dark] .status-reminder-banner--fault .status-reminder-banner-icon{color:#ef9a9a}:root[data-theme=dark] .heat-chip{background:var(--surface-2);color:var(--text)}:root[data-theme=dark] .heat-chip--heat-idle{color:#b0bec5;background:#2a3038;border-color:#4a5560}:root[data-theme=dark] .heat-chip--heat-on{color:#ffab91;background:#3d2218;border-color:#8b4513}:root[data-theme=dark] .heat-chip--heat-alt{color:#ffe082;background:#3a3218;border-color:#8a7530}:root[data-theme=dark] .heat-chip--need-yes{color:#ef9a9a;background:#3d2020;border-color:#a05050}:root[data-theme=dark] .heat-chip--need-no{color:#90a4ae;background:#2a3238;border-color:#546e7a}:root[data-theme=dark] .equip-cell--off{background:#2a3038;border-color:#4a5560;color:var(--text)}:root[data-theme=dark] .equip-cell--low{background:#3a3218;border-color:#b89030;color:#f5e6a8}:root[data-theme=dark] .equip-cell--high,:root[data-theme=dark] .equip-cell--on{background:#1a3028;border-color:#4a9070;color:#a5d6a7}:root[data-theme=dark] .equip-cell.equip-absent{background:#252e36;border-color:#3a4550}:root[data-theme=dark] .equip-cell.equip-absent .equip-label{color:var(--muted)}:root[data-theme=dark] .equip-cell.equip-absent .equip-val{color:var(--text)}:root[data-theme=dark] .range-band-active-low{border-color:var(--focus);background:#1a2838;color:var(--text)}:root[data-theme=dark] .range-band-active-high{border-color:#ef5350;background:#3a2020;color:#ffcdd2}:root[data-theme=dark] .range-band-active-low .range-band-indicator,:root[data-theme=dark] .range-band-active-high .range-band-indicator{color:inherit}:root[data-theme=dark] .config-fault-sev--info{color:#a5d6a7;background:#1a3028}:root[data-theme=dark] .config-fault-sev--warning{color:#f5e6a8;background:#3a3218}:root[data-theme=dark] .config-fault-sev--alert{color:#ffcdd2;background:#3d2020}:root[data-theme=dark] .fw-pill-current{background:#1a2838;color:var(--heading);border-color:#4a7090}:root[data-theme=dark] .fw-pill-latest{background:var(--surface-2);color:var(--muted)}:root[data-theme=dark] .fw-pill-branch{background:#3a3218;color:#f5d090;border-color:#8a7530}:root[data-theme=dark] button.fw-danger-btn{color:#ffcdd2!important;border-color:#a05050!important;background:#3d2020!important}:root[data-theme=dark] .status-control-row input{background:var(--panel);color:var(--text)}:root[data-theme=dark] .config-filter-card input[type=time],:root[data-theme=dark] .config-filter-card input[type=number]{background:var(--panel);color:var(--text);border:1px solid var(--border)}:root[data-theme=dark] .kv-row--alert dt,:root[data-theme=dark] .kv-row--alert dd{color:#ef9a9a}:root[data-theme=dark] .kv-row--alert-warn dt,:root[data-theme=dark] .kv-row--alert-warn dd{color:#f5e6a8}</style>"
 
-#define portalLogsHeadExtraStyle "<style>.log-pre{min-height:260px;max-height:70vh;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;margin:0;border:1px solid var(--border)}.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--panel);color:var(--text)}.log-controls label{font-size:14px;color:var(--muted)}.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px;background:var(--panel);color:var(--text)}</style>"
 
 /** True when portal global CSS marker is present (String: buffer scan; chunks: append stayed healthy). */
 static bool portalHtmlSawGlobalCss(const String &html)
 {
-  return html.indexOf(F(":root{--bg:#f4f7f8")) >= 0;
+  // Global CSS is a flash-served asset now; presence means the <link> made it into the head.
+  return html.indexOf(F("/assets/portal.css")) >= 0;
 }
 
 static bool portalHtmlSawGlobalCss(const PortalHtmlChunks &html)
@@ -1577,11 +1708,11 @@ static bool appendPortalHead(HtmlOut &html, const char *title, const char *viewp
   html += title;
   html += F("</title>");
   html += portalHeadIcon;
-  html += portalBaseStyle;
+  // Shared portal CSS/JS live in flash as static cacheable assets (spaPortalAssets.h). The
+  // ~58KB of styles/scripts previously inlined here cost 14 RAM slabs on every page build.
+  html += F("<link rel='stylesheet' href='/assets/portal.css?v=" VERSION "'>");
   const bool sawPortalCss = portalHtmlSawGlobalCss(html);
-  html += portalSemanticDarkStyle;
-  html += portalThemeScript;
-  html += portalHeadNavScript;
+  html += F("<script src='/assets/portal-head.js?v=" VERSION "'></script>");
   if (extraHeadStyle != nullptr && extraHeadStyle[0] != '\0')
   {
     html += extraHeadStyle;
@@ -2147,138 +2278,12 @@ void handleStatus(AsyncWebServerRequest *request)
   }
   Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
   PortalHtmlChunks html;
-  const char *statusStyle =
-      "<style>"
-      "html{scroll-behavior:smooth;}"
-      ".status-page-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 16px;margin:0 0 var(--space-3) 0;}"
-      ".status-page-head .status-page-title{margin:0;}"
-      ".status-page-title{color:var(--heading);font-size:1.1rem;line-height:1.3;}"
-      ".status-snapshot-meta{margin:0;flex:1 1 220px;text-align:right;font-size:0.82rem;line-height:1.35;color:var(--muted);max-width:46em;}"
-      "@media (max-width:520px){.status-snapshot-meta{text-align:left;flex:1 1 100%;}}"
-      ".status-layout{display:grid;grid-template-columns:1fr;gap:var(--space-3);}"
-      "@media (min-width:720px){.status-layout{grid-template-columns:1fr 1fr;}}"
-      ".status-layout .panel{margin-bottom:0;}"
-      ".status-span-full{grid-column:1/-1;}"
-      ".status-layout h2{color:var(--heading);font-size:0.95rem;margin:0 0 var(--space-2) 0;font-weight:700;line-height:1.3;}"
-      "dl.kv{margin:0;padding:0;}"
-      "dl.kv .kv-row{display:grid;grid-template-columns:minmax(110px,42%) 1fr;gap:6px 12px;padding:var(--space-1) 0;"
-      "border-bottom:1px dashed var(--border);align-items:start;}"
-      "dl.kv .kv-row:last-child{border-bottom:none;}"
-      "dl.kv dt{margin:0;font-weight:600;color:var(--muted);font-size:0.92rem;}"
-      "dl.kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
-      ".kv-dd-with-inline-action{display:flex;flex-wrap:wrap;align-items:center;gap:8px;column-gap:10px;}"
-      ".kv-dd-current-temp{flex-wrap:nowrap;}"
-      ".kv-dd-current-temp > span{white-space:nowrap;}"
-      ".status-temp-chart-link{color:var(--heading);display:inline-flex;align-items:center;vertical-align:middle;"
-      "text-decoration:none;border-radius:6px;padding:3px;line-height:0;}"
-      ".status-temp-chart-link:hover{background:var(--surface-2);}"
-      ".status-temp-chart-link:focus-visible{outline:2px solid var(--focus);outline-offset:2px;}"
-      ".status-temp-units-toggle{display:inline-flex;align-items:center;gap:0;overflow:hidden;border:1px solid var(--border);border-radius:8px;background:var(--panel);}"
-      ".status-temp-units-toggle button{flex:0 0 auto;min-height:0;padding:1px 5px;border:0;border-right:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:.62rem;line-height:1;cursor:pointer;}"
-      ".status-temp-units-toggle button:last-child{border-right:0;}"
-      ".status-temp-units-toggle button:hover{background:var(--bg);color:var(--text);}"
-      ".status-temp-units-toggle button:focus-visible{outline:2px solid var(--focus);outline-offset:2px;position:relative;z-index:1;}"
-      ".status-temp-units-toggle button:disabled{background:var(--focus);color:#fff;cursor:default;opacity:1;}"
-      ".heat-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin:0 0 6px 0;}"
-      ".heat-panel-head h2{margin:0;}"
-      ".heat-hint{font-size:0.82rem;color:var(--muted);margin:0 0 12px 0;line-height:1.45;max-width:52em;}"
-      ".heat-hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 12px 0;align-items:stretch;}"
-      "@media (max-width:560px){.heat-hero-grid{grid-template-columns:1fr;}#statusHeatHero{order:-1;}}"
-      ".heat-hero{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);margin:0;background:var(--surface-2);min-width:0;}"
-      ".heat-hero-icon{flex-shrink:0;line-height:0;color:var(--heading);}"
-      ".heat-hero--ok{border-color:#b8cfe8;background:#f2f7fc;}.heat-hero--ok .heat-hero-icon{color:#0f4a87;}"
-      ".heat-hero--init{border-color:#e6c200;background:#fffbeb;}.heat-hero--init .heat-hero-icon{color:#b8860b;}"
-      ".heat-hero--alert{border-color:#e57373;background:#fff5f5;}.heat-hero--alert .heat-hero-icon{color:#c62828;}"
-      ".kv-row--alert dt,.kv-row--alert dd{color:#c62828;font-weight:600;}"
-      ".kv-row--alert-warn dt,.kv-row--alert-warn dd{color:#8d6e00;font-weight:600;}"
-      ".status-reminder-banner{display:none;align-items:flex-start;gap:12px;margin:0 0 var(--space-3) 0;"
-      "padding:14px 16px;border-radius:10px;border:1px solid;}"
-      ".status-reminder-banner.is-active{display:flex;}"
-      ".status-reminder-banner--warn{border-color:#e6c200;background:#fffbeb;color:#5c4a00;}"
-      ".status-reminder-banner--fault{border-color:#e57373;background:#fff5f5;color:#b71c1c;}"
-      ".status-reminder-banner-icon{flex-shrink:0;line-height:0;margin-top:1px;}"
-      ".status-reminder-banner--warn .status-reminder-banner-icon{color:#b8860b;}"
-      ".status-reminder-banner--fault .status-reminder-banner-icon{color:#c62828;}"
-      ".status-reminder-banner-label{font-size:0.78rem;font-weight:600;text-transform:uppercase;"
-      "letter-spacing:0.03em;opacity:0.9;margin:0 0 4px 0;}"
-      ".status-reminder-banner-val{font-size:1.15rem;font-weight:700;line-height:1.3;margin:0;}"
-      ".status-reminder-banner-hint{font-size:0.82rem;line-height:1.4;margin:6px 0 0 0;opacity:0.92;}"
-      ".heat-hero--heat-idle{border-color:#dde2e8;background:#eef1f4;}.heat-hero--heat-idle .heat-hero-icon{color:#5f6c7b;}"
-      ".heat-hero--heat-on{border-color:#ffab91;background:#ffe8e0;}.heat-hero--heat-on .heat-hero-icon{color:#bf360c;}"
-      ".heat-hero--heat-alt{border-color:#ffe082;background:#fff8e1;}.heat-hero--heat-alt .heat-hero-icon{color:#8d6e00;}"
-      ".heat-hero--heat-reserved{border-color:#cfd8dc;background:#eceff1;}.heat-hero--heat-reserved .heat-hero-icon{color:#546e7a;}"
-      "#statusHeatHero .heat-hero-icon{color:#d32f2f;}"
-      "@keyframes heatHeroPulse{0%,100%{box-shadow:0 0 0 0 rgba(211,47,47,0);}"
-      "50%{box-shadow:0 0 22px 8px rgba(211,47,47,0.42);}}"
-      ".heat-hero--heat-on,.heat-hero--heat-alt{animation:heatHeroPulse 3.2s ease-in-out infinite;}"
-      "@media (prefers-reduced-motion:reduce){.heat-hero--heat-on,.heat-hero--heat-alt{animation:none;}}"
-      ".heat-hero-label{font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.03em;}"
-      ".heat-hero-val{font-size:1.12rem;font-weight:700;margin-top:2px;line-height:1.25;}"
-      ".heat-hero-val--emph{font-size:1.22rem;}"
-      ".heat-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px 0;align-items:center;}"
-      ".heat-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:0.84rem;font-weight:600;border:1px solid var(--border);background:#fff;}"
-      ".heat-chip svg{flex-shrink:0;}"
-      ".heat-chip--heat-idle{color:#5f6c7b;background:#eef1f4;border-color:#dde2e8;}"
-      ".heat-chip--heat-on{color:#8b2500;background:#ffe8e0;border-color:#ffab91;}"
-      ".heat-chip--heat-alt{color:#6d4c00;background:#fff8e1;border-color:#ffe082;}"
-      ".heat-chip--need-yes{color:#b71c1c;background:#ffebee;border-color:#ffcdd2;}"
-      ".heat-chip--need-no{color:#455a64;background:#eceff1;border-color:#cfd8dc;}"
-      ".heat-chip-lbl{font-weight:500;opacity:0.88;margin-right:2px;}"
-      "details.heat-raw{margin-top:10px;}details.heat-raw summary{cursor:pointer;font-size:0.84rem;color:var(--muted);font-weight:600;}"
-      "details.heat-raw pre{margin:8px 0 0 0;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:0.78rem;line-height:1.5;font-family:ui-monospace,Courier,monospace;}"
-      ".equip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:var(--space-2);}"
-      ".equip-cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px 8px 14px;background:var(--surface-2);}"
-      ".equip-cell--off{background:#f4f6f8;border-color:#dde3e9;box-shadow:inset 4px 0 0 0 #b0bec5;}"
-      ".equip-cell--low{background:#fff8e6;border-color:#e6c86a;box-shadow:inset 4px 0 0 0 #e6a000;}"
-      ".equip-cell--high,.equip-cell--on{background:#e8f5f0;border-color:#7ebda3;box-shadow:inset 4px 0 0 0 #2e8b6e;}"
-      ".equip-cell.equip-absent{opacity:0.58;background:#eef1f4;color:var(--muted);border-color:#dde2e8;box-shadow:inset 4px 0 0 0 #c5ced6;}"
-      ".equip-cell.equip-absent .equip-label{color:#7a8794;}"
-      ".equip-cell.equip-absent .equip-val{font-weight:500;color:#5f6c7b;}"
-      ".equip-grid.status-equip-hide-absent .equip-cell.equip-absent{display:none;}"
-      ".status-equip-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;}"
-      ".status-equip-head h2{margin:0;}"
-      ".status-equip-show-absent-lbl{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);cursor:pointer;user-select:none;}"
-      ".status-equip-show-absent-lbl input{margin:0;width:1rem;height:1rem;cursor:pointer;}"
-      ".equip-label{font-size:0.82rem;color:var(--muted);font-weight:600;}"
-      ".equip-val{font-weight:600;margin-top:2px;line-height:1.35;}"
-      ".equip-actions{margin-top:8px;}"
-      ".equip-btn{background:var(--focus);color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:.84rem;}"
-      ".equip-btn:disabled{opacity:.55;cursor:not-allowed;}"
-      ".range-bands{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0;}"
-      "#statusBandLow{grid-column:1;grid-row:1;}#statusBandHigh{grid-column:2;grid-row:1;}"
-      "@media (max-width:520px){.range-bands{grid-template-columns:1fr;}#statusBandLow,#statusBandHigh{grid-column:auto;grid-row:auto;}}"
-      ".range-band{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-2);}"
-      "button.range-band{display:block;width:100%;margin:0;text-align:start;font:inherit;color:inherit;"
-      "appearance:none;-webkit-appearance:none;border-radius:8px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .12s;}"
-      "button.range-band:not(:disabled):hover{border-color:#8b96a3;box-shadow:0 2px 8px rgba(0,0,0,.08);transform:translateY(-1px);}"
-      "button.range-band:not(:disabled):active{transform:translateY(0);box-shadow:0 1px 3px rgba(0,0,0,.06);}"
-      "button.range-band:focus-visible{outline:2px solid var(--focus);outline-offset:2px;z-index:1;position:relative;}"
-      "button.range-band:disabled{cursor:default;opacity:1;}"
-      ".range-band-active-low{border-color:var(--focus);background:#e8f0fa;box-shadow:0 0 0 2px rgba(15,74,135,0.12);}"
-      ".range-band-active-high{border-color:#b71c1c;background:#fde8e8;box-shadow:0 0 0 2px rgba(183,28,28,0.16);}"
-      ".range-band-title{font-size:0.82rem;font-weight:600;color:var(--muted);margin:0 0 6px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;}"
-      ".range-band-indicator{font-size:0.95rem;line-height:1;color:#8b96a3;}"
-      ".range-band-active-low .range-band-indicator,.range-band-active-high .range-band-indicator{color:var(--text);}"
-      ".range-band-temp{font-size:1.15rem;font-weight:700;margin:0;line-height:1.25;display:block;width:100%;}"
-      ".range-hint{font-size:0.82rem;color:var(--muted);margin:8px 0 0 0;line-height:1.35;}"
-      ".status-control-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}"
-      ".status-control-row input{border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:90px;}"
-      ".status-control-result{margin-top:8px;font-size:.84rem;color:var(--muted);}"
-      ".status-temp-hist-anchor{scroll-margin-top:16px;}"
-      ".history-block{margin-top:var(--space-2);}"
-      ".history-block h3{margin:0 0 6px 0;font-size:0.88rem;color:var(--muted);font-weight:600;}"
-      ".history-block pre{margin:0;padding:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;"
-      "font-size:0.8rem;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Courier,monospace;}"
-      ".chart-caption{font-size:0.82rem;color:var(--muted);margin:0 0 6px 0;line-height:1.35;}"
-      ".history-block .chart-wrap{max-width:100%;overflow:hidden;}"
-      ".history-raw{margin-top:8px;}details.history-raw summary{cursor:pointer;font-size:0.88rem;color:var(--muted);font-weight:600;}"
-      "</style>";
+
 
   // Build `<head>` with sequential appends (see `appendPortalHead`).
   html = F("<html>");
   const bool wroteOpeningTag = html.healthy() && html.length() >= 6;
   const bool sawPortalCss = appendPortalHead(html, "Spa Status");
-  html += statusStyle;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuStatus;
   html += F("<main id='mainContent'>");
@@ -2538,311 +2543,7 @@ void handleStatus(AsyncWebServerRequest *request)
   html += "<div id=\"statusHistoriesContainer\"></div>";
   html += "</section>";
 
-  html += "<script>"
-          "async function statusSendSci(payload){"
-          "const body='<sci_request version=\"1.0\"><data_service><targets><device id=\"00 11 22 33 44 55 66 77\"/></targets><requests>'+payload+'</requests></data_service></sci_request>';"
-          "const r=await fetch('/devices/sci',{method:'POST',headers:{'Content-Type':'application/xml'},body});"
-          "return await r.text();"
-          "}"
-          "function statusBackoffMs(base,max,fails){var e=Math.min(max,base*Math.pow(2,Math.min(6,fails)));var j=Math.floor(Math.random()*Math.max(250,Math.floor(e*0.35)));return Math.min(max,e+j);}"
-          "async function statusFetchJson(url,timeoutMs){const ctl=new AbortController();const t=setTimeout(function(){ctl.abort();},timeoutMs||5000);"
-          "try{const r=await fetch(url,{cache:'no-store',signal:ctl.signal});if(!r.ok)throw new Error('http_'+r.status);return await r.json();}finally{clearTimeout(t);}}"
-          "async function statusFetchControls(){return await statusFetchJson('/api/status/summary',4200);}"
-          "function statusScaleHeat(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/60);return b;}"
-          "function statusScaleFilter(a){var b=[],i;for(i=0;i<a.length;i++)b.push(a[i]/3600);return b;}"
-          "function statusDrawLineChart(id,data,opt){"
-          "opt=opt||{};var c=document.getElementById(id);if(!c||!data||data.length<1)return;"
-          "var ctx=c.getContext('2d');if(!ctx)return;"
-          "var isTemp=!!opt.temp;var isC=!!opt.celsius;var ySuf=opt.ySuffix||'';"
-          "var xL=opt.xLeft||'';var xM=opt.xMid||'';var xR=opt.xRight||'';"
-          "function fmtY(v){var s;if(isTemp){s=isC?Number(v).toFixed(1):String(Math.round(Number(v)));}else{s=Number(v).toFixed(2);}"
-          "return ySuf?(s+' '+ySuf):s;}"
-          "function draw(W,H){"
-          "var cc=window.portalChartColors?window.portalChartColors():{bg:'#fff',grid:'#ccc',fg:'#333',gridLine:'#eef1f4'};"
-          "ctx.fillStyle=cc.bg;ctx.fillRect(0,0,W,H);ctx.strokeStyle=cc.grid;ctx.strokeRect(0.5,0.5,W-1,H-1);"
-          "var lo=Infinity,hi=-Infinity,i,v;"
-          "for(i=0;i<data.length;i++){v=Number(data[i]);if(!isFinite(v))continue;if(v<lo)lo=v;if(v>hi)hi=v;}"
-          "if(!isFinite(lo)||!isFinite(hi)){ctx.fillStyle=cc.fg;ctx.font='12px sans-serif';ctx.fillText('No data yet',10,H/2);return;}"
-          "if(hi-lo<1e-6){lo-=0.5;hi+=0.5;}"
-          "var padL=34,padR=8,padT=14,padB=28,pw=W-padL-padR,ph=H-padT-padB;"
-          "function yOf(val){return padT+ph-(val-lo)/(hi-lo)*ph;}"
-          "ctx.strokeStyle=cc.gridLine;ctx.lineWidth=1;for(i=1;i<=3;i++){var gy=padT+ph*i/4;ctx.beginPath();ctx.moveTo(padL,gy);ctx.lineTo(padL+pw,gy);ctx.stroke();}"
-          "ctx.fillStyle=cc.fg;ctx.font='10px sans-serif';ctx.textAlign='left';"
-          "ctx.fillText(fmtY(lo),4,H-padB+2);ctx.fillText(fmtY(hi),4,padT+2);"
-          "ctx.textAlign='center';if(xL)ctx.fillText(xL,padL,H-4);if(xM)ctx.fillText(xM,padL+pw/2,H-4);if(xR)ctx.fillText(xR,padL+pw,H-4);"
-          "ctx.textAlign='left';ctx.strokeStyle='#037e52';ctx.lineWidth=1.5;ctx.beginPath();"
-          "for(i=0;i<data.length;i++){var px=padL+i*pw/Math.max(1,data.length-1);var py=yOf(Number(data[i]));if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}"
-          "ctx.stroke();}"
-          "function render(){var p=c.parentElement;var pg=document.querySelector('.page');"
-          "var cap=(pg&&pg.clientWidth)?pg.clientWidth:((document.documentElement&&document.documentElement.clientWidth)||window.innerWidth||980);"
-          "var raw=p?p.clientWidth-2:280;if(raw<0)raw=0;"
-          "var W=Math.min(1000,cap,Math.max(260,raw));var H=parseInt(c.getAttribute('height')||'140',10)||140;"
-          "H=Math.min(260,H);"
-          "var dpr=Math.min(2,Math.max(1,window.devicePixelRatio||1));"
-          "c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);c.style.width=W+'px';c.style.height=H+'px';"
-          "ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);draw(W,H);}"
-          "var raf=0;function scheduleRender(){if(raf)return;raf=window.requestAnimationFrame(function(){raf=0;render();});}"
-          "window.addEventListener('resize',scheduleRender,{passive:true});window.addEventListener('orientationchange',scheduleRender,{passive:true});"
-          "window.addEventListener('portal-theme-change',scheduleRender,{passive:true});"
-          "c.addEventListener('webglcontextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});"
-          "c.addEventListener('contextlost',function(e){if(e&&e.preventDefault)e.preventDefault();},{passive:false});"
-          "c.addEventListener('contextrestored',scheduleRender,{passive:true});"
-          "scheduleRender();}"
-          "function statusRenderHistoryCharts(j){"
-          "if(!j)return;var tc=!!j.tempIsCelsius;var deg=tc?'\\u00b0C':'\\u00b0F';"
-          "statusDrawLineChart('statusTempHistChart',j.tempHistory||[],{temp:1,celsius:tc,ySuffix:deg,xLeft:'-24h',xMid:'-12h',xRight:'now'});"
-          "statusDrawLineChart('statusHeatHistChart',statusScaleHeat(j.heatSeconds||[]),{ySuffix:'min',xLeft:'-23d',xMid:'-12d',xRight:'today'});"
-          "statusDrawLineChart('statusFilterHistChart',statusScaleFilter(j.filterSeconds||[]),{ySuffix:'hr',xLeft:'-23d',xMid:'-12d',xRight:'today'});}"
-          "function statusScrollToHistoryAnchor(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}"
-          "function statusSetHistoriesResult(text){var el=document.getElementById('statusHistoriesResult');if(el)el.textContent=text||'';}"
-          "function statusHistoriesReady(c){return !!(c&&c.querySelector&&c.querySelector('#statusTempHistSection'));}"
-          "let statusHistoriesLoading=false;"
-          "async function statusLoadHistories(opt){"
-          "opt=opt||{};var scrollTo=opt.scrollTo||'';"
-          "var c=document.getElementById('statusHistoriesContainer');var btn=document.getElementById('statusLoadHistoriesBtn');"
-          "if(!c){statusSetHistoriesResult('History charts unavailable (page incomplete). Reload /status.');return false;}"
-          "if(c.getAttribute('data-loaded')==='1'){statusScrollToHistoryAnchor(scrollTo||'statusTempHistSection');statusSetHistoriesResult('');return true;}"
-          "if(statusHistoriesLoading){statusSetHistoriesResult('Still loading history charts...');return false;}"
-          "statusHistoriesLoading=true;statusSetHistoriesResult('');"
-          "if(btn){btn.disabled=true;btn.textContent='Loading...';}"
-          "try{var j=await statusFetchJson('/api/status/histories',9000);"
-          "var html=(j&&j.html)?String(j.html):'';"
-          "if(!html.length)throw new Error('empty_html');"
-          "c.innerHTML=html;"
-          "if(!statusHistoriesReady(c)){c.innerHTML='';throw new Error('missing_sections');}"
-          "statusRenderHistoryCharts(j);c.setAttribute('data-loaded','1');"
-          "if(btn)btn.textContent='History loaded';"
-          "statusScrollToHistoryAnchor(scrollTo||'statusTempHistSection');"
-          "return true;"
-          "}catch(e){c.removeAttribute('data-loaded');"
-          "if(btn){btn.disabled=false;btn.textContent='Retry history load';}"
-          "statusSetHistoriesResult('History load failed: '+(e&&e.message?e.message:e)+'. Try again.');"
-          "return false;"
-          "}finally{statusHistoriesLoading=false;}}"
-          "function statusEquipCell(key){return document.querySelector('[data-equip=\"'+key+'\"]');}"
-          "function statusToggleEquipAbsent(show){var g=document.getElementById('statusEquipGrid');if(!g)return;"
-          "if(show){g.classList.remove('status-equip-hide-absent');}else{g.classList.add('status-equip-hide-absent');}}"
-          "function statusSetEquipValue(key,text){var c=statusEquipCell(key);if(!c)return;var v=c.querySelector('[data-role=\"value\"]');if(v)v.textContent=text;}"
-          "function statusSetEquipStateClass(key,state){var c=statusEquipCell(key);if(!c||c.classList.contains('equip-absent'))return;"
-          "var states=['equip-cell--off','equip-cell--low','equip-cell--high','equip-cell--on'];for(var i=0;i<states.length;i++)c.classList.remove(states[i]);"
-          "if(state==='off'||state==='low'||state==='high'||state==='on')c.classList.add('equip-cell--'+state);}"
-          "function statusPumpVisualState(snap,num){var cfg=Number(snap['pump'+num+'Config']||0);if(cfg===1)return snap['pump'+num+'On']?'on':'off';"
-          "var raw=Number(snap['pump'+num]||0);if(raw===0)return 'off';if(raw===1)return 'low';return 'high';}"
-          "function statusBinaryEquipFromSnap(snap,key){if(typeof snap[key]==='undefined')return 'off';return Number(snap[key])>0?'on':'off';}"
-          "function statusSetButtonState(code,desired){var btn=document.querySelector('button[data-button=\"'+code+'\"]');if(!btn)return;"
-          "btn.setAttribute('data-state',desired);btn.textContent='Turn '+(desired==='on'?'On':'Off');}"
-          "function statusPumpDisplay(raw){if(raw===0)return 'Off';if(raw===1)return 'Low';if(raw===2)return 'High';return String(raw);}"
-          "function statusOnOff(v){return Number(v)>0?'On':'Off';}"
-          "function statusPumpUiValue(snap,num){var cfg=Number(snap['pump'+num+'Config']||0);if(cfg===1)return statusOnOff(snap['pump'+num+'On']);return statusPumpDisplay(Number(snap['pump'+num]||0));}"
-          "function statusFormatBandTemp(snap,v){var n=Number(v);if(!isFinite(n)||n<=0)return'\xe2\x80\x94';var c=!!snap.tempScaleCelsius;"
-          "if(c)return n.toFixed(1)+'\\u00b0C';return String(Math.round(n))+'\\u00b0F';}"
-          "function statusApplySnapshotMeta(snap){var el=document.getElementById('statusSnapshotMeta');if(!el||!snap)return;"
-          "if(typeof snap.snapshotMeta==='string'){el.textContent=snap.snapshotMeta;"
-          "if(typeof snap.snapshotAtLocal==='string'&&snap.snapshotAtLocal.length)el.title=snap.snapshotAtLocal;}}"
-          "function statusApplyHeatingSnap(snap){"
-          "if(typeof snap.spaStateText==='undefined')return;"
-          "var hero=document.getElementById('statusSpaStateHero');if(hero)hero.textContent=snap.spaStateText;"
-          "var heroEl=document.getElementById('statusSpaHero');"
-          "if(heroEl){heroEl.className='heat-hero';var im=Number(snap.initMode||0);var ss=Number(snap.spaState||0);"
-          "if(im===2)heroEl.classList.add('heat-hero--alert');else if(ss===1||im===1)heroEl.classList.add('heat-hero--init');else heroEl.classList.add('heat-hero--ok');}"
-          "var hsn=Number(snap.heatingState||0);var hth=document.getElementById('statusHeatStateHero');if(hth)hth.textContent=snap.heatingStateText||'';"
-          "var hhero=document.getElementById('statusHeatHero');if(hhero){hhero.className='heat-hero';"
-          "if(hsn===1)hhero.classList.add('heat-hero--heat-on');else if(hsn===2)hhero.classList.add('heat-hero--heat-alt');else if(hsn===3)hhero.classList.add('heat-hero--heat-reserved');else hhero.classList.add('heat-hero--heat-idle');}"
-          "var imv=document.getElementById('statusInitModeVal');if(imv)imv.textContent=snap.initModeText||'';"
-          "var hmv=document.getElementById('statusHeatingModeVal');if(hmv)hmv.textContent=snap.heatingModeText||'';"
-          "var raw=document.getElementById('statusHeatRawPre');if(raw)raw.textContent='spaState='+snap.spaState+' initMode='+snap.initMode+' heatingMode='+snap.heatingMode+' heatingState='+snap.heatingState+' needsHeat='+snap.needsHeat;"
-          "}"
-          "function statusApplySnapshot(snap){"
-          "if(!snap)return;"
-          "statusSetEquipValue('pump1',statusPumpUiValue(snap,1));statusSetEquipStateClass('pump1',statusPumpVisualState(snap,1));"
-          "statusSetEquipValue('pump2',statusPumpUiValue(snap,2));statusSetEquipStateClass('pump2',statusPumpVisualState(snap,2));"
-          "statusSetEquipValue('pump3',statusPumpUiValue(snap,3));statusSetEquipStateClass('pump3',statusPumpVisualState(snap,3));"
-          "statusSetEquipValue('pump4',statusPumpUiValue(snap,4));statusSetEquipStateClass('pump4',statusPumpVisualState(snap,4));"
-          "statusSetEquipValue('pump5',statusPumpUiValue(snap,5));statusSetEquipStateClass('pump5',statusPumpVisualState(snap,5));"
-          "statusSetEquipValue('pump6',statusPumpUiValue(snap,6));statusSetEquipStateClass('pump6',statusPumpVisualState(snap,6));"
-          "if(typeof snap.circ!=='undefined'){statusSetEquipValue('circ',statusOnOff(snap.circ));statusSetEquipStateClass('circ',statusBinaryEquipFromSnap(snap,'circ'));}"
-          "statusSetEquipValue('blower',statusOnOff(snap.blower));statusSetEquipStateClass('blower',statusBinaryEquipFromSnap(snap,'blower'));"
-          "statusSetEquipValue('light1',statusOnOff(snap.light1));statusSetEquipStateClass('light1',statusBinaryEquipFromSnap(snap,'light1'));"
-          "statusSetEquipValue('light2',statusOnOff(snap.light2));statusSetEquipStateClass('light2',statusBinaryEquipFromSnap(snap,'light2'));"
-          "statusSetEquipValue('mister',statusOnOff(snap.mister));statusSetEquipStateClass('mister',statusBinaryEquipFromSnap(snap,'mister'));"
-          "statusSetButtonState(4,snap.pump1On?'off':'on');"
-          "statusSetButtonState(5,snap.pump2On?'off':'on');"
-          "statusSetButtonState(6,snap.pump3On?'off':'on');"
-          "statusSetButtonState(7,snap.pump4On?'off':'on');"
-          "statusSetButtonState(8,snap.pump5On?'off':'on');"
-          "statusSetButtonState(9,snap.pump6On?'off':'on');"
-          "statusSetButtonState(12,Number(snap.blower)>0?'off':'on');"
-          "statusSetButtonState(17,Number(snap.light1)>0?'off':'on');"
-          "statusSetButtonState(18,Number(snap.light2)>0?'off':'on');"
-          "statusSetButtonState(14,Number(snap.mister)>0?'off':'on');"
-          "var tr=Number(snap.tempRange||0);var hi=document.getElementById('statusBandHigh');var lo=document.getElementById('statusBandLow');"
-          "if(hi){hi.classList.toggle('range-band-active-high',tr===1);hi.classList.remove('range-band-active-low');}"
-          "if(lo){lo.classList.toggle('range-band-active-low',tr===0);lo.classList.remove('range-band-active-high');}"
-          "var hv=document.getElementById('statusBandHighVal');var lv=document.getElementById('statusBandLowVal');"
-          "if(hv)hv.textContent=statusFormatBandTemp(snap,snap.highSetTemp);if(lv)lv.textContent=statusFormatBandTemp(snap,snap.lowSetTemp);"
-          "var lbl=document.getElementById('statusSetTempScopeLabel');if(lbl)lbl.textContent=tr===1?'(high range)':'(low range)';"
-          "if(lo){lo.disabled=(tr===0);lo.setAttribute('aria-pressed',tr===0?'true':'false');}"
-          "if(hi){hi.disabled=(tr===1);hi.setAttribute('aria-pressed',tr===1?'true':'false');}"
-          "var setInput=document.getElementById('statusSetTempInput');"
-          "if(setInput){if(typeof snap.setTempMin!=='undefined')setInput.min=String(snap.setTempMin);if(typeof snap.setTempMax!=='undefined')setInput.max=String(snap.setTempMax);"
-          "if(typeof snap.tempScaleCelsius!=='undefined')setInput.step=snap.tempScaleCelsius?'0.5':'1';"
-          "if(document.activeElement!==setInput&&typeof snap.setTemp!=='undefined')setInput.value=String(snap.tempScaleCelsius?Number(snap.setTemp).toFixed(1):Math.round(Number(snap.setTemp)));}"
-          "var uC=!!snap.tempScaleCelsius;var cBtn=document.getElementById('statusTempUnitsToggleC');var fBtn=document.getElementById('statusTempUnitsToggleF');"
-          "if(cBtn)cBtn.disabled=uC;if(fBtn)fBtn.disabled=!uC;"
-          "var pt=document.getElementById('statusPanelTimeVal');if(pt&&typeof snap.panelTime==='string')pt.textContent=snap.panelTime;"
-          "var cf=document.getElementById('statusClockFormatVal');if(cf&&typeof snap.clockFormat==='string'){cf.textContent=snap.clockFormat;if(typeof snap.clockModeRaw!=='undefined')cf.title='Raw status flag (status byte 9 & 0x02): '+snap.clockModeRaw;}"
-          "var f12=document.getElementById('statusClockFormat12Btn');var f24=document.getElementById('statusClockFormat24Btn');var is24=String(snap.clockFormat||'').toLowerCase().indexOf('24')>=0;"
-          "if(f12)f12.disabled=!is24;if(f24)f24.disabled=is24;"
-          "var fm=document.getElementById('statusFilterModeVal');if(fm&&typeof snap.filterModeText==='string')fm.textContent=snap.filterModeText;"
-          "function statusApplyReminderSnap(snap){"
-          "var txt=typeof snap.reminderText==='string'?snap.reminderText:'';"
-          "var active=!!(snap.reminderActive||(txt&&txt!=='None'));"
-          "var fault=!!snap.reminderIsFault;"
-          "var banner=document.getElementById('statusReminderBanner');"
-          "if(banner){banner.classList.toggle('is-active',active);"
-          "banner.classList.remove('status-reminder-banner--warn','status-reminder-banner--fault');"
-          "if(active)banner.classList.add(fault?'status-reminder-banner--fault':'status-reminder-banner--warn');"
-          "var bv=document.getElementById('statusReminderBannerVal');if(bv)bv.textContent=active?txt:'';"
-          "var bh=document.getElementById('statusReminderBannerHint');"
-          "if(bh)bh.textContent=active&&(typeof snap.reminderHint==='string')?snap.reminderHint:'';}"
-          "var rv=document.getElementById('statusReminderVal');if(rv&&typeof snap.reminderText==='string')rv.textContent=snap.reminderText;"
-          "var rr=document.getElementById('statusReminderRow');if(rr){rr.classList.remove('kv-row--alert','kv-row--alert-warn');"
-          "if(active)rr.classList.add(fault?'kv-row--alert':'kv-row--alert-warn');}}"
-          "statusApplyReminderSnap(snap);"
-          "var tIn=document.getElementById('statusPanelTimeInput');if(tIn&&document.activeElement!==tIn&&typeof snap.panelTime==='string')tIn.value=snap.panelTime;"
-          "statusApplyHeatingSnap(snap);statusApplySnapshotMeta(snap);"
-          "}"
-          "let statusPollTimer=0;let statusPollBusy=false;let statusPollFailures=0;let statusLastSnapshotAgeSec=0;const statusPollBaseMs=2000;const statusPollMaxMs=25000;const statusFlakyFailThreshold=3;const statusStaleAgeSecThreshold=10;"
-          "function statusConnState(msg){var el=document.getElementById('statusButtonResult');if(el&&msg)el.textContent=msg;}"
-          "function statusShouldShowFlaky(){if(statusPollFailures<statusFlakyFailThreshold)return false;if(statusLastSnapshotAgeSec===0)return true;return statusLastSnapshotAgeSec>=statusStaleAgeSecThreshold;}"
-          "function statusSchedulePoll(ms){statusStopPolling();statusPollTimer=setTimeout(statusPollOnce,Math.max(250,ms||statusPollBaseMs));}"
-          "async function statusPollOnce(){"
-          "if(statusPollBusy||document.hidden)return;"
-          "statusPollBusy=true;"
-          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);statusLastSnapshotAgeSec=Number(snap&&snap.snapshotAgeSec||0);statusPollFailures=0;statusConnState('');statusSchedulePoll(statusPollBaseMs);}catch(e){statusPollFailures++;if(statusShouldShowFlaky())statusConnState('Connection is flaky, showing last known values...');statusSchedulePoll(statusBackoffMs(statusPollBaseMs,statusPollMaxMs,statusPollFailures));}"
-          "statusPollBusy=false;"
-          "}"
-          "function statusStartPolling(){if(statusPollTimer||statusPollBusy)return;statusPollFailures=0;statusPollOnce();}"
-          "function statusStopPolling(){if(!statusPollTimer)return;clearTimeout(statusPollTimer);statusPollTimer=0;}"
-          "document.addEventListener('visibilitychange',function(){if(document.hidden){statusStopPolling();}else{statusStartPolling();}});"
-          "window.addEventListener('beforeunload',statusStopPolling);"
-          "(function(){"
-          "var loadBtn=document.getElementById('statusLoadHistoriesBtn');"
-          "if(loadBtn)loadBtn.addEventListener('click',function(){statusLoadHistories({});});"
-          "document.addEventListener('click',function(e){"
-          "var t=e.target&&e.target.closest?e.target.closest('a.status-temp-chart-link[data-history-anchor]'):null;"
-          "if(!t)return;var anchor=t.getAttribute('data-history-anchor');if(!anchor)return;"
-          "e.preventDefault();statusLoadHistories({scrollTo:anchor});});"
-          "statusStartPolling();"
-          "})();"
-          "function statusButtonMatch(snap,code,desired){var on=(desired||'on').toLowerCase()==='on';"
-          "if(code===17)return (snap.light1>0)===on;"
-          "if(code===18)return (snap.light2>0)===on;"
-          "if(code===4)return on?!!snap.pump1On:!snap.pump1On;"
-          "if(code===5)return on?!!snap.pump2On:!snap.pump2On;"
-          "if(code===6)return on?!!snap.pump3On:!snap.pump3On;"
-          "if(code===7)return on?!!snap.pump4On:!snap.pump4On;"
-          "if(code===8)return on?!!snap.pump5On:!snap.pump5On;"
-          "if(code===9)return on?!!snap.pump6On:!snap.pump6On;"
-          "if(code===12)return on?(snap.blower>0):(snap.blower===0);"
-          "if(code===14)return (snap.mister>0)===on;"
-          "if(code===80)return on?(Number(snap.tempRange||0)===1):(Number(snap.tempRange||0)===0);"
-          "return false;}"
-          "async function statusWaitForButtonState(code,desired){"
-          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
-          "try{var snap=await statusFetchControls();if(statusButtonMatch(snap,code,desired))return true;}catch(e){}}"
-          "return false;}"
-          "async function statusWaitForSetTemp(target){"
-          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
-          "try{var snap=await statusFetchControls();if(Math.abs(Number(snap.setTemp)-Number(target))<0.26)return true;}catch(e){}}"
-          "return false;}"
-          "async function statusWaitForTempUnits(units){"
-          "var wantC=(String(units||'').toUpperCase()==='C');"
-          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
-          "try{var snap=await statusFetchControls();if(!!snap.tempScaleCelsius===wantC)return true;}catch(e){}}"
-          "return false;}"
-          "function statusSetResult(id,text){var el=document.getElementById(id);if(el)el.textContent=text;}"
-          "async function statusSendButton(btn){"
-          "try{btn.disabled=true;const c=btn.getAttribute('data-button');const s=btn.getAttribute('data-state')||'on';"
-          "const xml='<device_request target_name=\"Button\">'+c+':'+s+'</device_request>';"
-          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusButtonResult','Button command response: '+out);return;}"
-          "statusSetResult('statusButtonResult','Button command accepted; waiting for spa status update...');"
-          "const changed=await statusWaitForButtonState(Number(c),s);"
-          "if(changed){statusSetResult('statusButtonResult','Button command accepted and state changed.');setTimeout(function(){location.reload();},500);}else{statusSetResult('statusButtonResult','Button command accepted, but state did not change yet.');}"
-          "}catch(e){statusSetResult('statusButtonResult','Button command failed: '+e);}finally{btn.disabled=false;}"
-          "}"
-          "async function statusSendSetTemp(){"
-          "const input=document.getElementById('statusSetTempInput');if(!input)return;const v=input.value;"
-          "var pv=parseFloat(v);var mn=parseFloat(input.min);var mx=parseFloat(input.max);"
-          "if(isFinite(pv)&&isFinite(mn)&&isFinite(mx)&&(pv<mn-1e-6||pv>mx+1e-6)){statusSetResult('statusSetTempResult','Enter a value between '+mn+' and '+mx+' for the active range.');return;}"
-          "try{const xml='<device_request target_name=\"SetTemp\">'+v+'</device_request>';"
-          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSetTempResult','SetTemp response: '+out);return;}"
-          "statusSetResult('statusSetTempResult','SetTemp accepted; waiting for spa status update...');"
-          "const changed=await statusWaitForSetTemp(v);"
-          "if(changed){statusSetResult('statusSetTempResult','SetTemp accepted and state changed.');setTimeout(function(){location.reload();},500);}else{statusSetResult('statusSetTempResult','SetTemp accepted, but setpoint did not change yet.');}"
-          "}catch(e){statusSetResult('statusSetTempResult','SetTemp failed: '+e);}"
-          "}"
-          "async function statusSendTempUnits(units){"
-          "var t=String(units||'').toUpperCase();if(t!=='C'&&t!=='F'){statusSetResult('statusTempUnitsResult','Invalid temp units request.');return;}"
-          "if(!confirm('Change temperature units to '+(t==='C'?'Celsius':'Fahrenheit')+'?')){statusSetResult('statusTempUnitsResult','Temperature units change canceled.');return;}"
-          "var cBtn=document.getElementById('statusTempUnitsToggleC');var fBtn=document.getElementById('statusTempUnitsToggleF');"
-          "try{if(cBtn)cBtn.disabled=true;if(fBtn)fBtn.disabled=true;"
-          "const xml='<device_request target_name=\"TempUnits\">'+t+'</device_request>';"
-          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusTempUnitsResult','TempUnits response: '+out);return;}"
-          "statusSetResult('statusTempUnitsResult','TempUnits accepted; waiting for spa status update...');"
-          "const changed=await statusWaitForTempUnits(t);"
-          "if(changed){statusSetResult('statusTempUnitsResult','Temperature units updated.');statusApplySnapshot(await statusFetchControls());}"
-          "else{statusSetResult('statusTempUnitsResult','Command accepted; temperature units did not update yet.');}}"
-          "catch(e){statusSetResult('statusTempUnitsResult','TempUnits failed: '+e);}finally{"
-          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);}catch(_e){}"
-          "if(cBtn)cBtn.disabled=false;if(fBtn)fBtn.disabled=false;}"
-          "}"
-          "async function statusWaitForPanelTime(target){"
-          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
-          "try{var snap=await statusFetchControls();if(String(snap.panelTime||'')===String(target))return true;}catch(e){}}"
-          "return false;}"
-          "async function statusWaitForTimeFormat(use24){"
-          "for(var i=0;i<10;i++){await new Promise(function(res){setTimeout(res,650);});"
-          "try{var snap=await statusFetchControls();var is24=String(snap.clockFormat||'').toLowerCase().indexOf('24')>=0;if(is24===!!use24)return true;}catch(e){}}"
-          "return false;}"
-          "async function statusSendTimeFormat(fmt){"
-          "var f=Number(fmt);if(f!==12&&f!==24){statusSetResult('statusTimeFormatResult','Invalid time format request.');return;}"
-          "if(!confirm('Change panel clock format to '+f+'-hour?')){statusSetResult('statusTimeFormatResult','Time format change canceled.');return;}"
-          "var f12=document.getElementById('statusClockFormat12Btn');var f24=document.getElementById('statusClockFormat24Btn');"
-          "try{if(f12)f12.disabled=true;if(f24)f24.disabled=true;"
-          "const xml='<device_request target_name=\"TimeFormat\">'+String(f)+'</device_request>';"
-          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusTimeFormatResult','TimeFormat response: '+out);return;}"
-          "statusSetResult('statusTimeFormatResult','TimeFormat accepted; waiting for spa...');"
-          "const changed=await statusWaitForTimeFormat(f===24);"
-          "if(changed){statusSetResult('statusTimeFormatResult','Panel clock format updated.');statusApplySnapshot(await statusFetchControls());}"
-          "else{statusSetResult('statusTimeFormatResult','Command accepted; panel clock format did not update yet.');}"
-          "}catch(e){statusSetResult('statusTimeFormatResult','TimeFormat failed: '+e);}finally{"
-          "try{var snap=await statusFetchControls();statusApplySnapshot(snap);}catch(_e){}"
-          "if(f12)f12.disabled=false;if(f24)f24.disabled=false;}"
-          "}"
-          "async function statusSendPanelTime(){"
-          "var input=document.getElementById('statusPanelTimeInput');if(!input)return;var v=(input.value||'').trim();"
-          "if(!/^\\d{1,2}:\\d{2}$/.test(v)){statusSetResult('statusSystemTimeResult','Enter a valid time (HH:MM).');return;}"
-          "var p=v.split(':');var hh=String(Number(p[0])||0);var mm=String(p[1]||'00');if(mm.length===1)mm='0'+mm;if(hh.length===1)hh='0'+hh;v=hh+':'+mm;"
-          "try{const xml='<device_request target_name=\"SystemTime\">'+v+'</device_request>';"
-          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSystemTimeResult','SystemTime response: '+out);return;}"
-          "statusSetResult('statusSystemTimeResult','SystemTime accepted; waiting for spa...');"
-          "const changed=await statusWaitForPanelTime(v);"
-          "if(changed){statusSetResult('statusSystemTimeResult','Panel time updated.');statusApplySnapshot(await statusFetchControls());}"
-          "else{statusSetResult('statusSystemTimeResult','Command accepted; panel time did not match yet.');}"
-          "}catch(e){statusSetResult('statusSystemTimeResult','SystemTime failed: '+e);}"
-          "}"
-          "async function statusSyncPanelTimeFromGateway(){"
-          "try{var snap=await statusFetchControls();var gt=snap.gatewayTimeHHMM;if(!gt||gt==='--:--'){statusSetResult('statusSystemTimeResult','Gateway clock not available (sync ESP time / NTP).');return;}"
-          "const xml='<device_request target_name=\"SystemTime\">'+gt+'</device_request>';"
-          "const out=await statusSendSci(xml);if(out.indexOf('result=\\'accepted\\'')<0){statusSetResult('statusSystemTimeResult','SystemTime response: '+out);return;}"
-          "statusSetResult('statusSystemTimeResult','Sync sent; waiting for spa...');"
-          "const changed=await statusWaitForPanelTime(gt);"
-          "if(changed){statusSetResult('statusSystemTimeResult','Panel time synced from gateway.');var inp=document.getElementById('statusPanelTimeInput');if(inp)inp.value=gt;statusApplySnapshot(await statusFetchControls());}"
-          "else{statusSetResult('statusSystemTimeResult','Command accepted; panel time did not match yet.');}"
-          "}catch(e){statusSetResult('statusSystemTimeResult','Sync failed: '+e);}"
-          "}"
-          "</script>";
+  html += F("<script src='/assets/portal-status.js?v=" VERSION "'></script>");
   html += "</div></main></div></body></html>";
   String etag = String("W/\"status-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
   logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/status");
@@ -2990,63 +2691,11 @@ void handleConfig(AsyncWebServerRequest *request)
   }
   // Log.verbose("[Web]: Request %s received from %p" CR, request->url().c_str(), request->client()->remoteIP());
 
-  const char *configEnhancements =
-      "<style>"
-      "html{scroll-behavior:smooth;}"
-      ".config-layout{display:grid;grid-template-columns:1fr;gap:var(--space-3);}"
-      "@media (min-width:720px){.config-layout{grid-template-columns:1fr 1fr;}}"
-      ".config-layout .panel{margin-bottom:0;}"
-      ".config-span-full{grid-column:1/-1;}"
-      ".config-toc{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:0 0 var(--space-2) 0;padding:0;list-style:none;}"
-      ".config-toc li{margin:0;padding:0;border-bottom:none !important;}"
-      ".config-toc a{font-size:14px;color:var(--heading);text-decoration:underline;}"
-      ".config-toc a:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px;}"
-      "dl.config-kv{margin:0;padding:0;}"
-      "dl.config-kv .kv-row{display:grid;grid-template-columns:minmax(110px,42%) 1fr;gap:6px 12px;padding:var(--space-1) 0;"
-      "border-bottom:1px dashed var(--border);align-items:start;}"
-      "dl.config-kv .kv-row:last-child{border-bottom:none;}"
-      "dl.config-kv dt{margin:0;font-weight:600;color:var(--muted);font-size:0.92rem;}"
-      "dl.config-kv dd{margin:0;overflow-wrap:anywhere;word-break:break-word;}"
-      "table.config-equip{width:100%;border-collapse:collapse;margin-top:8px;}"
-      "table.config-equip th,table.config-equip td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}"
-      "table.config-equip th{font-size:13px;color:var(--muted);}"
-      "table.config-equip tr.config-equip-absent td{color:var(--muted);opacity:0.78;}"
-      "table.config-equip tr.config-equip-absent td:first-child{font-weight:500;}"
-      ".config-filter-strip{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch;margin:0 0 var(--space-3) 0;}"
-      "@media (max-width:560px){.config-filter-strip{grid-template-columns:1fr;}}"
-      ".config-filter-card{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface-2);}"
-      ".config-filter-strip .config-filter-card{min-height:100%;}"
-      ".config-filter-card h2{margin:0 0 8px 0;font-size:0.88rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}"
-      ".config-filter-card p{margin:4px 0;font-size:14px;}"
-      ".config-filter-card label{display:block;font-size:13px;color:var(--muted);margin:8px 0 4px 0;}"
-      ".config-filter-card label.config-filter-enable{margin-top:0;}"
-      ".config-filter-fields{margin-top:auto;}"
-      ".config-filter-card input[type=time]{width:100%;max-width:160px;padding:6px 8px;font-size:14px;}"
-      ".config-dur-fields{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;}"
-      ".config-dur-fields input[type=number]{width:4.5em;padding:6px 8px;font-size:14px;}"
-      ".config-dur-unit{font-size:14px;color:var(--muted);}"
-      ".config-backup-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0;}"
-      "#cfgImportPreview{margin:10px 0;font-size:14px;white-space:pre-wrap;}"
-      ".config-fault-latest{margin:0 0 12px 0;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);}"
-      ".config-fault-latest h2{margin:0 0 8px 0;font-size:1rem;}"
-      ".config-fault-headline{font-size:18px;font-weight:700;margin:0 0 8px 0;line-height:1.35;}"
-      ".config-fault-meta{margin:4px 0;font-size:14px;color:var(--muted);}"
-      ".config-fault-sev{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;}"
-      ".config-fault-sev--info{color:#0f5132;background:#d1e7dd;}"
-      ".config-fault-sev--warning{color:#664d03;background:#fff3cd;}"
-      ".config-fault-sev--alert{color:#842029;background:#f8d7da;}"
-      "table.config-fault-history{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px;}"
-      "table.config-fault-history th,table.config-fault-history td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}"
-      "table.config-fault-history th{font-size:13px;color:var(--muted);}"
-      "pre.config-hex{margin:8px 0 0 0;padding:10px 12px;font-size:12px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;"
-      "overflow-x:auto;word-break:break-all;white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;}"
-      ".config-layout details{margin-top:10px;}"
-      "</style>";
+
 
   PortalHtmlChunks html;
   html = F("<html>");
   const bool sawPortalCss = appendPortalHead(html, "Spa Config");
-  html += configEnhancements;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuConfig;
   html += F("<main id='mainContent'>");
@@ -3324,120 +2973,7 @@ void handleConfig(AsyncWebServerRequest *request)
   html += "<ul id='cfgLittleFsContainer'></ul>";
   html += "</section></div>";
 
-  html += "<script>(function(){var btn=document.getElementById('cfgLoadLittleFsBtn');var box=document.getElementById('cfgLittleFsContainer');"
-          "if(btn&&box){btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
-          "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
-          "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});}"
-          "function cfgParseHm(v){if(!v||v.indexOf(':')<0)return{h:0,m:0};var p=v.split(':');return{h:parseInt(p[0],10)||0,m:parseInt(p[1],10)||0};}"
-          "function cfgParseDur(hId,mId){var hEl=document.getElementById(hId);var mEl=document.getElementById(mId);"
-          "var h=hEl?parseInt(hEl.value,10):0;var m=mEl?parseInt(mEl.value,10):0;return{h:isNaN(h)?0:h,m:isNaN(m)?0:m};}"
-          "function cfgFilterPayload(){var s1=cfgParseHm(document.getElementById('cfgF1Start')&&document.getElementById('cfgF1Start').value);"
-          "var d1=cfgParseDur('cfgF1DurH','cfgF1DurM');"
-          "var s2=cfgParseHm(document.getElementById('cfgF2Start')&&document.getElementById('cfgF2Start').value);"
-          "var d2=cfgParseDur('cfgF2DurH','cfgF2DurM');"
-          "var en=document.getElementById('cfgF2Enable')&&document.getElementById('cfgF2Enable').checked;"
-          "var f2s={startHour:s2.h,startMinute:s2.m,durationHour:en?d2.h:0,durationMinute:en?d2.m:0};"
-          "return{filter1:{startHour:s1.h,startMinute:s1.m,durationHour:d1.h,durationMinute:d1.m},"
-          "filter2:{enabled:!!en,startHour:en?s2.h:0,startMinute:en?s2.m:0,durationHour:f2s.durationHour,durationMinute:f2s.durationMinute}};}"
-          "function cfgFilter2Matches(reqF2,gotF2){if(!reqF2||!gotF2)return false;"
-          "if(!!reqF2.enabled!==!!gotF2.enabled)return false;if(!gotF2.enabled)return true;"
-          "return reqF2.startHour===gotF2.startHour&&reqF2.startMinute===gotF2.startMinute&&"
-          "reqF2.durationHour===gotF2.durationHour&&reqF2.durationMinute===gotF2.durationMinute;}"
-          "function cfgFilterMatches(req,got){if(!req||!got||!req.filter1||!got.filter1||!req.filter2||!got.filter2)return false;"
-          "return req.filter1.startHour===got.filter1.startHour&&req.filter1.startMinute===got.filter1.startMinute&&"
-          "req.filter1.durationHour===got.filter1.durationHour&&req.filter1.durationMinute===got.filter1.durationMinute&&"
-          "cfgFilter2Matches(req.filter2,got.filter2);}"
-          "function cfgFilterSyncMeta(j){var f2=document.getElementById('cfgFilter2Enabled');"
-          "if(f2&&j&&j.filter2)f2.textContent=j.filter2.enabled?'yes':'no';}"
-          "var saveBtn=document.getElementById('cfgFilterSaveBtn');if(saveBtn){saveBtn.addEventListener('click',function(){"
-          "var st=document.getElementById('cfgFilterStatus');var req=cfgFilterPayload();var baseLast=0;"
-          "fetch('/api/config/filter',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){baseLast=j.lastUpdate||0;"
-          "return fetch('/api/config/filter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req)});"
-          "}).then(function(r){return r.json();}).then(function(j){if(!j.accepted){if(st)st.textContent='Save rejected: '+(j.reason||'unknown');return;}"
-          "if(st)st.textContent='Queued — verifying readback…';var tries=0;var timer=setInterval(function(){tries++;"
-          "fetch('/api/config/filter',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
-          "var got={filter1:j.filter1,filter2:j.filter2};if(cfgFilterMatches(req,got)||(j.lastUpdate&&j.lastUpdate>baseLast)){"
-          "clearInterval(timer);cfgFilterSyncMeta(j);if(st)st.textContent='Saved — verified on controller.';}else if(tries>=12){clearInterval(timer);"
-          "if(st)st.textContent='Queued — readback mismatch (controller may have ignored write).';}}).catch(function(){});},2000);"
-          "}).catch(function(e){if(st)st.textContent='Save failed.';});});}"
-          "var exBtn=document.getElementById('cfgExportBtn');if(exBtn){exBtn.addEventListener('click',function(){"
-          "fetch('/api/config/export',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.blob();}).then(function(b){"
-          "var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='spa-config.json';a.click();URL.revokeObjectURL(a.href);"
-          "}).catch(function(){});});}"
-          "function cfgImportRun(dry){var f=document.getElementById('cfgImportFile');var prev=document.getElementById('cfgImportPreview');"
-          "var force=document.getElementById('cfgImportForce')&&document.getElementById('cfgImportForce').checked;if(!f||!f.files||!f.files[0]){"
-          "if(prev){prev.style.display='block';prev.textContent='Choose a JSON file first.';}return;}"
-          "var reader=new FileReader();reader.onload=function(){try{var data=JSON.parse(reader.result);data.dryRun=!!dry;data.force=!!force;"
-          "fetch('/api/config/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})"
-          ".then(function(r){return r.json();}).then(function(j){if(prev){prev.style.display='block';prev.textContent=JSON.stringify(j,null,2);}"
-          "if(!dry&&j.accepted&&!j.blocked){setTimeout(function(){location.reload();},1500);}}).catch(function(){"
-          "if(prev){prev.style.display='block';prev.textContent='Import request failed.';}});}catch(e){if(prev){prev.style.display='block';"
-          "prev.textContent='Invalid JSON file.';}}};reader.readAsText(f.files[0]);}"
-          "var pv=document.getElementById('cfgImportPreviewBtn');if(pv){pv.addEventListener('click',function(){cfgImportRun(true);});}"
-          "var ap=document.getElementById('cfgImportApplyBtn');if(ap){ap.addEventListener('click',function(){cfgImportRun(false);});}"
-          "function cfgSyncPrefsUi(j){if(!j)return;var val=document.getElementById('cfgPrefsRemindersVal');"
-          "var onBtn=document.getElementById('cfgPrefsRemindersOnBtn');var offBtn=document.getElementById('cfgPrefsRemindersOffBtn');"
-          "var st=document.getElementById('cfgPrefsRemindersStatus');"
-          "function cfgRemindersOn(j){if(!j||!j.ready)return false;return typeof j.remindersEnabled==='boolean'?j.remindersEnabled:((Number(j.reminders||0)&1)!==0);}"
-          "if(val){if(j.ready){val.textContent=j.remindersText||'';}else{val.innerHTML='<em>Not received yet</em>';}}"
-          "if(onBtn)onBtn.disabled=!j.ready||cfgRemindersOn(j);if(offBtn)offBtn.disabled=!j.ready||!cfgRemindersOn(j);"
-          "if(st&&!st.dataset.busy){if(!j.ready)st.textContent='Waiting for preferences from the spa controller (requested automatically after connect).';"
-          "else if(!st.textContent)st.textContent='';}}"
-          "function cfgSetReminders(enabled){var st=document.getElementById('cfgPrefsRemindersStatus');"
-          "var label=enabled?'ON':'OFF';"
-          "if(!confirm('Turn panel maintenance reminders '+label+'?\\n\\nThis changes the spa topside Reminders setting (Clean Filter, Check pH, Change Water, etc.).')){"
-          "if(st)st.textContent='Reminders change canceled.';return;}"
-          "if(st){st.dataset.busy='1';st.textContent='Sending to spa…';}"
-          "var baseLast=0;fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
-          "baseLast=j.lastUpdate||0;return fetch('/api/config/preferences',{method:'POST',headers:{'Content-Type':'application/json'},"
-          "body:JSON.stringify({reminders:enabled?1:0})});}).then(function(r){return r.json();}).then(function(j){"
-          "if(!j.accepted){if(st){st.dataset.busy='';st.textContent='Save rejected: '+(j.reason||'unknown');}return;}"
-          "if(st)st.textContent='Queued — verifying readback…';var tries=0;var timer=setInterval(function(){tries++;"
-          "fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
-          "if(j.ready&&(cfgRemindersOn(j)===enabled||(j.lastUpdate&&j.lastUpdate>baseLast))){"
-          "clearInterval(timer);cfgSyncPrefsUi(j);if(st){st.dataset.busy='';st.textContent='Saved — verified on controller.';}}"
-          "else if(tries>=12){clearInterval(timer);if(st){st.dataset.busy='';st.textContent='Queued — readback not confirmed yet (reload page in a moment).';}}"
-          "}).catch(function(){});},2000);}).catch(function(){if(st){st.dataset.busy='';st.textContent='Save failed.';}});}"
-          "var pOn=document.getElementById('cfgPrefsRemindersOnBtn');if(pOn){pOn.addEventListener('click',function(){cfgSetReminders(true);});}"
-          "var pOff=document.getElementById('cfgPrefsRemindersOffBtn');if(pOff){pOff.addEventListener('click',function(){cfgSetReminders(false);});}"
-          "fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(cfgSyncPrefsUi).catch(function(){});"
-          "setInterval(function(){fetch('/api/config/preferences',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
-          "if(j&&j.ready)cfgSyncPrefsUi(j);}).catch(function(){});},5000);"
-          "function cfgFaultSevClass(sev){if(sev==='alert')return 'config-fault-sev config-fault-sev--alert';"
-          "if(sev==='warning')return 'config-fault-sev config-fault-sev--warning';return 'config-fault-sev config-fault-sev--info';}"
-          "function cfgRenderFaultHistory(j){var tbody=document.getElementById('cfgFaultHistoryBody');"
-          "var table=document.getElementById('cfgFaultHistoryTable');if(!tbody||!table||!j||!j.entries)return;"
-          "tbody.innerHTML='';j.entries.forEach(function(row){var tr=document.createElement('tr');"
-          "tr.innerHTML='<td>'+(row.occurredText||'')+'</td><td>'+(row.eventText||'')+'</td><td>'+(row.faultCode||'')+'</td>'"
-          "+'<td><span class=\"'+cfgFaultSevClass(row.severity)+'\">'+(row.severity||'')+'</span></td>';tbody.appendChild(tr);});"
-          "table.style.display=j.entries.length?'table':'none';}"
-          "function cfgPollFaultHistory(){fetch('/api/config/fault-log/history',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){"
-          "var st=document.getElementById('cfgFaultHistoryStatus');var btn=document.getElementById('cfgFaultHistoryLoadBtn');"
-          "if(typeof j.loading!=='boolean'){if(st)st.textContent='Unexpected history API response — reload the page and try again.';"
-          "if(btn)btn.disabled=false;return;}"
-          "if(st){if(j.loading){var total=j.total||'?';var n=(typeof j.pendingEntry==='number'?j.pendingEntry:j.progress||0)+1;"
-          "if(j.total&&n>j.total)n=j.total;st.textContent='Loading entry '+n+' of '+total+'…';"
-          "if(j.entries&&j.entries.length)cfgRenderFaultHistory(j);}"
-          "else if(j.error){if(j.entries&&j.entries.length){cfgRenderFaultHistory(j);"
-          "st.textContent='History load incomplete — showing '+j.entries.length+' events collected so far.';}"
-          "else{st.textContent='History load failed or timed out — try again.';}"
-          "if(btn)btn.disabled=false;}"
-          "else if(j.complete){st.textContent='Loaded '+((j.entries&&j.entries.length)||0)+' events from the spa controller.';"
-          "cfgRenderFaultHistory(j);if(btn){btn.disabled=false;btn.textContent='Reload history from spa';}}}"
-          "if(j.loading){setTimeout(cfgPollFaultHistory,2000);}}).catch(function(){"
-          "var st=document.getElementById('cfgFaultHistoryStatus');if(st)st.textContent='History request failed.';"
-          "var btn=document.getElementById('cfgFaultHistoryLoadBtn');if(btn)btn.disabled=false;});}"
-          "function cfgLoadFaultHistory(){var btn=document.getElementById('cfgFaultHistoryLoadBtn');"
-          "var st=document.getElementById('cfgFaultHistoryStatus');var tbody=document.getElementById('cfgFaultHistoryBody');"
-          "var table=document.getElementById('cfgFaultHistoryTable');if(tbody)tbody.innerHTML='';if(table)table.style.display='none';"
-          "if(btn)btn.disabled=true;"
-          "if(st)st.textContent='Starting history load…';"
-          "fetch('/api/config/fault-log/history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start'})})"
-          ".then(function(r){return r.json();}).then(function(j){if(!j.accepted){if(st)st.textContent='Could not start: '+(j.reason||'unknown');"
-          "if(btn)btn.disabled=false;return;}cfgPollFaultHistory();}).catch(function(){if(st)st.textContent='Failed to start history load.';"
-          "if(btn)btn.disabled=false;});}"
-          "var fBtn=document.getElementById('cfgFaultHistoryLoadBtn');if(fBtn){fBtn.addEventListener('click',cfgLoadFaultHistory);}"
-          "})();</script>";
+  html += F("<script src='/assets/portal-config.js?v=" VERSION "'></script>");
 
   html += "</main></div></body></html>";
   String etag = String("W/\"cfg-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaConfigurationData.lastUpdate) + "-" +
@@ -3466,11 +3002,9 @@ void handleState(AsyncWebServerRequest *request)
   // Log.verbose(F("[Web]: handleStatus()" CR));
   // Keep CSS as a flash/rodata literal and append through PortalHtmlChunks (do not heap-allocate
   // a large Arduino String first — that can fail under fragmentation while slabs still succeed).
-  const char *stateEnhancements = "<style>.state-grid{display:grid;grid-template-columns:1fr;gap:14px;}@media (min-width:980px){.state-grid{grid-template-columns:1fr 1fr;}.state-grid .panel{margin-bottom:0;}}.diag-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.88rem;}.state-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px 0;}.state-freshness{width:100%;border-collapse:collapse;margin-top:8px;}.state-freshness th,.state-freshness td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}.state-freshness th{font-size:13px;color:var(--muted);}body .advanced-panel{display:none;}body.show-advanced .advanced-panel{display:block;}body .advanced-only{display:none;}body.show-advanced li.advanced-only{display:list-item;}body.show-advanced .sys-advanced-block{display:grid;}button.fw-check-btn{background:var(--panel)!important;color:var(--text)!important;border:1px solid var(--border)!important;flex:0 0 auto!important;width:auto!important;min-width:auto!important;padding:8px 14px!important;font-size:14px!important;font-weight:600!important;}button.fw-danger-btn{color:#991b1b!important;border-color:#fca5a5!important;background:#fef2f2!important;}#fwUpdateResult.fw-update-msg{display:block;width:100%;max-width:100%;margin:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--muted);}.fw-compare{display:flex;flex-direction:column;gap:12px;margin:0;}.fw-compare-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:start;}@media (max-width:560px){.fw-compare-cols{grid-template-columns:1fr;}}.fw-compare-item{display:flex;flex-direction:column;gap:6px;min-width:0;}.fw-compare-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;}.fw-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;width:100%;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch;}.fw-actions .fw-check-btn{flex:0 0 auto;}.fw-actions .gh-sponsor-embed{flex:0 0 auto;flex-shrink:0;line-height:0;align-self:center;}.fw-pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid var(--border);background:var(--surface-2);color:var(--text);}.fw-pill-current{background:#edf7ff;color:var(--heading);border-color:#b7d6f2;}.fw-pill-latest{background:var(--surface-2);color:var(--muted);}.fw-pill-branch{background:#fffbeb;color:#92400e;border-style:dashed;border-color:#fcd34d;}.sub-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:8px 0;}.sub-card-title{font-size:13px;font-weight:700;letter-spacing:.01em;color:var(--muted);text-transform:uppercase;margin:0 0 8px 0;}.sub-card-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}.fw-repo-links{display:flex;flex-wrap:nowrap;align-items:center;gap:0 6px;margin-top:8px;font-size:13px;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}.fw-repo-links a{flex:0 0 auto;}.fw-repo-sep{color:var(--muted);opacity:.7;flex:0 0 auto;user-select:none;}.gh-sponsor-embed iframe{display:block;border:0;border-radius:6px;vertical-align:middle;}.wifi-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.wifi-hero__status{flex:0 0 auto;}.wifi-hero__net{flex:1 1 120px;min-width:0;}.wifi-hero__ssid{font-weight:700;font-size:1rem;line-height:1.25;overflow-wrap:anywhere;}.wifi-hero__host{font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px;}.wifi-hero__signal{flex:0 0 auto;text-align:right;min-width:72px;}.wifi-hero__rssi{font-size:1.15rem;font-weight:700;line-height:1.2;}#wf-rssi,#wf-quality{font-weight:700;}.wifi-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.wifi-meta__sep{opacity:.55;padding:0 5px;}.wifi-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}@media (max-width:520px){.wifi-body{grid-template-columns:1fr;}}.wifi-block-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px 0;}.wifi-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px;align-items:baseline;}.wifi-kv dt{color:var(--muted);font-weight:600;margin:0;}.wifi-kv dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;}.wifi-signal-card{border:1px solid var(--border);background:var(--surface-2);border-radius:10px;padding:10px 12px;}.wifi-signal-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:14px;}.wifi-signal-row__label{color:var(--muted);font-weight:600;flex:0 0 auto;}.wifi-signal-row__value{font-weight:600;text-align:right;overflow-wrap:anywhere;}.wifi-signal-caption{font-size:12px;color:var(--muted);margin:8px 0 4px 0;}.sys-hero{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:8px;}.sys-hero__uptime,.sys-hero__time,.sys-hero__rs485{flex:1 1 100px;min-width:0;}.sys-hero__uptime-val{font-size:1.15rem;font-weight:700;line-height:1.2;}.sys-hero__time-val{font-size:14px;font-weight:600;overflow-wrap:anywhere;}.sys-hero__rs485{text-align:right;}.sys-meta{font-size:13px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}.sys-meta__label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px;}.sys-advanced-block{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;align-items:start;}@media (max-width:520px){.sys-advanced-block{grid-template-columns:1fr;}}.sys-stat-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}@media (max-width:420px){.sys-stat-tiles{grid-template-columns:1fr;}}.sys-stat-tile{display:flex;flex-direction:column;gap:4px;min-width:0;}.sys-stat-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere;}.sys-build-def{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;margin:6px 0 0 0;line-height:1.4;}.rs485-hint{font-size:13px;color:var(--muted);margin:0 0 6px 0;line-height:1.4;}.rs485-deep-meta{font-size:12px;color:var(--muted);margin:0 0 10px 0;overflow-wrap:anywhere;line-height:1.45;}</style>";
   PortalHtmlChunks html;
   html = F("<html>");
   const bool sawPortalCss = appendPortalHead(html, "ESP State");
-  html += stateEnhancements;
   html += F("<body><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page'>");
   html += webMenuState;
   html += F("<main id='mainContent'>");
@@ -3648,28 +3182,11 @@ void handleState(AsyncWebServerRequest *request)
   html += "<dl class='wifi-kv' style='margin-top:10px'><dt>UART</dt><dd>RX GPIO " + String(rs485RxGpio()) + ", TX GPIO " + String(rs485TxGpio()) + ", " + String(rs485Baud()) + " baud</dd>";
   html += "<dt>Polarity inverted</dt><dd>" + String(rs485Stats.polarityInverted ? "true" : "false") + "</dd></dl>";
 #endif
-  html += "</section></div><script>(function(){var t=document.getElementById('toggleAdvanced');if(!t)return;t.addEventListener('change',function(){document.body.classList.toggle('show-advanced',t.checked);});})();</script>";
-  html += "<script>(function(){var up=document.getElementById('gwFaultUptime');var box=document.getElementById('gwFaultLogBox');if(!up||!box)return;"
-          "fetch('/api/diagnostics',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
-          "var ms=j&&typeof j.deviceUptimeMs==='number'?j.deviceUptimeMs:null;"
-          "up.textContent=ms===null?'\\u2014':(Math.floor(ms/1000).toLocaleString()+' s');"
-          "var arr=j&&j.faultLog?j.faultLog:[];if(!arr.length){box.textContent='(empty)';return;}"
-          "var lines=[];for(var i=0;i<arr.length;i++){var e=arr[i]||{};var when=e.wallTime||(typeof e.uptimeMs==='number'?('uptime '+e.uptimeMs+' ms'):'');"
-          "lines.push((when?when+' \\u2014 ':'')+String(e.msg||''));}"
-          "box.textContent=lines.join('\\n');"
-          "}).catch(function(){box.textContent='Failed to load /api/diagnostics';});})();</script>";
-  html += "<script>(function(){var btn=document.getElementById('stateLoadLittleFs');var box=document.getElementById('stateLittleFsBox');if(!btn||!box)return;"
-          "btn.addEventListener('click',function(){if(btn.disabled)return;btn.disabled=true;btn.textContent='Loading...';"
-          "fetch('/api/state/littlefs',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){"
-          "box.innerHTML='<li>'+(j&&j.html?j.html:'(empty)')+'</li>';btn.textContent='LittleFS loaded';}).catch(function(){btn.disabled=false;btn.textContent='Retry LittleFS load';});});})();</script>";
-  html += "<script>(function(){var btn=document.getElementById('fwCheckUpdates');if(!btn)return;var el=document.getElementById('fwUpdateResult');var cur=document.getElementById('fwCurrentBadge');var relBadge=document.getElementById('fwLatestReleaseBadge');var brBadge=document.getElementById('fwLatestBranchBadge');var apiLatest=btn.getAttribute('data-api-latest');var apiMainH=btn.getAttribute('data-api-main-h');var releases=btn.getAttribute('data-releases');var branchUrl=btn.getAttribute('data-branch-url');var branch=btn.getAttribute('data-default-branch')||'branch';var fw=btn.getAttribute('data-fw-version');var ghHdr={Accept:'application/vnd.github+json'};function norm(s){return String(s||'').trim().replace(/^v/i,'');}function dispTag(s){s=String(s||'').trim();if(!s)return'\u2014';return/^v/i.test(s)?s:('v'+s);}function cmpSemver(a,b){var pa=norm(a).split('.').map(function(x){return parseInt(x,10)||0;});var pb=norm(b).split('.').map(function(x){return parseInt(x,10)||0;});var n=Math.max(pa.length,pb.length,3);for(var i=0;i<n;i++){var da=(pa[i]||0),db=(pb[i]||0);if(da<db)return-1;if(da>db)return 1;}return 0;}function setMsg(state,text){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent=text;}function renderMsg(state,parts){var colors={idle:'var(--muted)',checking:'#b26a00',ok:'#1b5e20',warn:'#b00020',error:'#6b7280'};el.style.color=colors[state]||colors.idle;el.textContent='';for(var i=0;i<(parts||[]).length;i++){var p=parts[i];if(p.href){var a=document.createElement('a');a.href=p.href;a.textContent=p.t;a.target='_blank';a.rel='noopener';el.appendChild(a);}else{el.appendChild(document.createTextNode(p.t||''));}}}function parseVersionFromMainH(text){var m=String(text||'').match(/#define\\s+VERSION\\s+\"([^\"]+)\"/);return m?m[1]:'';}function fetchRelease(){return fetch(apiLatest,{headers:ghHdr}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){return j.tag_name||'';});}function fetchBranch(){return fetch(apiMainH,{headers:ghHdr}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(j){if(!j||j.encoding!=='base64'||!j.content)return '';var text=atob(String(j.content).replace(/\\n/g,''));return parseVersionFromMainH(text);});}function showManualLink(){renderMsg('error',[{t:'Could not reach GitHub. '},{t:'Open Releases',href:releases},{t:' or '},{t:'Source ('+branch+')',href:branchUrl},{t:' to compare manually.'}]);}if(cur)cur.textContent=dispTag(fw);btn.addEventListener('click',function(){setMsg('checking','Checking GitHub...');if(relBadge)relBadge.textContent='\u2014';if(brBadge)brBadge.textContent='\u2014';Promise.allSettled([fetchRelease(),fetchBranch()]).then(function(results){var relOk=results[0].status==='fulfilled';var brOk=results[1].status==='fulfilled';var relVer=relOk?results[0].value:'';var brVer=brOk?results[1].value:'';if(relBadge)relBadge.textContent=relOk?dispTag(relVer):'\u2014';if(brBadge)brBadge.textContent=brOk?dispTag(brVer):'\u2014';if(!relOk&&!brOk){showManualLink();return;}var behindRel=relOk&&cmpSemver(fw,relVer)<0;var behindBr=brOk&&cmpSemver(fw,brVer)<0;if(!behindRel&&!behindBr){setMsg('ok',(!relOk||!brOk)?'Up to date (partial check).':'Up to date.');return;}var parts=[];if(behindRel&&behindBr){if(cmpSemver(relVer,brVer)===0){parts=[{t:'Newer tagged release available ('+dispTag(relVer)+') \u2014 see '},{t:'Releases',href:releases},{t:' for changelog / tag.'}];}else{parts=[{t:'Newer tagged release ('+dispTag(relVer)+') and '+branch+' tip ('+dispTag(brVer)+') available \u2014 see '},{t:'Releases',href:releases},{t:' and '},{t:'Source ('+branch+')',href:branchUrl},{t:'.'}];}}else if(behindRel){parts=[{t:'Newer tagged release available ('+dispTag(relVer)+') \u2014 see '},{t:'Releases',href:releases},{t:' for changelog / tag.'}];}else{parts=[{t:'Newer on '+branch+' branch ('+dispTag(brVer)+') \u2014 not tagged yet; see '},{t:'Source ('+branch+')',href:branchUrl},{t:' to build from tip.'}];}if(!relOk||!brOk){parts.push({t:' Some GitHub data unavailable.'});}renderMsg('warn',parts);});});})();</script>";
-  html += "<script>(function(){var btn=document.getElementById('gwRebootBtn');var el=document.getElementById('gwRebootResult');if(!btn||!el)return;"
-          "btn.addEventListener('click',function(){"
-          "if(!confirm('Reboot this gateway? Spa control and telemetry will be unavailable briefly.'))return;"
-          "btn.disabled=true;el.style.color='#b26a00';el.textContent='Rebooting...';"
-          "fetch('/restart',{cache:'no-store'}).catch(function(){});"
-          "setTimeout(function(){el.style.color='var(--muted)';el.textContent='Gateway is rebooting. Reload this page in ~30 seconds.';},500);"
-          "});})();</script></main></div></body></html>";
+  html += "</section></div>";
+
+
+
+  html += F("<script src='/assets/portal-state.js?v=" VERSION "'></script></main></div></body></html>");
 
   String etag = String("W/\"state-") + String(VERSION) + "-" + String(BUILD) + "-" + String(spaStatusData.lastUpdate) + "-" + String(spaConfigurationData.lastUpdate) + "\"";
   logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/state");
@@ -3756,33 +3273,12 @@ void handleLogsPage(AsyncWebServerRequest *request)
   String html;
   html.reserve(40000);
   html = F("<html class=\"logs-portal\">");
-  const bool sawPortalCss = appendPortalHead(html, "Spa Logs", ",viewport-fit=cover", portalLogsHeadExtraStyle);
+  const bool sawPortalCss = appendPortalHead(html, "Spa Logs", ",viewport-fit=cover");
   html += F("<body class=\"logs-portal\"><a class='skip-link' href='#mainContent'>Skip to main content</a><div class='page logs-page'>");
   html += webMenuLogs;
   html += F("<main id='mainContent'><section class='panel logs-panel'><div class='logs-stack'><h1>Device logs</h1>");
   html += "<p style='color:var(--muted);font-size:14px;margin-top:0'>Recent lines are buffered on the gateway; include/exclude filters run in the browser. Logs are teed to USB <code>Serial</code> (monitor baud) and this ring. For a live tail without USB, use this page or <code>GET /api/logs</code> (optional WebSocket tail). If the firmware was built with <code>TELNET_LOG</code>, <code>TelnetStream</code> also listens on TCP port 23; the global logger is <em>not</em> switched to Telnet (see Wi‑Fi boot messages).</p>";
-  html += R"HTML(<style>
-html.logs-portal,body.logs-portal{min-height:100svh;min-height:100dvh}
-body.logs-portal{display:flex;flex-direction:column;margin:0;box-sizing:border-box;padding-bottom:env(safe-area-inset-bottom,0)}
-body.logs-portal>.page.logs-page{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;width:100%;max-width:980px;margin:0 auto;padding:max(var(--space-3),env(safe-area-inset-left,0)) max(var(--space-3),env(safe-area-inset-right,0)) max(var(--space-3),env(safe-area-inset-bottom,0))}
-body.logs-portal #mainContent{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
-body.logs-portal .logs-panel{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;margin-bottom:0}
-body.logs-portal .logs-stack{flex:0 0 auto}
-.log-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
-.log-controls input[type=text]{flex:1 1 140px;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px}
-.log-controls label{font-size:14px;color:var(--muted)}
-.log-controls select{padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14px}
-.preset-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0}
-.preset-row button{flex:0 0 auto;padding:8px 11px;font-size:13px;min-height:36px}
-.status-row{display:flex;align-items:center;gap:10px;margin:0 0 10px 0;color:var(--muted);font-size:13px}
-.log-view{flex:1 1 12rem;min-height:0;overflow:auto;background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;padding:8px;border-radius:8px;border:1px solid var(--border)}
-.log-line{display:flex;gap:8px;padding:2px 4px;border-radius:4px;white-space:pre-wrap;word-break:break-word}
-.log-seq{color:#93a8c5;min-width:56px}
-.log-tag{display:inline-block;padding:0 6px;border-radius:999px;background:#233148;color:#d7e3f4;font-size:11px}
-.lvl-e{background:rgba(190,24,36,.2)} .lvl-w{background:rgba(202,138,4,.2)} .lvl-i{background:rgba(2,132,199,.16)} .lvl-v{background:rgba(71,85,105,.2)}
-#newBadge{display:none}
-@media (max-width:640px){body.logs-portal>.page.logs-page{padding-left:max(var(--space-2),env(safe-area-inset-left,0));padding-right:max(var(--space-2),env(safe-area-inset-right,0))}}
-</style>)HTML";
+
   html += "<div class='preset-row'><button type='button' id='pAll'>All</button><button type='button' id='pErr'>Errors only</button><button type='button' id='pRs'>RS485</button><button type='button' id='pBridge'>BridgeDiag</button><button type='button' id='pWifi'>WiFi</button></div>";
   html += "<div class='log-controls'><label>Level <select id='lvl'><option value='0'>SILENT</option><option value='1'>FATAL</option><option value='2'>ERROR</option><option value='3'>WARNING</option><option value='4'>INFO/NOTICE</option><option value='5'>TRACE</option><option value='6'>VERBOSE</option></select></label>";
   html += "<button type='button' id='applyLvl'>Apply level</button>";
@@ -3796,99 +3292,9 @@ body.logs-portal .logs-stack{flex:0 0 auto}
   html += "<button type='button' id='clr'>Clear view</button><button type='button' id='copyTxt'>Copy</button><button type='button' id='dlTxt'>Download .log</button><button type='button' id='dlJson'>Download .json</button>";
   html += "</div>";
   html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='hiddenCount'>hidden idle CTS: 0</span><span id='connState'></span></div></div>";
-  html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div><script>";
-  html += R"JS((function(){
-var logView=document.getElementById('logView'),since=0,pollMs=1000,pollMaxMs=20000,timer,ws,useWs=true,newBuffered=0;
-var pollFailures=0,wsRetryTimer=null,wsOpenEver=false,pollInFlight=null;
-var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
-var pauseEl=document.getElementById('pause'),newBadge=document.getElementById('newBadge');
-var hideIdleCtsEl=document.getElementById('hideIdleCts'),showHiddenEl=document.getElementById('showHidden');
-var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),hiddenCountEl=document.getElementById('hiddenCount'),connState=document.getElementById('connState');
-var rendered=[],maxRendered=8000;
-var hiddenIdleCts=0;
-function abortLogPoll(){if(pollInFlight){pollInFlight.abort();pollInFlight=null;}}
-function getTag(t){var m=t.match(/\[([^\]]+)\]/);return m?m[1]:'';}
-function getLevelClass(t){if(/\bE:|\bERROR\b/.test(t))return'lvl-e';if(/\bW:|\bWARNING\b/.test(t))return'lvl-w';if(/\bI:|\bNOTICE\b|\bINFO\b/.test(t))return'lvl-i';if(/\bTRACE\b|\bVERBOSE\b/.test(t))return'lvl-v';return'';}
-function esc(s){return s.replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
-function isIdleCtsLine(t){
-var l=t.toLowerCase();
-if(l.indexOf('[bridgediag]')<0)return false;
-if(l.indexOf('cts')<0)return false;
-if(l.indexOf('depth_before=0')<0)return false;
-return true;
-}
-function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.toLowerCase().indexOf(i.toLowerCase())<0)return false;if(x&&t.toLowerCase().indexOf(x.toLowerCase())>=0)return false;return true;}
-function isVisibleRecord(rec){
-var line=rec.t;
-var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);
-if(hiddenByIdleCts&&!showHiddenEl.checked)return false;
-if(!passes(line))return false;
-return true;
-}
-function renderLine(rec){var tag=getTag(rec.t),cls=getLevelClass(rec.t);var body=esc(rec.t);if(tag){body=body.replace('['+tag+']','<span class=\"log-tag\">['+esc(tag)+']</span>');}
-return '<div class=\"log-line '+cls+'\"><span class=\"log-seq\">#'+rec.s+'</span><span>'+body+'</span></div>';}
-function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;}if(!isVisibleRecord(rendered[i]))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);var stick=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;logView.innerHTML=out;renderCount.textContent=n+' lines';if(stick){logView.scrollTop=logView.scrollHeight;}}
-function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){rendered.push({s:arr[j].s,t:arr[j].t});if(rendered.length>maxRendered)rendered.shift();}refreshFromRendered();}
-function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;
-if(atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
-else{newBuffered+=arr.length;newBadge.textContent=String(newBuffered)+' new lines';newBadge.style.display='inline-flex';for(var k=0;k<arr.length;k++){rendered.push({s:arr[k].s,t:arr[k].t});if(rendered.length>maxRendered)rendered.shift();}renderCount.textContent=rendered.length+' lines';}}
-function capSel(mx){for(var i=0;i<sel.options.length;i++){var o=sel.options[i];o.disabled=(parseInt(o.value,10)>mx);}if((parseInt(sel.value,10)||0)>mx)sel.value=String(mx);}
-function nextPollDelay(){var e=Math.min(pollMaxMs,pollMs*Math.pow(2,Math.min(6,pollFailures)));var j=Math.floor(Math.random()*Math.max(250,Math.floor(e*0.35)));return Math.min(pollMaxMs,e+j);}
-function schedulePoll(ms){stopPoll();timer=setTimeout(poll,Math.max(250,ms||pollMs));}
-function fetchJsonTimeout(url,timeoutMs){var ctl=new AbortController();var t=setTimeout(function(){ctl.abort();},timeoutMs||5000);return fetch(url,{cache:'no-store',signal:ctl.signal}).then(function(r){if(!r.ok)throw new Error('http_'+r.status);return r.json();}).finally(function(){clearTimeout(t);});}
-function poll(){if(document.hidden||pauseEl.checked)return;var ctl=new AbortController();pollInFlight=ctl;var t=setTimeout(function(){ctl.abort();},4200);schedulePoll(pollMs);
-fetch('/api/logs?since='+since+'&limit=120',{cache:'no-store',signal:ctl.signal}).then(function(r){if(!r.ok)throw new Error('http_'+r.status);return r.json();}).then(function(j){if(pauseEl.checked||pollInFlight!==ctl)return;pollFailures=0;connState.textContent='ok';
-if(typeof j.compileMaxLevel==='number')capSel(j.compileMaxLevel);
-var lines=j.lines||[];
-receiveLines(lines);
-if(lines.length>0&&typeof lines[lines.length-1].s==='number'){since=lines[lines.length-1].s;}
-else if(typeof j.newestSeq==='number'){since=j.newestSeq;}
-}).catch(function(){if(pauseEl.checked||pollInFlight!==ctl)return;pollFailures++;connState.textContent='poll retrying...';schedulePoll(nextPollDelay());}).finally(function(){clearTimeout(t);if(pollInFlight===ctl)pollInFlight=null;});}
-function startPoll(){stopPoll();streamMode.textContent='poll';pollFailures=0;poll();}
-function stopPoll(){if(timer){clearTimeout(timer);timer=null;}}
-function clearWsRetry(){if(wsRetryTimer){clearTimeout(wsRetryTimer);wsRetryTimer=null;}}
-function scheduleWsReconnect(){clearWsRetry();if(document.hidden||pauseEl.checked||!useWs)return;var wait=Math.min(20000,1000*Math.pow(2,Math.min(6,pollFailures)));wsRetryTimer=setTimeout(connectWs,wait);}
-function connectWs(){if(document.hidden||pauseEl.checked||!useWs)return;streamMode.textContent='ws';clearWsRetry();var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/api/logs/ws');connState.textContent='connecting';
-ws.onopen=function(){pollFailures=0;wsOpenEver=true;connState.textContent='ws-open';};
-ws.onmessage=function(ev){if(pauseEl.checked)return;try{var o=JSON.parse(ev.data);if(o.lines)receiveLines(o.lines);if(o.d)receiveLines(o.d);}catch(e){}};
-ws.onerror=function(){connState.textContent='ws-error';};
-ws.onclose=function(){ws=null;pollFailures++;if(!useWs)return;connState.textContent='ws-closed';if(wsOpenEver&&!pauseEl.checked){startPoll();}scheduleWsReconnect();};}
-function setPreset(inc,exc){fInc.value=inc||'';fExc.value=exc||'';refreshFromRendered();}
-function dl(name,content,type){var b=new Blob([content],{type:type});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);}
-document.getElementById('pAll').addEventListener('click',function(){setPreset('','');});
-document.getElementById('pErr').addEventListener('click',function(){setPreset('E:','');});
-document.getElementById('pRs').addEventListener('click',function(){setPreset('[RS485]','');});
-document.getElementById('pBridge').addEventListener('click',function(){setPreset('[BridgeDiag]','');});
-document.getElementById('pWifi').addEventListener('click',function(){setPreset('[WiFi]','');});
-fInc.addEventListener('input',refreshFromRendered);fExc.addEventListener('input',refreshFromRendered);
-hideIdleCtsEl.addEventListener('change',refreshFromRendered);
-showHiddenEl.addEventListener('change',refreshFromRendered);
-newBadge.addEventListener('click',function(){newBuffered=0;newBadge.style.display='none';refreshFromRendered();logView.scrollTop=logView.scrollHeight;});
-document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
-document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
-document.getElementById('clr').addEventListener('click',function(){rendered=[];refreshFromRendered();});
-document.getElementById('copyTxt').addEventListener('click',function(){
-var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}
-if(!txt){connState.textContent='nothing to copy';return;}
-if(navigator.clipboard&&navigator.clipboard.writeText){
-navigator.clipboard.writeText(txt).then(function(){connState.textContent='copied';}).catch(function(){fallbackCopy(txt);});
-}else{fallbackCopy(txt);}
-});
-function fallbackCopy(txt){
-var ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','readonly');
-ta.style.position='fixed';ta.style.top='-1000px';document.body.appendChild(ta);ta.focus();ta.select();
-try{var ok=document.execCommand('copy');connState.textContent=ok?'copied':'copy failed';}
-catch(e){connState.textContent='copy failed';}
-document.body.removeChild(ta);
-}
-document.getElementById('dlTxt').addEventListener('click',function(){var txt='';for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))txt+=rendered[i].t+'\n';}dl('spa-logs-'+Date.now()+'.log',txt,'text/plain');});
-document.getElementById('dlJson').addEventListener('click',function(){var out=[];for(var i=0;i<rendered.length;i++){if(isVisibleRecord(rendered[i]))out.push(rendered[i]);}dl('spa-logs-'+Date.now()+'.json',JSON.stringify(out,null,2),'application/json');});
-document.getElementById('applyLvl').addEventListener('click',function(){var v=parseInt(sel.value,10);fetch('/api/logs/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level:v})}).then(function(){return fetchJsonTimeout('/api/logs/config',5000);}).then(function(c){if(typeof c.currentLevel==='number')sel.value=String(c.currentLevel);if(typeof c.compileMaxLevel==='number')capSel(c.compileMaxLevel);}).catch(function(){});});
-fetchJsonTimeout('/api/logs/config',5000).then(function(c){sel.value=String(c.currentLevel||0);capSel(c.compileMaxLevel||6);}).catch(function(){});
-document.addEventListener('visibilitychange',function(){if(document.hidden){stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}}else if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
-if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
-})();)JS";
-  html += "</script></body></html>";
+  html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div>";
+  html += F("<script src='/assets/portal-logs.js?v=" VERSION "'></script></body></html>");
+
   String etag = String("W/\"logs-") + String(VERSION) + "-" + String(BUILD) + "\"";
   logPortalHtmlMissingGlobalCss(sawPortalCss, html.length(), "/logs");
   sendHtmlWithEtag(request, html, etag, true);
@@ -3897,7 +3303,11 @@ if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}
 
 void handleVersion(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(1024);
   doc["version"] = VERSION;
   doc["build"] = BUILD;
@@ -3919,7 +3329,11 @@ void handleVersion(AsyncWebServerRequest *request)
 
 void handleDiagnostics(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(10240);
   // Use to<> once — a second to<JsonObject>() clears the document (ArduinoJson 6).
   JsonObject root = doc.to<JsonObject>();
@@ -3949,7 +3363,11 @@ void handleDiagnostics(AsyncWebServerRequest *request)
 
 void handleWifi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(1024);
   wl_status_t st = WiFi.status();
   const bool ok = (st == WL_CONNECTED);
@@ -4002,7 +3420,11 @@ void handleWifi(AsyncWebServerRequest *request)
 
 void handleMqtt(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(1024);
   const int stateCode = mqtt.state();
   const bool connected = mqtt.connected();
@@ -4103,7 +3525,11 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
 
 void handleStatusControlsApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2560);
   fillStatusSnapshotDoc(doc);
   serializeJson(doc, *response);
@@ -4112,7 +3538,11 @@ void handleStatusControlsApi(AsyncWebServerRequest *request)
 
 void handleStatusSummaryApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2560);
   fillStatusSnapshotDoc(doc);
   wl_status_t st = WiFi.status();
@@ -4185,7 +3615,11 @@ void handleStatusHistoriesApi(AsyncWebServerRequest *request)
 
 void handleStateLittleFsApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(6144);
   doc["html"] = listDirToString(LittleFS, "/", 3);
   serializeJson(doc, *response);
@@ -4194,7 +3628,11 @@ void handleStateLittleFsApi(AsyncWebServerRequest *request)
 
 void handleDiagToggleApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(768);
 
   if (!request->hasParam("item"))
@@ -4257,7 +3695,11 @@ void handleDiagToggleApi(AsyncWebServerRequest *request)
 
 void handleDiagToggleSequenceApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(4096);
 
   if (!request->hasParam("item"))
@@ -4389,7 +3831,11 @@ void handleDiagToggleSequenceApi(AsyncWebServerRequest *request)
 
 void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2048);
 
   int observeMs = 2500;
@@ -4480,7 +3926,11 @@ void handleDiagLight1NextCtsApi(AsyncWebServerRequest *request)
 
 void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(16384);
 
   int observeMs = 6000;
@@ -4582,7 +4032,11 @@ void handleDiagLight1NextCtsWindowApi(AsyncWebServerRequest *request)
 
 void handleRs485(AsyncWebServerRequest *request)
 {
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(2048);
   doc["rxGpio"] = rs485RxGpio();
   doc["txGpio"] = rs485TxGpio();
@@ -4635,7 +4089,11 @@ void handleRs485(AsyncWebServerRequest *request)
 void handleRs485Retry(AsyncWebServerRequest *request)
 {
   rs485RequestRetry();
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(512);
   doc["ok"] = true;
   doc["retryPending"] = rs485RetryPending();
@@ -4664,7 +4122,11 @@ void handleRs485Raw(AsyncWebServerRequest *request)
   Rs485RawByte bytes[RS485_RAW_CAPTURE_SIZE];
   const int count = rs485GetRawRecent(bytes, limit);
 
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   response->print("{\"count\":");
   response->print(count);
   response->print(",\"limit\":");
@@ -4726,7 +4188,11 @@ void handleRs485History(AsyncWebServerRequest *request)
   Rs485Snapshot snapshots[RS485_HISTORY_SIZE];
   const int count = rs485GetHistoryNewestFirst(snapshots, limit);
 
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  AsyncResponseStream *response = spaWebBeginJsonStream(request);
+  if (response == nullptr)
+  {
+    return;
+  }
   DynamicJsonDocument doc(16384);
   doc["count"] = count;
   doc["limit"] = limit;
@@ -4989,6 +4455,11 @@ void handleConfigExport(AsyncWebServerRequest *request)
   String filename = "spa-config-" + hostname + "-" + String(ts) + ".json";
 
   AsyncWebServerResponse *response = request->beginResponse(200, "application/json", body);
+  if (response == nullptr)
+  {
+    request->send(503, "text/plain", "low memory, retry");
+    return;
+  }
   response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   request->send(response);
 }
@@ -5366,7 +4837,11 @@ void handleLoginData(AsyncWebServerRequest *request)
     // data.device.device_id
     // data.token
 
-    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    AsyncResponseStream *response = spaWebBeginJsonStream(request);
+    if (response == nullptr)
+    {
+      return;
+    }
     DynamicJsonDocument doc(128);
 
     doc["username"] = WiFi.getHostname();
@@ -5401,6 +4876,10 @@ void handleSlash(AsyncWebServerRequest *request)
 {
   Log.verbose("[Web]: handleSlash %p %s %s" CR, request->client()->remoteIP(), request->methodToString(), request->url().c_str());
   AsyncWebServerResponse *response = request->beginResponse(302); // Sends 302 Weiterleitung
+  if (response == nullptr)
+  {
+    return; // OOM: the parser's null-response guard completes the request
+  }
   response->addHeader("Location", "index.html");
   request->send(response);
 }

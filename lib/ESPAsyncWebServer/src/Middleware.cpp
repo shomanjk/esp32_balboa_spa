@@ -1,5 +1,6 @@
 #include "WebAuthentication.h"
 #include <ESPAsyncWebServer.h>
+#include <new>
 
 AsyncMiddlewareChain::~AsyncMiddlewareChain() {
   for (AsyncMiddleware* m : _middlewares)
@@ -207,8 +208,11 @@ void AsyncCorsMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext n
   if (request->hasHeader(asyncsrv::T_CORS_O)) {
     // check if this is a preflight request => handle it and return
     if (request->method() == HTTP_OPTIONS) {
+      // Local patch: beginResponse is nothrow; skip the preflight decoration under OOM.
       AsyncWebServerResponse* response = request->beginResponse(200);
-      addCORSHeaders(response);
+      if (response) {
+        addCORSHeaders(response);
+      }
       request->send(response);
       return;
     }
@@ -249,8 +253,12 @@ void AsyncRateLimitMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareN
   if (isRequestAllowed(retryAfterSeconds)) {
     next();
   } else {
+    // Local patch: beginResponse is nothrow; a null still ends the request via send()
+    // (the parser's null-response guard answers 501/closes).
     AsyncWebServerResponse* response = request->beginResponse(429);
-    response->addHeader(asyncsrv::T_retry_after, retryAfterSeconds);
+    if (response) {
+      response->addHeader(asyncsrv::T_retry_after, retryAfterSeconds);
+    }
     request->send(response);
   }
 }

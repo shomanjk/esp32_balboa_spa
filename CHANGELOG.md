@@ -8,6 +8,26 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-09-02
+
+### Changed
+
+- **Portal CSS/JS moved to flash-resident static assets** ([`lib/spaWebServer/spaPortalAssets.h`](lib/spaWebServer/spaPortalAssets.h), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): The ~58KB of byte-identical inline `<style>`/`<script>` boilerplate (base styles, dark-mode palette, theme/nav scripts, both canvas chart engines, page feature scripts) is no longer rebuilt into RAM slabs on every page request. It now lives in flash as six immutable-cached assets under `/assets/` (`portal.css`, `portal-head.js`, and per-page `portal-{status,config,state,logs}.js`), cache-busted via `?v=VERSION`. Page bodies shrink dramatically — `/status` **73,008 → 15,471 bytes** (18 slabs → 4) — which removes the DRAM exhaustion that caused `portal page assembly failed (low memory)` when a page build overlapped the SPA's parallel JSON responses (see 2.27.0 notes: real usable DRAM is ~87KB and the old 73KB body plus hydration traffic did not fit). Bench: the reload-storm that previously failed 25/25 rounds now passes **12/12 first-try**; pages render identically (theme, charts, controls verified in headless Chrome). Deprecated `beginResponse_P` calls replaced with `beginResponse`.
+
+### Fixed (external review follow-up on the 2.27.0 networking work)
+
+- **TCP write accounting can no longer duplicate or drop bytes** ([`lib/ESPAsyncWebServer/src/WebResponses.cpp`](lib/ESPAsyncWebServer/src/WebResponses.cpp)): every response send path (portal chunked bodies, HTTP heads, and the small `AsyncBasicResponse` JSON replies) now uses `AsyncClient::add()` as the sole authority on accepted bytes with `send()` as a best-effort output trigger. `write()` returns 0 when only `tcp_output` fails *after* `tcp_write` queued the bytes, so retrying its "failure" duplicated bytes on the wire; partial HTTP heads also used to lose the unaccepted remainder.
+- **AsyncTCP control events are no longer droppable** ([`lib/AsyncTCP/src/AsyncTCP.cpp`](lib/AsyncTCP/src/AsyncTCP.cpp)): the bounded-wait patch from 2.27.0 applied to *all* events, but lwIP never redelivers SENT/FIN/ERROR/CONNECTED/DNS/ACCEPT — a drop stranded ack accounting or leaked connections. Retryable RECV/POLL now leave 32 reserved queue slots free and fail fast (lwIP redelivers refused data); control events use the reserve plus a 1 s wait. Discarded queued RECV events free their pbuf chains (previous leak), and `_tcp_clear_events` is task-aware so queue purging cannot race the consumer task.
+- **OOM fallback paths cannot abort the firmware** ([`lib/ESPAsyncWebServer/src/WebRequest.cpp`](lib/ESPAsyncWebServer/src/WebRequest.cpp), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): the whole `beginResponse` family allocates with `new (std::nothrow)` (under `-fno-exceptions` a failed throwing `new` aborts — the existing nullptr checks were dead code), null-response guards added where the library dereferences the result, and the emergency 503 path drops its optional `Retry-After` header (a throwing list allocation; the page's meta refresh already carries the hint).
+- **HTTP/1.0 portal requests get close-delimited bodies** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): the nothrow response construction bypassed `beginChunkedResponse`'s version switch and sent chunk framing that HTTP/1.0 heads never declare.
+- **RS485 retries no longer freeze while NTP is unavailable** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): `retryRequest` paces on a new monotonic `lastRequestMs` (wrap-safe) instead of wall clock — with `getTime()` still 0, a boot-time request could never satisfy `lastRequest + RETRY_TIME < 0`, so one lost frame stalled that dataset until NTP sync. The field is inserted before `magicNumber` so the RTC_NOINIT layout shift forces a clean reinit after OTA.
+- **Wi-Fi path watchdog is harder to false-trigger and probe-scoped** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): a ping miss is vetoed when HTTP traffic crossed the radio in the last 30 s (loopback probe excluded), two misses force one `WiFi.reconnect()` before any restart, restart needs 4 sustained misses (~40 s), and a fail-safe restarts if the forced reconnect never re-associates (true RX-death blocks association too). Ping callbacks and the lwIP heartbeat now carry sequence tokens, so delayed callbacks from older probes/connections can no longer arm, clear, or fail the current watchdog.
+- **Vendored-library provenance documented** ([`lib/AsyncTCP/PATCHES.md`](lib/AsyncTCP/PATCHES.md), [`lib/ESPAsyncWebServer/PATCHES.md`](lib/ESPAsyncWebServer/PATCHES.md)): dated modification notices (LGPL-3.0) listing upstream baselines and every local patch.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.28.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.27.0] - 2026-09-01
 
 ### Added
