@@ -44,5 +44,5 @@ These live in the [main repository](https://github.com/shomanjk/esp32_balboa_spa
 
 - **Catalog stubs:** Edit status, RS485 notes, and OEM brands on [Spa controllers and brands](Spa-controllers-and-brands).
 - **Field reports:** Add a row on [Hardware field notes](Hardware-field-notes) (tub model, board, PlatformIO env, outcome).
-- **Corrections:** Edit the wiki page directly, or open an [Issue](https://github.com/shomanjk/esp32_balboa_spa/issues) with tub model + board + what you tried.
+- **Corrections:** Edit the matching file under [`wiki/`](https://github.com/shomanjk/esp32_balboa_spa/tree/ESP32/wiki) in a PR (CI publishes to this tab), or open an [Issue](https://github.com/shomanjk/esp32_balboa_spa/issues) with tub model + board + what you tried. Wiki UI-only edits are overwritten on the next sync.
 - **Behavior that depends on a firmware release** (new MQTT topics, flags, APIs): update the **main repo README/CHANGELOG** in a PR; link from the wiki, do not duplicate long tables here.

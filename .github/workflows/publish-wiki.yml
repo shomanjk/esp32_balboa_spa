@@ -23,7 +23,9 @@ jobs:
       - uses: Andrew-Chen-Wang/github-wiki-action@v5
         with:
           path: wiki
-          strategy: init
+          # clone (default): append commits so GitHub Wiki shows revision history.
+          # init force-pushes a single commit each run (always "1 revision" per page).
+          strategy: clone
           commit-message: "Sync wiki from ${{ github.sha }}"
           ignore: |
             BOOTSTRAP.md
