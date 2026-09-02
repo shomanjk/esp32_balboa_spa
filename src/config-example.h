@@ -108,8 +108,8 @@
 // Grove RS485 modules (Unit RS485, Tail485, similar) on Atom Lite:
 //   - Use a GENERIC PlatformIO env (ESP32ota, ESP32prodOta, …), NOT M5AtomLite-tub.
 //   - M5AtomLite-tub always uses RX=22 / TX=19; config.h overrides are ignored there.
-//   - RS485_DIR_PIN is NOT a firmware define — use AUTO_TX true first; if direction fails,
-//     try AUTO_TX false and verify DE/RE wiring per your module datasheet.
+//   - Manual DE/RE on a separate GPIO is NOT supported — no RS485_DIR_PIN define.
+//     Use an auto-direction module with AUTO_TX true (Atomic base, Unit RS485, typical Tail485).
 //
 // M5 Unit RS485 on Grove (example for Atom Lite Grove pinout):
 //   Black=GND, Red=5V, Yellow=G26, White=G32

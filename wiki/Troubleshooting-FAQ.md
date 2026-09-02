@@ -9,8 +9,8 @@ Short **symptom → checks** guide. For release-accurate API and flag lists, use
 **Checks (in order):**
 
 1. **Wiring** — Confirm RS485 **A/B** on the spa bus ([ccutrer physical layer](https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer)). Swap A/B if you see no frames.
-2. **Pins** — `M5AtomLite-tub`: env **RX 22 / TX 19**. `M5AtomS3Lite-tub` (AtomS3 Lite): env **RX 5 / TX 6**. Generic envs: set pins in `config.h`. On Atom Lite, **GPIO 16/17** are unsafe (PICO flash) and trigger RS485 safe mode.
-3. **`AUTO_TX`** — Prefer `true` unless your module needs manual DE/RE.
+2. **Pins** — `M5AtomLite-tub`: env **RX 22 / TX 19**. `M5AtomS3Lite-tub` (AtomS3 Lite): env **RX 5 / TX 6**. Generic envs: set pins in `config.h`. On Atom Lite, **GPIO 16/17** are unsafe (PICO flash) — never use them; immediate safe mode on 16/17 applies only on **`M5AtomLite-tub`** (pin guard needs `M5_STATUS_LED`).
+3. **`AUTO_TX`** — Use **`true`** with auto-direction transceivers. Separate DE/RE GPIO control is **not supported**.
 4. **RS485 health** — Open `/state` or `GET /api/rs485`. Look at `health`, frame/CRC counters, and polarity hints. `UART_DEFERRED` means waiting for Wi‑Fi/OTA; `RS485_SAFE_MODE` means UART is skipped after faults — fix pins then `POST /api/rs485/retry` or power-cycle.
 5. **Power / bench** — USB-only bench power is OK; ensure the transceiver shares a valid ground reference with the bus.
 
@@ -49,7 +49,7 @@ Symptom: no spa frames despite “correct” pins in `config.h`, or RS485 safe m
 
 `M5AtomLite-tub` **ignores** `config.h` pin overrides. Grove wiring on **32/26** with that env talks to the wrong GPIOs.
 
-**Also:** default generic pins **16/17** are unsafe on Atom Lite (PICO flash) → RS485 safe mode. Do not use them on this board.
+**Also:** default generic pins **16/17** are unsafe on Atom Lite (PICO flash). Set **32/26** (Grove) or another safe pair — do not leave 16/17 at defaults. On **`M5AtomLite-tub`**, 16/17 trigger immediate safe mode; on a **generic** env the guard is off and flash-pin UART may WDT/panic before safe mode appears.
 
 Detail: [Hardware targets — Atom Lite + Grove RS485](Hardware-targets#atom-lite--grove-rs485-alternate).
 

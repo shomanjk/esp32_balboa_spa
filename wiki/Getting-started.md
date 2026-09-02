@@ -38,7 +38,7 @@ Edit at minimum:
 | `MQTT_SERVER` / `MQTT_PORT` | Optional until you add HA; required for MQTT/HA |
 | `BROKER_LOGIN` / `BROKER_PASS` | If your broker requires auth |
 | `TX485_Rx` / `TX485_Tx` | **M5\*‑tub envs:** set by PlatformIO (Atom Lite **22/19**, AtomS3 Lite **5/6**) — omit in `config.h`. **Generic envs:** set here (e.g. **16/17**) |
-| `AUTO_TX` | Prefer **`true`** unless your transceiver needs explicit DE/RE |
+| `AUTO_TX` | **`true`** for auto-direction transceivers (required). Separate DE/RE GPIO is **not supported**. |
 
 **Which env for your RS485 module?**
 
@@ -49,7 +49,7 @@ Edit at minimum:
 
 Do not use `M5AtomLite-tub` with Grove wiring — that env ignores `config.h` pin overrides. See [Hardware targets — Grove alternate](Hardware-targets#atom-lite--grove-rs485-alternate).
 
-Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pins (16/17 are unsafe on Atom Lite / PICO-D4).
+Comment out or remove the default **GPIO 16/17** pair on Atom Lite — they are PICO flash pins. Use **32/26** (Grove) or Atomic-base **22/19** via `M5AtomLite-tub`. Leaving 16/17 on a generic env can WDT/panic (pin guard applies only when `M5_STATUS_LED` is defined).
 
 Also copy local upload/monitor ports (gitignored):
 

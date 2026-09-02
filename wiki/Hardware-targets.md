@@ -44,8 +44,8 @@ The [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) uses the **ESP3
 **Common mistakes**
 
 1. **Wrong env** — `M5AtomLite-tub` always uses **22/19**. If your transceiver is on Grove **32/26**, `config.h` pin overrides are **ignored** on that env. Use a generic env instead.
-2. **Unsafe pins on generic env** — default **GPIO 16/17** in `config-example.h` are tied to PICO flash and trigger **RS485 safe mode** on Atom Lite. Use **32/26** (Grove) or another safe pair.
-3. **`RS485_DIR_PIN` is not supported** — this firmware has no such define. Prefer **`AUTO_TX true`**. If your module needs manual DE/RE, try **`AUTO_TX false`** and verify wiring against the module datasheet (direction is toggled via existing `AUTO_TX false` behavior, not a separate pin define).
+2. **Unsafe pins on generic env** — default **GPIO 16/17** in `config-example.h` are tied to PICO flash on Atom Lite. **Do not use them on this board** — set **32/26** (Grove) or another safe pair in `config.h`. Immediate refusal (RS485 safe mode before UART begin) applies only on **`M5AtomLite-tub`** (defines `M5_STATUS_LED_PIN=27`). On a **generic** env with 16/17 left at defaults, the pin guard is **not** active and UART may begin on flash pins → WDT/panic loops; safe mode may appear only after repeated fault boots.
+3. **Manual DE/RE is not supported** — there is no `RS485_DIR_PIN` define. Use an **auto-direction** transceiver with **`AUTO_TX true`** (Atomic RS485 Base, M5 Unit RS485, typical Tail485). Modules that need a **separate** DE/RE GPIO are **unsupported** in this firmware (`AUTO_TX false` toggles the UART TX data pin, not a direction line).
 
 Community report (unverified on **v2.28+**): [Issue #31](https://github.com/shomanjk/esp32_balboa_spa/issues/31) — Atom Lite + Tail485; RS485 worked initially; web portal hung on firmware before **2.28** portal fixes. See [Hardware field notes](Hardware-field-notes).
 
