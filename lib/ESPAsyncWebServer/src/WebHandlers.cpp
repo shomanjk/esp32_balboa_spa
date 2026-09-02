@@ -20,6 +20,7 @@
 */
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
+#include <new>
 
 using namespace asyncsrv;
 
@@ -237,9 +238,13 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest* request) {
 
     if (not_modified){
       request->_tempFile.close();
-      response = new AsyncBasicResponse(304); // Not modified
+      response = new (std::nothrow) AsyncBasicResponse(304); // Not modified
     } else {
-      response = new AsyncFileResponse(request->_tempFile, filename, emptyString, false, _callback);
+      response = new (std::nothrow) AsyncFileResponse(request->_tempFile, filename, emptyString, false, _callback);
+    }
+    // Local patch: nothrow allocation; the parser's null-response guard completes on OOM.
+    if (!response) {
+      return;
     }
 
     response->addHeader(T_ETag, etag.c_str());

@@ -31,4 +31,10 @@
 - `src/WebRequest.cpp` — the `beginResponse*` family allocates with `new (std::nothrow)`
   (under `-fno-exceptions` a failed throwing `new` aborts the firmware; these run on
   OOM-recovery paths where returning nullptr is the point). Null-response guards added where
-  this library itself dereferences the result (request completion, `redirect`).
+  this library itself dereferences the result (request completion, `redirect`,
+  `requestAuthentication`).
+- `src/AsyncWebSocket.cpp`, `src/Middleware.cpp`, `src/WebHandlers.cpp`,
+  `src/AsyncEventSource.cpp` — remaining in-library consumers of the nullable contract
+  guarded (WS handshake 400/upgrade responses, CORS preflight, rate-limit 429, static-file
+  ETag responses, EventSource response), with their request-path `new` calls converted to
+  `new (std::nothrow)`.

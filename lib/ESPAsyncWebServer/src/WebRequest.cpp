@@ -864,6 +864,9 @@ void AsyncWebServerRequest::requestAuthentication(AsyncAuthType method, const ch
     realm = T_LOGIN_REQ;
 
   AsyncWebServerResponse* r = _authFailMsg ? beginResponse(401, T_text_html, _authFailMsg) : beginResponse(401);
+  if (!r) {
+    return; // Local patch: nothrow beginResponse; the parser's null-response guard completes
+  }
 
   switch (method) {
     case AsyncAuthType::AUTH_BASIC: {
