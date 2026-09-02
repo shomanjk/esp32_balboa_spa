@@ -38,3 +38,9 @@
   guarded (WS handshake 400/upgrade responses, CORS preflight, rate-limit 429, static-file
   ETag responses, EventSource response), with their request-path `new` calls converted to
   `new (std::nothrow)`.
+- `src/ESPAsyncWebServer.h` / `src/WebResponses.cpp` — response header storage replaced:
+  `std::list<AsyncWebHeader>` → fixed-capacity `AsyncResponseHeaders` (16 slots). The list's
+  node allocations used throwing `new`, so a failed ~32B allocation could still abort after
+  everything else went nothrow; response headers are bounded by our own code, and
+  `addHeader` now reports overflow instead of growing. Request-side header parsing keeps
+  `std::list` (client-controlled count — documented residual).

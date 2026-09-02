@@ -178,8 +178,8 @@ bool AsyncWebServerResponse::addHeader(const char* name, const char* value, bool
     }
   }
   // header was not found found, or existing one was removed
-  _headers.emplace_back(name, value);
-  return true;
+  // Local patch: fixed-capacity store; false on overflow instead of a throwing list append.
+  return _headers.emplace_back(name, value);
 }
 
 void AsyncWebServerResponse::_assembleHead(String& buffer, uint8_t version) {
