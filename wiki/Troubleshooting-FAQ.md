@@ -32,25 +32,25 @@ Symptoms: `/status` or other portal pages freeze, show raw CSS as text, return *
 4. **503 `portal page busy`** — Only one large portal page assembles at a time; retry after the other request finishes.
 5. **Still broken on 2.28+?** — Open an Issue with firmware version, browser, and whether RS485 was connected; optional serial excerpt.
 
-Atom Lite users on **alternate RS485 at 32/26** (Tail485 tail or Unit RS485 Grove — not Atomic base): also see [Wrong env / 32/26 pins](#wrong-env--326-pins-on-atom-lite) below — portal symptoms can overlap with RS485 retry floods on older firmware.
+Atom Lite users on **alternate RS485 at 32/26** (Tail485 tail or Unit RS485 Grove — not Atomic base): also see [Wrong pins on Atom Lite](#wrong-pins-on-atom-lite) below — portal symptoms can overlap with RS485 retry floods on older firmware.
 
 ---
 
-## Wrong env / 32/26 pins on Atom Lite
+## Wrong pins on Atom Lite
 
-Symptom: no spa frames despite “correct” pins in `config.h`, or RS485 safe mode with GPIO **16/17**.
+Symptom: no spa frames despite “correct” wiring, or RS485 safe mode with GPIO **16/17**.
 
 **Cause:** [M5 Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) is **ESP32-PICO-D4**. Three RS485 options, two pin maps:
 
-| RS485 module | How it attaches | Use env | Pins |
-|--------------|-----------------|---------|------|
-| **Atomic RS485 Base** | Tail stack | `M5AtomLite-tub` | **22 / 19** (env-owned — omit in `config.h`) |
-| **Tail485** | Tail stack (**not** Grove) | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** |
-| **Unit RS485** | Grove cable | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** |
+| RS485 module | How it attaches | Env | Pins in `config.h` |
+|--------------|-----------------|-----|-------------------|
+| **Atomic RS485 Base** | Tail stack | `M5AtomLite-tub` | Omit overrides → **22 / 19** (env default) |
+| **Tail485** | Tail stack (**not** Grove) | `M5AtomLite-tub` | **`#undef` block** → **32 / 26** |
+| **Unit RS485** | Grove cable | `M5AtomLite-tub` | **`#undef` block** → **32 / 26** |
 
-`M5AtomLite-tub` **ignores** `config.h` pin overrides. Tail485 or Unit RS485 on **32/26** with that env talks to the wrong GPIOs.
+**Common mistake:** Tail485 or Unit RS485 wired to **32/26** but `config.h` still leaves env defaults **22/19** (no `#undef` block) — UART talks to the wrong GPIOs.
 
-**Also:** default generic pins **16/17** are unsafe on Atom Lite (PICO flash). Set **32/26** or another safe pair — do not leave 16/17 at defaults. On **`M5AtomLite-tub`**, 16/17 trigger immediate safe mode; on a **generic** env the guard is off and flash-pin UART may WDT/panic before safe mode appears.
+**Also:** **GPIO 16/17** are PICO flash — never use on Atom Lite. On **`M5AtomLite-tub`**, 16/17 trigger immediate safe mode. On **`ESP32ota`**, the pin guard is off.
 
 Detail: [Hardware targets — alternate RS485 (32/26 pins)](Hardware-targets#atom-lite--alternate-rs485-3226-pins).
 
