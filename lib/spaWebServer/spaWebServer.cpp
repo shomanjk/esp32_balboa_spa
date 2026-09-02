@@ -131,6 +131,36 @@ static void portalLargePageRelease()
 }
 
 /** Gate /status, /config, /state, /logs assembly — one large portal page at a time. */
+/** Largest block plain malloc/new can actually get. ESP.getMaxAllocHeap()/getFreeHeap() also
+ *  count a ~40KB 32-bit-only IRAM region normal allocations can never use, which made every
+ *  "low memory" log/guard here lie by that margin. */
+static inline uint32_t portalUsableLargestBlock()
+{
+  return heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+}
+
+/** 503 for transient assembly OOM (page + SPA hydration overlapped): a tiny PROGMEM page that
+ *  retries itself in 2s, when the parallel JSON responses have drained. Plain-text dead ends
+ *  made users think the device was broken. */
+static const char kPortalRetryHtml[] PROGMEM =
+    "<!DOCTYPE html><html><head><meta charset='utf-8'><meta http-equiv='refresh' content='2'>"
+    "<title>Spa portal busy</title></head><body style='font-family:sans-serif'>"
+    "<p>The portal is momentarily out of memory (a page build and app refresh overlapped).</p>"
+    "<p>Retrying automatically&hellip;</p></body></html>";
+
+static void sendPortalBusyRetry(AsyncWebServerRequest *request)
+{
+  AsyncWebServerResponse *response = request->beginResponse_P(
+      503, "text/html", reinterpret_cast<const uint8_t *>(kPortalRetryHtml), sizeof(kPortalRetryHtml) - 1);
+  if (response != nullptr)
+  {
+    response->addHeader("Retry-After", "2");
+    request->send(response);
+    return;
+  }
+  request->send(503, "text/plain", "portal busy, retry shortly");
+}
+
 static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *pageTag)
 {
   if (s_portalLargePageInFlight != 0)
@@ -231,14 +261,14 @@ static bool ifNoneMatchHits(AsyncWebServerRequest *request, const String &etag)
  */
 static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String &etag)
 {
-  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  const uint32_t maxAlloc = portalUsableLargestBlock();
   if (maxAlloc < kPortalHtmlResponseHeadroom)
   {
     Log.error("[Web]: portal HTML 304 headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
               static_cast<unsigned>(maxAlloc), static_cast<unsigned>(kPortalHtmlResponseHeadroom),
               static_cast<unsigned>(ESP.getFreeHeap()));
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return false;
   }
@@ -249,7 +279,7 @@ static bool sendNotModified304Soft(AsyncWebServerRequest *request, const String 
     Log.error("[Web]: portal HTML 304 alloc failed freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return false;
   }
@@ -566,13 +596,33 @@ private:
                 static_cast<unsigned>(ESP.getMaxAllocHeap()));
       return false;
     }
-    std::unique_ptr<uint8_t[]> slab(new (std::nothrow) uint8_t[kSlabCap]);
+    // A slab alloc can fail transiently while parallel JSON API responses (SPA hydration after
+    // a reload) momentarily hold the heap: observed on the bench as a 4 KiB nothrow failure
+    // logged alongside maxAlloc=42996 — the memory was back microseconds later. Ride out the
+    // contention with brief yielding retries before declaring the page unbuildable.
+    std::unique_ptr<uint8_t[]> slab;
+    for (int attempt = 0; attempt < 4; attempt++)
+    {
+      slab.reset(new (std::nothrow) uint8_t[kSlabCap]);
+      if (slab)
+      {
+        break;
+      }
+      delay(1);
+    }
     if (!slab)
     {
       healthy_ = false;
-      Log.error("[Web]: portal HTML slab alloc failed freeHeap=%u maxAlloc=%u" CR,
+      multi_heap_info_t info8;
+      heap_caps_get_info(&info8, MALLOC_CAP_8BIT);
+      const bool intact = heap_caps_check_integrity_all(false);
+      Log.error("[Web]: portal HTML slab alloc failed after retries freeHeap=%u maxAlloc=%u "
+                "cap8free=%u cap8largest=%u cap8blocks=%u integrity=%d" CR,
                 static_cast<unsigned>(ESP.getFreeHeap()),
-                static_cast<unsigned>(ESP.getMaxAllocHeap()));
+                static_cast<unsigned>(ESP.getMaxAllocHeap()),
+                static_cast<unsigned>(info8.total_free_bytes),
+                static_cast<unsigned>(info8.largest_free_block),
+                static_cast<unsigned>(info8.free_blocks), static_cast<int>(intact));
       return false;
     }
     slabs_[usedSlabs_] = std::move(slab);
@@ -634,7 +684,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getMaxAllocHeap()));
     html.clear();
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return;
   }
@@ -658,7 +708,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getMaxAllocHeap()));
     html.clear();
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return;
   }
@@ -670,14 +720,14 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getFreeHeap()));
     hold->destroy();
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return;
   }
   const uint8_t slotU8 = static_cast<uint8_t>(slot);
   // The request helper uses throwing new. After slabs + hold have consumed heap, require
   // headroom and construct the chunked response with nothrow so this path can 503 instead.
-  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  const uint32_t maxAlloc = portalUsableLargestBlock();
   if (maxAlloc < kPortalHtmlResponseHeadroom)
   {
     Log.error("[Web]: portal HTML response headroom low maxAlloc=%u need=%u freeHeap=%u" CR,
@@ -685,7 +735,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getFreeHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return;
   }
@@ -701,7 +751,7 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
     spaWebTouchHttpActivity();
-    request->send(503, "text/plain", "portal page assembly failed (low memory)");
+    sendPortalBusyRetry(request);
     portalLargePageRelease();
     return;
   }
@@ -1103,10 +1153,202 @@ static void spaWebServerLogPoll()
   wsLogBroadcastSeq = newest;
 }
 
+#include "lwip/tcpip.h"
+
+/**
+ * lwIP heartbeat watchdog. The device can freeze with the tcpip task blocked forever (no ping,
+ * no HTTP, ARP-level only) while loop() keeps running — reproduced under sustained portal
+ * transfers on every AsyncTCP/ESPAsyncWebServer version tried. tcpip_try_callback() posts a
+ * no-op into the tcpip task WITHOUT blocking (unlike every socket API); if the echo doesn't
+ * come back, the stack is provably wedged and only a restart recovers it. Detection worst case
+ * ~25s. Raw Serial for the fatal path so runtime log levels cannot mute it.
+ */
+static volatile unsigned long s_lwipEchoMs = 0;
+static unsigned long s_lwipBeatSentMs = 0;
+static uint8_t s_lwipBeatFailStreak = 0;
+
+static void spaWebLwipEcho(void *)
+{
+  s_lwipEchoMs = millis();
+}
+
+static void spaWebLwipHeartbeatTick()
+{
+  if (!serverSetup)
+  {
+    return;
+  }
+  const unsigned long nowMs = millis();
+  if (nowMs - s_lwipBeatSentMs < 10000UL)
+  {
+    return;
+  }
+  // Evaluate the previous beat before sending the next one.
+  if (s_lwipBeatSentMs != 0 && s_lwipEchoMs < s_lwipBeatSentMs)
+  {
+    s_lwipBeatFailStreak++;
+    Serial.printf("[NetProbe] lwIP heartbeat missed (%u/2)\r\n",
+                  static_cast<unsigned>(s_lwipBeatFailStreak));
+  }
+  else
+  {
+    s_lwipBeatFailStreak = 0;
+  }
+  if (s_lwipBeatFailStreak >= 2)
+  {
+#if defined(DIAG_FAULT_CAPTURE)
+    faultCaptureAppendf("[fault] lwIP heartbeat watchdog freeHeap=%u",
+                        static_cast<unsigned>(ESP.getFreeHeap()));
+#endif
+    setLastRestartReason("lwIP heartbeat watchdog");
+    Serial.println("[NetProbe] lwIP heartbeat dead twice, restarting");
+    delay(50);
+    ESP.restart();
+  }
+  s_lwipBeatSentMs = nowMs;
+  if (tcpip_try_callback(&spaWebLwipEcho, nullptr) != ERR_OK)
+  {
+    // Full tcpip mailbox counts as a missed beat: the echo can never be queued.
+    s_lwipEchoMs = 0;
+  }
+}
+
+#include "ping/ping_sock.h"
+
+/**
+ * Wi-Fi path watchdog. Bench-reproduced failure mode on this Arduino 2.x core: under sustained
+ * large HTTP transfers the Wi-Fi driver's RX path dies silently — no ping/HTTP from outside,
+ * while WiFi.status() stays WL_CONNECTED, every task looks Blocked-normal, heap is healthy and
+ * lwIP still answers tcpip_try_callback echoes (so loopback probes CANNOT see it; only traffic
+ * across the radio can). Async esp_ping to the gateway exercises the real TX+RX radio path
+ * without ever blocking loop(). Armed only after the first success on a connection so a router
+ * that drops ICMP can never cause a restart loop. Three consecutive misses while associated
+ * (~30s) → restart. Raw Serial so runtime log levels cannot mute the fatal path.
+ */
+static volatile uint8_t s_gwPingOutcome = 0; // 0 pending/none, 1 success, 2 timeout
+static uint8_t s_gwPingFailStreak = 0;
+static bool s_gwPingArmed = false;
+static unsigned long s_gwPingLastMs = 0;
+
+static void spaWebGwPingSuccess(esp_ping_handle_t, void *)
+{
+  s_gwPingOutcome = 1;
+}
+
+static void spaWebGwPingTimeout(esp_ping_handle_t, void *)
+{
+  s_gwPingOutcome = 2;
+}
+
+static void spaWebGwPingEnd(esp_ping_handle_t h, void *)
+{
+  esp_ping_delete_session(h);
+}
+
+static void spaWebWifiPathWatchdogTick()
+{
+  if (!serverSetup || WiFi.status() != WL_CONNECTED)
+  {
+    s_gwPingArmed = false;
+    s_gwPingFailStreak = 0;
+    s_gwPingOutcome = 0;
+    return;
+  }
+  const unsigned long nowMs = millis();
+  if (nowMs - s_gwPingLastMs < 10000UL)
+  {
+    return;
+  }
+  s_gwPingLastMs = nowMs;
+
+  // Evaluate the previous probe before launching the next one.
+  if (s_gwPingOutcome == 1)
+  {
+    s_gwPingArmed = true;
+    s_gwPingFailStreak = 0;
+  }
+  else if (s_gwPingOutcome == 2 && s_gwPingArmed)
+  {
+    s_gwPingFailStreak++;
+    Serial.printf("[NetProbe] gateway ping missed (%u/3)\r\n",
+                  static_cast<unsigned>(s_gwPingFailStreak));
+    if (s_gwPingFailStreak >= 3)
+    {
+#if defined(DIAG_FAULT_CAPTURE)
+      faultCaptureAppendf("[fault] Wi-Fi path watchdog freeHeap=%u",
+                          static_cast<unsigned>(ESP.getFreeHeap()));
+#endif
+      setLastRestartReason("Wi-Fi path watchdog");
+      Serial.println("[NetProbe] Wi-Fi RX path dead (3 gateway pings lost while associated), restarting");
+      delay(50);
+      ESP.restart();
+    }
+  }
+  s_gwPingOutcome = 0;
+
+  const IPAddress gw = WiFi.gatewayIP();
+  if (gw == IPAddress(0, 0, 0, 0))
+  {
+    return;
+  }
+  esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
+  cfg.target_addr.type = IPADDR_TYPE_V4;
+  cfg.target_addr.u_addr.ip4.addr = static_cast<uint32_t>(gw);
+  cfg.count = 1;
+  cfg.timeout_ms = 3000;
+  esp_ping_callbacks_t cbs = {};
+  cbs.on_ping_success = spaWebGwPingSuccess;
+  cbs.on_ping_timeout = spaWebGwPingTimeout;
+  cbs.on_ping_end = spaWebGwPingEnd;
+  esp_ping_handle_t handle;
+  if (esp_ping_new_session(&cfg, &cbs, &handle) == ESP_OK)
+  {
+    esp_ping_start(handle);
+  }
+}
+
+/**
+ * Every 15s from loop(): print scheduler state of the network tasks so a wedged lwIP stack can
+ * be post-mortemed over serial while loop() is still alive (the freeze presents as: no ping, no
+ * HTTP, RS485 logs continue). States: 0=Running 1=Ready 2=Blocked 3=Suspended 4=Deleted
+ * -1=task not found. Raw Serial so runtime log-level changes cannot mute it.
+ */
+static void spaWebNetTaskProbe()
+{
+#ifndef SPA_NET_TASK_PROBE
+  return; // diagnostic serial chatter; enable with -DSPA_NET_TASK_PROBE when investigating
+#else
+  static unsigned long lastMs = 0;
+  const unsigned long nowMs = millis();
+  if (nowMs - lastMs < 15000UL)
+  {
+    return;
+  }
+  lastMs = nowMs;
+  static const char *const kNames[] = {"async_tcp", "tiT", "wifi", "arduino_events"};
+  char line[144];
+  size_t off = 0;
+  for (size_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]); i++)
+  {
+    TaskHandle_t h = xTaskGetHandle(kNames[i]);
+    const int st = h ? static_cast<int>(eTaskGetState(h)) : -1;
+    off += snprintf(line + off, sizeof(line) - off, "%s=%d ", kNames[i], st);
+  }
+  Serial.printf("[NetProbe] %swifi=%d heap=%u\r\n", line, static_cast<int>(WiFi.status()),
+                static_cast<unsigned>(ESP.getFreeHeap()));
+#endif
+}
+
 static void spaWebHttpLivenessTick()
 {
 #if HTTP_LIVENESS_WATCHDOG
   if (!serverSetup || WiFi.status() != WL_CONNECTED)
+  {
+    return;
+  }
+  // A large portal transfer can legitimately monopolize sockets/heap for its whole lifetime;
+  // probing (and worse, restarting) during one turns a slow page into a reboot. Defer instead.
+  if (s_portalLargePageInFlight != 0)
   {
     return;
   }
@@ -1268,6 +1510,9 @@ void spaWebServerLoop()
     serverSetup = true;
     Log.notice(F("[Web]: Web server started at http://%p/" CR), WiFi.localIP());
   }
+  spaWebNetTaskProbe();
+  spaWebLwipHeartbeatTick();
+  spaWebWifiPathWatchdogTick();
   spaWebHttpLivenessTick();
   spaWebServerLogPoll();
 }
