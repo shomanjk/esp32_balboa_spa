@@ -85,6 +85,8 @@ String listDirToString(fs::FS &fs, const char *dirname, uint8_t levels);
 
 /** Contiguous heap needed for a small Async*Response + a couple of addHeader Strings. */
 static constexpr size_t kPortalHtmlResponseHeadroom = 2048;
+/** ESPAsyncWebServer/AsyncTCP can stall browser transfers when a callback fills >2 KiB at once. */
+static constexpr size_t kPortalResponseFillMax = 2048;
 
 #ifndef HTTP_LIVENESS_PROBE_INTERVAL_MS
 #define HTTP_LIVENESS_PROBE_INTERVAL_MS (2UL * 60UL * 1000UL)
@@ -279,7 +281,6 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
     (void)sendNotModified304Soft(request, etag);
     return;
   }
-  const size_t bodyLen = html.length();
   auto sharedBody = std::make_shared<String>(std::move(html));
   if (releasePortalGateOnDisconnect)
   {
@@ -287,9 +288,8 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
       portalLargePageRelease();
     });
   }
-  AsyncWebServerResponse *response = request->beginResponse(
+  AsyncWebServerResponse *response = request->beginChunkedResponse(
       "text/html; charset=utf-8",
-      bodyLen,
       [sharedBody](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
         if (index >= sharedBody->length())
         {
@@ -299,6 +299,10 @@ static void sendHtmlWithEtag(AsyncWebServerRequest *request, String &html, const
         if (n > maxLen)
         {
           n = maxLen;
+        }
+        if (n > kPortalResponseFillMax)
+        {
+          n = kPortalResponseFillMax;
         }
         memcpy(buffer, sharedBody->c_str() + index, n);
         return n;
@@ -325,9 +329,6 @@ struct PortalHtmlChunkBody
   size_t slabLens[kMaxSlabs] = {};
   size_t usedSlabs = 0;
   size_t totalLen = 0;
-  size_t cursorSlab = 0;
-  size_t cursorOff = 0;
-  size_t cursorAbs = 0;
 };
 
 /** Single nothrow malloc for delivery state (no std::shared_ptr control block). */
@@ -404,48 +405,45 @@ static size_t portalHtmlChunkFill(uint8_t slotU8, uint8_t *buffer, size_t maxLen
   {
     return 0;
   }
-  if (index != body.cursorAbs)
+
+  // Derive the source position solely from the callback's authoritative index. AsyncTCP may
+  // re-enter response filling; shared mutable cursor state can then skip or duplicate a slab.
+  size_t slabIndex = 0;
+  size_t slabOffset = index;
+  while (slabIndex < body.usedSlabs && slabOffset >= body.slabLens[slabIndex])
   {
-    size_t remaining = index;
-    body.cursorSlab = 0;
-    body.cursorOff = 0;
-    while (body.cursorSlab < body.usedSlabs && remaining >= body.slabLens[body.cursorSlab])
-    {
-      remaining -= body.slabLens[body.cursorSlab];
-      body.cursorSlab++;
-    }
-    body.cursorOff = remaining;
-    body.cursorAbs = index;
+    slabOffset -= body.slabLens[slabIndex];
+    slabIndex++;
   }
 
+  const size_t fillLimit = maxLen < kPortalResponseFillMax ? maxLen : kPortalResponseFillMax;
   size_t written = 0;
-  while (written < maxLen && body.cursorAbs < body.totalLen)
+  while (written < fillLimit && index + written < body.totalLen)
   {
-    if (body.cursorSlab >= body.usedSlabs)
+    if (slabIndex >= body.usedSlabs)
     {
       break;
     }
-    const size_t slabLen = body.slabLens[body.cursorSlab];
-    if (body.cursorOff >= slabLen)
+    const size_t slabLen = body.slabLens[slabIndex];
+    if (slabOffset >= slabLen)
     {
-      body.cursorSlab++;
-      body.cursorOff = 0;
+      slabIndex++;
+      slabOffset = 0;
       continue;
     }
-    const size_t avail = slabLen - body.cursorOff;
-    size_t n = maxLen - written;
+    const size_t avail = slabLen - slabOffset;
+    size_t n = fillLimit - written;
     if (n > avail)
     {
       n = avail;
     }
-    memcpy(buffer + written, body.slabs[body.cursorSlab].get() + body.cursorOff, n);
+    memcpy(buffer + written, body.slabs[slabIndex].get() + slabOffset, n);
     written += n;
-    body.cursorOff += n;
-    body.cursorAbs += n;
-    if (body.cursorOff >= slabLen)
+    slabOffset += n;
+    if (slabOffset >= slabLen)
     {
-      body.cursorSlab++;
-      body.cursorOff = 0;
+      slabIndex++;
+      slabOffset = 0;
     }
   }
   return written;
@@ -550,9 +548,6 @@ public:
     }
     out.usedSlabs = usedSlabs_;
     out.totalLen = totalLen_;
-    out.cursorSlab = 0;
-    out.cursorOff = 0;
-    out.cursorAbs = 0;
     usedSlabs_ = 0;
     totalLen_ = 0;
     healthy_ = true;
@@ -680,9 +675,8 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
   const uint8_t slotU8 = static_cast<uint8_t>(slot);
-  const size_t bodyLen = hold->body.totalLen;
-  // beginResponse uses throwing `new AsyncCallbackResponse`. After slabs + hold have consumed
-  // heap, require headroom and construct with nothrow so this path can 503 instead of abort.
+  // The request helper uses throwing new. After slabs + hold have consumed heap, require
+  // headroom and construct the chunked response with nothrow so this path can 503 instead.
   const uint32_t maxAlloc = ESP.getMaxAllocHeap();
   if (maxAlloc < kPortalHtmlResponseHeadroom)
   {
@@ -696,14 +690,14 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
 
-  AsyncCallbackResponse *response = new (std::nothrow) AsyncCallbackResponse(
-      "text/html; charset=utf-8", bodyLen,
+  AsyncChunkedResponse *response = new (std::nothrow) AsyncChunkedResponse(
+      "text/html; charset=utf-8",
       [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
         return portalHtmlChunkFill(slotU8, buffer, maxLen, index);
       });
   if (response == nullptr)
   {
-    Log.error("[Web]: portal HTML AsyncCallbackResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
+    Log.error("[Web]: portal HTML AsyncChunkedResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
     spaWebTouchHttpActivity();

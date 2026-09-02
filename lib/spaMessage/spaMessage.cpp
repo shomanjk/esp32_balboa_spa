@@ -379,6 +379,12 @@ void configurationRequest()
   {
     return;
   }
+  if (spaWriteQueue == nullptr || uxQueueSpacesAvailable(spaWriteQueue) == 0)
+  {
+    // No live RS485 bus means no CTS frames to drain this queue. Wait quietly for capacity
+    // instead of retrying every loop and starving Wi-Fi/HTTP with queue-full logging.
+    return;
+  }
 
   unsigned char config_request[] = CONFIGURATION_REQUEST;
   unsigned char settings_request[] = SETTINGS_0X04_REQUEST;
@@ -386,56 +392,66 @@ void configurationRequest()
   unsigned char information_request[] = INFORMATION_REQUEST;
   unsigned char fault_log_request[] = FAULT_LOG_REQUEST;
   unsigned char preferences_request[] = PREFERENCES_REQUEST;
+  const time_t wallNow = getTime();
+  // getTime() is zero until NTP sync. Use a nonzero sentinel so successful boot-time
+  // enqueues are not treated as "never requested" on every pass through loop().
+  const time_t requestStamp = wallNow > 0 ? wallNow : 1;
 
   // Queue one Balboa request frame per write-queue entry. Batching into a single
   // SpaWriteQueueMessage overflowed BALBOA_MESSAGE_SIZE (50) when all six were stale
   // (6 × 10 = 60), corrupting heap and causing hourly ESP_RST_PANIC after STALE_TIME.
   // Only stamp lastRequest after a successful enqueue so a full queue can retry sooner.
-  if (staleData(spaConfigurationData) && retryRequest(spaConfigurationData))
+  if (uxQueueSpacesAvailable(spaWriteQueue) > 0 &&
+      staleData(spaConfigurationData) && retryRequest(spaConfigurationData))
   {
     if (sendMessageToSpa(config_request, sizeof(config_request)))
     {
-      spaConfigurationData.lastRequest = getTime();
+      spaConfigurationData.lastRequest = requestStamp;
       Log.verbose(F("[Mess]: Queuing Configuration request" CR));
     }
   }
-  if (staleData(spaSettings0x04Data) && retryRequest(spaSettings0x04Data))
+  if (uxQueueSpacesAvailable(spaWriteQueue) > 0 &&
+      staleData(spaSettings0x04Data) && retryRequest(spaSettings0x04Data))
   {
     if (sendMessageToSpa(settings_request, sizeof(settings_request)))
     {
-      spaSettings0x04Data.lastRequest = getTime();
+      spaSettings0x04Data.lastRequest = requestStamp;
       Log.verbose(F("[Mess]: Queuing Settings request" CR));
     }
   }
-  if (staleData(spaFilterSettingsData) && retryRequest(spaFilterSettingsData))
+  if (uxQueueSpacesAvailable(spaWriteQueue) > 0 &&
+      staleData(spaFilterSettingsData) && retryRequest(spaFilterSettingsData))
   {
     if (sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request)))
     {
-      spaFilterSettingsData.lastRequest = getTime();
+      spaFilterSettingsData.lastRequest = requestStamp;
       Log.verbose(F("[Mess]: Queuing Filter request" CR));
     }
   }
-  if (staleData(spaInformationData) && retryRequest(spaInformationData))
+  if (uxQueueSpacesAvailable(spaWriteQueue) > 0 &&
+      staleData(spaInformationData) && retryRequest(spaInformationData))
   {
     if (sendMessageToSpa(information_request, sizeof(information_request)))
     {
-      spaInformationData.lastRequest = getTime();
+      spaInformationData.lastRequest = requestStamp;
       Log.verbose(F("[Mess]: Queuing Information request" CR));
     }
   }
-  if (staleData(spaFaultLogData) && retryRequest(spaFaultLogData) && !spaFaultLogHistoryIsActive())
+  if (uxQueueSpacesAvailable(spaWriteQueue) > 0 &&
+      staleData(spaFaultLogData) && retryRequest(spaFaultLogData) && !spaFaultLogHistoryIsActive())
   {
     if (sendMessageToSpa(fault_log_request, sizeof(fault_log_request)))
     {
-      spaFaultLogData.lastRequest = getTime();
+      spaFaultLogData.lastRequest = requestStamp;
       Log.verbose(F("[Mess]: Queuing FaultLog request" CR));
     }
   }
-  if (staleData(spaPreferencesData) && retryRequest(spaPreferencesData))
+  if (uxQueueSpacesAvailable(spaWriteQueue) > 0 &&
+      staleData(spaPreferencesData) && retryRequest(spaPreferencesData))
   {
     if (sendMessageToSpa(preferences_request, sizeof(preferences_request)))
     {
-      spaPreferencesData.lastRequest = getTime();
+      spaPreferencesData.lastRequest = requestStamp;
       Log.verbose(F("[Mess]: Queuing Preferences request" CR));
     }
   }

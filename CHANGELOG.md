@@ -13,6 +13,11 @@ where version numbers are used.
 - **Upload Wi‑Fi credential gate** ([`scripts/check_wifi_config_for_upload.py`](scripts/check_wifi_config_for_upload.py), [`platformio.ini`](platformio.ini)): `pio … -t upload` (USB or OTA) refuses to flash when `src/config.h` still has placeholder `WIFI_SSID` / `WIFI_PASSWORD` (e.g. `xxxxxx` from `config-example.h`), so a working device cannot be overwritten with an image that will not join Wi‑Fi. Compile-only builds are unaffected. Override for intentional bench tests: `SPA_ALLOW_PLACEHOLDER_WIFI=1`.
 - **OTA boot-verified rollback** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp)): After OTA, the running app stays **`pending_verify`** until Wi‑Fi is up and **`ArduinoOTA.begin()`** completes; then **`esp_ota_mark_app_valid_cancel_rollback()`** confirms the boot. Panic/WDT before that mark lets the ESP32 bootloader revert to the previous OTA slot (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`, already on in the Arduino ESP32 SDK). **`esp_ota_*` is not called from `wifiModuleSetup()`** (can hang early boot on some boards). **`GET /api/diagnostics`** exposes **`otaRunningPartition`**, **`otaPartitionState`**, and **`otaBootVerified`**.
 
+### Fixed
+
+- **No-bus RS485 request flood** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Configuration requests queued before NTP now receive a nonzero retry sentinel, and polling pauses when `spaWriteQueue` has no capacity. An Atom Lite powered on USB without a live spa bus no longer retries and logs queue-full errors every loop, which could starve Wi‑Fi and wedge the HTTP portal.
+- **Large portal pages stall or skip HTML in browsers** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Send callback-built portal bodies with chunked transfer encoding, cap each fill at 2 KiB, and derive every slab read from the callback's supplied byte index instead of shared mutable cursor state. Fixed-length AsyncTCP callback delivery stalled after roughly 10–14 KiB or skipped HTML ranges (rendering CSS as text), then held the portal gate until TCP timeout and caused retries to receive `503 portal page busy`.
+
 ## [2.26.2] - 2026-08-23
 
 ### Added
