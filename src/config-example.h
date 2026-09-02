@@ -104,20 +104,22 @@
 // ---------------------------------------------------------------------------
 // Alternate wiring on a generic env (not an M5*-tub env — those own pins via build_flags)
 // ---------------------------------------------------------------------------
+// Alternate Atom Lite RS485 (generic env — NOT M5AtomLite-tub; that env uses 22/19 only):
 // M5 Atom Lite MCU is ESP32-PICO-D4 ("ESP32 Pico" in community posts = this board).
-// Grove RS485 modules (Unit RS485, Tail485, similar) on Atom Lite:
-//   - Use a GENERIC PlatformIO env (ESP32ota, ESP32prodOta, …), NOT M5AtomLite-tub.
-//   - M5AtomLite-tub always uses RX=22 / TX=19; config.h overrides are ignored there.
-//   - Manual DE/RE on a separate GPIO is NOT supported — no RS485_DIR_PIN define.
-//     Use an auto-direction module with AUTO_TX true (Atomic base, Unit RS485, typical Tail485).
 //
-// M5 Unit RS485 on Grove (example for Atom Lite Grove pinout):
+// Tail485 (tail stack — same mechanical style as Atomic base, NOT Grove):
+//   https://docs.m5stack.com/en/atom/tail485 — Atom G26=TX, G32=RX → TX485_Tx=26, TX485_Rx=32
+//
+// Unit RS485 (Grove cable — same 32/26 pins, different connector):
 //   Black=GND, Red=5V, Yellow=G26, White=G32
 //   https://docs.m5stack.com/en/unit/rs485
 // Wire: ESP TX (G26) -> module RX (yellow); ESP RX (G32) -> module TX (white).
 // If you see no frames, swap those two TTL wires.
-// Tail485 and similar Grove transceivers: same 32/26 pattern if wired like Unit RS485.
-//   wiki: Hardware-targets — Atom Lite + Grove RS485 (alternate)
+//
+// Both alternates: GENERIC PlatformIO env (ESP32ota, ESP32prodOta, …), AUTO_TX true.
+// Manual DE/RE from an ESP32 GPIO is NOT supported (no RS485_DIR_PIN; AUTO_TX false
+// toggles the UART TX data pin). Tail485 handles direction on-module; only TX/RX reach the Atom.
+//   wiki: Hardware-targets — Atom Lite + alternate RS485 (32/26 pins)
 //
 // Uncomment below to override the defaults above. Use #undef first — a second
 // #ifndef TX485_Rx after the defaults would silently keep 16/17.

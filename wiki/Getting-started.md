@@ -42,14 +42,15 @@ Edit at minimum:
 
 **Which env for your RS485 module?**
 
-| RS485 on Atom Lite | PlatformIO env | Pins |
-|--------------------|----------------|------|
-| **Atomic RS485 Base** (stacked) | `M5AtomLite-tub` | **22 / 19** (env-owned) |
-| **Grove** (Unit RS485, Tail485, …) | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** typical |
+| RS485 on Atom Lite | How it attaches | PlatformIO env | Pins |
+|--------------------|-----------------|----------------|------|
+| **Atomic RS485 Base** | Tail stack | `M5AtomLite-tub` | **22 / 19** (env-owned) |
+| **Tail485** | Tail stack (**not** Grove) | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** |
+| **Unit RS485** | Grove cable | **Generic** (`ESP32ota`, …) + `config.h` | **32 / 26** |
 
-Do not use `M5AtomLite-tub` with Grove wiring — that env ignores `config.h` pin overrides. See [Hardware targets — Grove alternate](Hardware-targets#atom-lite--grove-rs485-alternate).
+Do not use `M5AtomLite-tub` with **32/26** wiring — that env ignores `config.h` pin overrides. See [Hardware targets — alternate 32/26](Hardware-targets#atom-lite--alternate-rs485-3226-pins).
 
-Comment out or remove the default **GPIO 16/17** pair on Atom Lite — they are PICO flash pins. Use **32/26** (Grove) or Atomic-base **22/19** via `M5AtomLite-tub`. Leaving 16/17 on a generic env can WDT/panic (pin guard applies only when `M5_STATUS_LED` is defined).
+Comment out or remove the default **GPIO 16/17** pair on Atom Lite — they are PICO flash pins. Use **32/26** (Tail485 or Unit RS485) or Atomic-base **22/19** via `M5AtomLite-tub`. Leaving 16/17 on a generic env can WDT/panic (pin guard applies only when `M5_STATUS_LED` is defined).
 
 Also copy local upload/monitor ports (gitignored):
 
