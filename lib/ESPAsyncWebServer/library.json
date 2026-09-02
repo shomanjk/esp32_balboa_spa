@@ -1,0 +1,30 @@
+{
+  "name": "ESPAsyncWebServer",
+  "version": "3.6.0-spa-patched",
+  "description": "Vendored me-no-dev/ESPAsyncWebServer@ad3741d (v3.6.0) with local _ack send-loss patch; see CHANGELOG. AsyncTCP pinned in platformio.ini.",
+  "keywords": "http,async,websocket,webserver",
+  "homepage": "https://github.com/ESP32Async/ESPAsyncWebServer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ESP32Async/ESPAsyncWebServer.git"
+  },
+  "authors": {
+    "name": "ESP32Async",
+    "maintainer": true
+  },
+  "license": "LGPL-3.0",
+  "frameworks": "arduino",
+  "platforms": [
+    "espressif32"
+  ],
+  "export": {
+    "include": [
+      "examples",
+      "src",
+      "library.json",
+      "library.properties",
+      "LICENSE",
+      "README.md"
+    ]
+  }
+}
