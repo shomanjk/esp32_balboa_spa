@@ -118,9 +118,34 @@ static void spaWebTouchHttpActivity()
   /* Reserved for future diagnostics; liveness uses loopback probes, not idle time. */
 }
 
+/** millis() of the last HTTP request that arrived over the radio. Corroborates Wi-Fi RX health
+ *  for the gateway-ping watchdog: an ICMP-dropping router must not look like the RX-death
+ *  failure while real traffic is flowing. The loopback liveness probe (device → its own IP)
+ *  never crosses the radio, so it is excluded. Written on the async_tcp task, read from loop();
+ *  an aligned 32-bit store is atomic on this target. */
+static volatile unsigned long s_lastRemoteHttpMs = 0;
+
+static void spaWebNoteRemoteActivity(const IPAddress &peer)
+{
+  if (peer != WiFi.localIP() && peer != IPAddress(0, 0, 0, 0))
+  {
+    s_lastRemoteHttpMs = millis();
+  }
+}
+
+static bool spaWebRecentRemoteHttp(unsigned long nowMs)
+{
+  const unsigned long last = s_lastRemoteHttpMs;
+  return last != 0 && nowMs - last < 30000UL;
+}
+
 static void spaWebDispatch(SpaWebHandlerFn handler, AsyncWebServerRequest *request)
 {
   spaWebTouchHttpActivity();
+  if (request->client() != nullptr)
+  {
+    spaWebNoteRemoteActivity(request->client()->remoteIP());
+  }
   handler(request);
 }
 
@@ -152,15 +177,22 @@ static const char kPortalRetryHtml[] PROGMEM =
 
 static void sendPortalBusyRetry(AsyncWebServerRequest *request)
 {
+  // Emergency path — runs right after an allocation failure. beginResponse is nothrow
+  // (vendored patch) and no addHeader here: a header emplace is a throwing list-node
+  // allocation under -fno-exceptions, and the page's meta refresh already carries the
+  // retry hint a Retry-After header would duplicate.
   AsyncWebServerResponse *response = request->beginResponse(
       503, "text/html", reinterpret_cast<const uint8_t *>(kPortalRetryHtml), sizeof(kPortalRetryHtml) - 1);
   if (response != nullptr)
   {
-    response->addHeader("Retry-After", "2");
     request->send(response);
     return;
   }
-  request->send(503, "text/plain", "portal busy, retry shortly");
+  // Not even the ~200B response object fit: drop the connection rather than allocate more.
+  if (request->client() != nullptr)
+  {
+    request->client()->close();
+  }
 }
 
 static bool portalLargePageTryBegin(AsyncWebServerRequest *request, const char *pageTag)
@@ -758,14 +790,22 @@ static void sendHtmlChunksWithEtag(AsyncWebServerRequest *request, PortalHtmlChu
     return;
   }
 
-  AsyncChunkedResponse *response = new (std::nothrow) AsyncChunkedResponse(
-      "text/html; charset=utf-8",
+  // Version-aware like beginChunkedResponse (bypassed only for nothrow construction):
+  // HTTP/1.0 clients get a close-delimited AsyncCallbackResponse — AsyncChunkedResponse
+  // would emit hex chunk framing that _assembleHead never declares for 1.0.
+  const AwsResponseFiller portalFiller =
       [slotU8](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
         return portalHtmlChunkFill(slotU8, buffer, maxLen, index);
-      });
+      };
+  AsyncWebServerResponse *response =
+      request->version()
+          ? static_cast<AsyncWebServerResponse *>(
+                new (std::nothrow) AsyncChunkedResponse("text/html; charset=utf-8", portalFiller))
+          : static_cast<AsyncWebServerResponse *>(
+                new (std::nothrow) AsyncCallbackResponse("text/html; charset=utf-8", 0, portalFiller));
   if (response == nullptr)
   {
-    Log.error("[Web]: portal HTML AsyncChunkedResponse alloc failed freeHeap=%u maxAlloc=%u" CR,
+    Log.error("[Web]: portal HTML response alloc failed freeHeap=%u maxAlloc=%u" CR,
               static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
     portalHtmlHoldReleaseSlot(slotU8);
     spaWebTouchHttpActivity();
@@ -1101,6 +1141,7 @@ static void onWsLogEvent(AsyncWebSocket *wsServer, AsyncWebSocketClient *client,
   if (type == WS_EVT_CONNECT)
   {
     spaWebTouchHttpActivity();
+    spaWebNoteRemoteActivity(client->remoteIP());
     String hist;
     webLogBufferBuildJsonFull(hist);
     client->text(hist);
@@ -1144,13 +1185,17 @@ static void spaWebServerLogPoll()
  * come back, the stack is provably wedged and only a restart recovers it. Detection worst case
  * ~25s. Raw Serial for the fatal path so runtime log levels cannot mute it.
  */
-static volatile unsigned long s_lwipEchoMs = 0;
+// Sequence tokens, not timestamps: a beat only passes when the echo carries the seq of the
+// most recently sent beat. Timestamp comparison let a late echo from beat N mask a missing
+// echo for beat N+1 and misbehaved around millis() wraparound.
+static volatile uint32_t s_lwipEchoSeq = 0;
+static uint32_t s_lwipBeatSeq = 0; // 0 = no beat sent yet
 static unsigned long s_lwipBeatSentMs = 0;
 static uint8_t s_lwipBeatFailStreak = 0;
 
-static void spaWebLwipEcho(void *)
+static void spaWebLwipEcho(void *ctx)
 {
-  s_lwipEchoMs = millis();
+  s_lwipEchoSeq = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx));
 }
 
 static void spaWebLwipHeartbeatTick()
@@ -1165,7 +1210,7 @@ static void spaWebLwipHeartbeatTick()
     return;
   }
   // Evaluate the previous beat before sending the next one.
-  if (s_lwipBeatSentMs != 0 && s_lwipEchoMs < s_lwipBeatSentMs)
+  if (s_lwipBeatSeq != 0 && s_lwipEchoSeq != s_lwipBeatSeq)
   {
     s_lwipBeatFailStreak++;
     Serial.printf("[NetProbe] lwIP heartbeat missed (%u/2)\r\n",
@@ -1187,11 +1232,14 @@ static void spaWebLwipHeartbeatTick()
     ESP.restart();
   }
   s_lwipBeatSentMs = nowMs;
-  if (tcpip_try_callback(&spaWebLwipEcho, nullptr) != ERR_OK)
+  if (++s_lwipBeatSeq == 0)
   {
-    // Full tcpip mailbox counts as a missed beat: the echo can never be queued.
-    s_lwipEchoMs = 0;
+    s_lwipBeatSeq = 1; // skip the "no beat yet" sentinel on wrap
   }
+  // On a full tcpip mailbox the echo can never arrive; the stale echo seq will read as a
+  // missed beat at the next evaluation, which is exactly right.
+  (void)tcpip_try_callback(&spaWebLwipEcho,
+                           reinterpret_cast<void *>(static_cast<uintptr_t>(s_lwipBeatSeq)));
 }
 
 #include "ping/ping_sock.h"
@@ -1206,19 +1254,26 @@ static void spaWebLwipHeartbeatTick()
  * that drops ICMP can never cause a restart loop. Three consecutive misses while associated
  * (~30s) → restart. Raw Serial so runtime log levels cannot mute the fatal path.
  */
-static volatile uint8_t s_gwPingOutcome = 0; // 0 pending/none, 1 success, 2 timeout
+// Each probe carries its sequence number through cb_args; only the result whose seq matches
+// the last-launched probe is evaluated, so a delayed callback from an older probe (or from a
+// session predating a reconnect) can neither arm, clear, nor fail the current watchdog.
+// Result packing: (seq << 2) | outcome, outcome 1 = success, 2 = timeout.
+static volatile uint32_t s_gwPingResult = 0;
+static uint32_t s_gwPingSeq = 0; // 0 = no probe launched yet
 static uint8_t s_gwPingFailStreak = 0;
 static bool s_gwPingArmed = false;
+static bool s_gwPingReconnectTried = false;
+static unsigned long s_gwPingReconnectMs = 0;
 static unsigned long s_gwPingLastMs = 0;
 
-static void spaWebGwPingSuccess(esp_ping_handle_t, void *)
+static void spaWebGwPingSuccess(esp_ping_handle_t, void *args)
 {
-  s_gwPingOutcome = 1;
+  s_gwPingResult = (static_cast<uint32_t>(reinterpret_cast<uintptr_t>(args)) << 2) | 1u;
 }
 
-static void spaWebGwPingTimeout(esp_ping_handle_t, void *)
+static void spaWebGwPingTimeout(esp_ping_handle_t, void *args)
 {
-  s_gwPingOutcome = 2;
+  s_gwPingResult = (static_cast<uint32_t>(reinterpret_cast<uintptr_t>(args)) << 2) | 2u;
 }
 
 static void spaWebGwPingEnd(esp_ping_handle_t h, void *)
@@ -1226,46 +1281,89 @@ static void spaWebGwPingEnd(esp_ping_handle_t h, void *)
   esp_ping_delete_session(h);
 }
 
+static void spaWebWifiPathWatchdogRestart(const char *detail)
+{
+#if defined(DIAG_FAULT_CAPTURE)
+  faultCaptureAppendf("[fault] Wi-Fi path watchdog freeHeap=%u",
+                      static_cast<unsigned>(ESP.getFreeHeap()));
+#endif
+  setLastRestartReason("Wi-Fi path watchdog");
+  Serial.println(detail);
+  delay(50);
+  ESP.restart();
+}
+
 static void spaWebWifiPathWatchdogTick()
 {
+  const unsigned long nowMs = millis();
   if (!serverSetup || WiFi.status() != WL_CONNECTED)
   {
+    // Fail-safe for the reconnect escalation below: if we forced a reconnect after misses and
+    // the link never re-associates, the driver is in the RX-dead state a reconnect cannot fix
+    // (association needs working RX too) — restart, as the pre-escalation watchdog would have.
+    if (s_gwPingReconnectMs != 0 && nowMs - s_gwPingReconnectMs > 30000UL)
+    {
+      spaWebWifiPathWatchdogRestart("[NetProbe] Wi-Fi reconnect after lost pings never re-associated, restarting");
+    }
     s_gwPingArmed = false;
     s_gwPingFailStreak = 0;
-    s_gwPingOutcome = 0;
+    s_gwPingResult = 0;
+    s_gwPingSeq = 0;
     return;
   }
-  const unsigned long nowMs = millis();
   if (nowMs - s_gwPingLastMs < 10000UL)
   {
     return;
   }
   s_gwPingLastMs = nowMs;
+  // Associated again, so a forced reconnect — if any — did re-associate: disarm the
+  // never-re-associated fail-safe (a stale timestamp would otherwise fire during a later,
+  // unrelated AP outage). s_gwPingReconnectTried stays set until a ping succeeds so one miss
+  // episode forces at most one reconnect; a wedged driver that never even drops the
+  // association is still caught by the miss streak below.
+  s_gwPingReconnectMs = 0;
 
-  // Evaluate the previous probe before launching the next one.
-  if (s_gwPingOutcome == 1)
+  // Evaluate the previous probe before launching the next one; only its own seq counts.
+  const uint32_t result = s_gwPingResult;
+  if (s_gwPingSeq != 0 && (result >> 2) == s_gwPingSeq)
   {
-    s_gwPingArmed = true;
-    s_gwPingFailStreak = 0;
-  }
-  else if (s_gwPingOutcome == 2 && s_gwPingArmed)
-  {
-    s_gwPingFailStreak++;
-    Serial.printf("[NetProbe] gateway ping missed (%u/3)\r\n",
-                  static_cast<unsigned>(s_gwPingFailStreak));
-    if (s_gwPingFailStreak >= 3)
+    const uint8_t outcome = result & 3u;
+    if (outcome == 1)
     {
-#if defined(DIAG_FAULT_CAPTURE)
-      faultCaptureAppendf("[fault] Wi-Fi path watchdog freeHeap=%u",
-                          static_cast<unsigned>(ESP.getFreeHeap()));
-#endif
-      setLastRestartReason("Wi-Fi path watchdog");
-      Serial.println("[NetProbe] Wi-Fi RX path dead (3 gateway pings lost while associated), restarting");
-      delay(50);
-      ESP.restart();
+      s_gwPingArmed = true;
+      s_gwPingFailStreak = 0;
+      s_gwPingReconnectTried = false;
+      s_gwPingReconnectMs = 0;
+    }
+    else if (outcome == 2 && s_gwPingArmed)
+    {
+      s_gwPingFailStreak++;
+      Serial.printf("[NetProbe] gateway ping missed (%u/4)\r\n",
+                    static_cast<unsigned>(s_gwPingFailStreak));
+      if (spaWebRecentRemoteHttp(nowMs))
+      {
+        // ICMP is being dropped or rate-limited while real traffic still crosses the radio —
+        // not the RX-death failure this watchdog exists for. Never escalate while corroborated.
+        Serial.println("[NetProbe] ICMP lost but HTTP traffic alive - suppressing escalation");
+        s_gwPingFailStreak = 0;
+      }
+      else if (s_gwPingFailStreak == 2 && !s_gwPingReconnectTried)
+      {
+        // Cheaper first step than a reboot; covers gateway hiccups and driver states a
+        // re-association can clear. The fail-safe above reboots if this never comes back.
+        s_gwPingReconnectTried = true;
+        s_gwPingReconnectMs = nowMs;
+        Serial.println("[NetProbe] gateway unreachable twice, forcing Wi-Fi reconnect before restart");
+        WiFi.reconnect();
+        return; // let the reconnect settle; probing again this tick would race association
+      }
+      else if (s_gwPingFailStreak >= 4)
+      {
+        spaWebWifiPathWatchdogRestart(
+            "[NetProbe] Wi-Fi RX path dead (4 gateway pings lost while associated, reconnect did not help), restarting");
+      }
     }
   }
-  s_gwPingOutcome = 0;
 
   const IPAddress gw = WiFi.gatewayIP();
   if (gw == IPAddress(0, 0, 0, 0))
@@ -1281,6 +1379,11 @@ static void spaWebWifiPathWatchdogTick()
   cbs.on_ping_success = spaWebGwPingSuccess;
   cbs.on_ping_timeout = spaWebGwPingTimeout;
   cbs.on_ping_end = spaWebGwPingEnd;
+  if (++s_gwPingSeq == 0)
+  {
+    s_gwPingSeq = 1; // skip the "no probe yet" sentinel on wrap
+  }
+  cbs.cb_args = reinterpret_cast<void *>(static_cast<uintptr_t>(s_gwPingSeq));
   esp_ping_handle_t handle;
   if (esp_ping_new_session(&cfg, &cbs, &handle) == ESP_OK)
   {

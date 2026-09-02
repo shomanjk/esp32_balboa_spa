@@ -392,10 +392,10 @@ void configurationRequest()
   unsigned char information_request[] = INFORMATION_REQUEST;
   unsigned char fault_log_request[] = FAULT_LOG_REQUEST;
   unsigned char preferences_request[] = PREFERENCES_REQUEST;
-  const time_t wallNow = getTime();
-  // getTime() is zero until NTP sync. Use a nonzero sentinel so successful boot-time
-  // enqueues are not treated as "never requested" on every pass through loop().
-  const time_t requestStamp = wallNow > 0 ? wallNow : 1;
+  // Wall clock (0 until NTP sync) is diagnostic only; retryRequest() paces on lastRequestMs,
+  // which works from boot regardless of NTP.
+  const time_t requestStamp = getTime();
+  const unsigned long requestStampMs = millis();
 
   // Queue one Balboa request frame per write-queue entry. Batching into a single
   // SpaWriteQueueMessage overflowed BALBOA_MESSAGE_SIZE (50) when all six were stale
@@ -407,6 +407,7 @@ void configurationRequest()
     if (sendMessageToSpa(config_request, sizeof(config_request)))
     {
       spaConfigurationData.lastRequest = requestStamp;
+      spaConfigurationData.lastRequestMs = requestStampMs;
       Log.verbose(F("[Mess]: Queuing Configuration request" CR));
     }
   }
@@ -416,6 +417,7 @@ void configurationRequest()
     if (sendMessageToSpa(settings_request, sizeof(settings_request)))
     {
       spaSettings0x04Data.lastRequest = requestStamp;
+      spaSettings0x04Data.lastRequestMs = requestStampMs;
       Log.verbose(F("[Mess]: Queuing Settings request" CR));
     }
   }
@@ -425,6 +427,7 @@ void configurationRequest()
     if (sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request)))
     {
       spaFilterSettingsData.lastRequest = requestStamp;
+      spaFilterSettingsData.lastRequestMs = requestStampMs;
       Log.verbose(F("[Mess]: Queuing Filter request" CR));
     }
   }
@@ -434,6 +437,7 @@ void configurationRequest()
     if (sendMessageToSpa(information_request, sizeof(information_request)))
     {
       spaInformationData.lastRequest = requestStamp;
+      spaInformationData.lastRequestMs = requestStampMs;
       Log.verbose(F("[Mess]: Queuing Information request" CR));
     }
   }
@@ -443,6 +447,7 @@ void configurationRequest()
     if (sendMessageToSpa(fault_log_request, sizeof(fault_log_request)))
     {
       spaFaultLogData.lastRequest = requestStamp;
+      spaFaultLogData.lastRequestMs = requestStampMs;
       Log.verbose(F("[Mess]: Queuing FaultLog request" CR));
     }
   }
@@ -452,6 +457,7 @@ void configurationRequest()
     if (sendMessageToSpa(preferences_request, sizeof(preferences_request)))
     {
       spaPreferencesData.lastRequest = requestStamp;
+      spaPreferencesData.lastRequestMs = requestStampMs;
       Log.verbose(F("[Mess]: Queuing Preferences request" CR));
     }
   }
@@ -835,6 +841,7 @@ void spaRequestFilterSettings()
   unsigned char filter_settings_request[] = FILTER_SETTINGS_REQUEST;
   sendMessageToSpa(filter_settings_request, sizeof(filter_settings_request));
   spaFilterSettingsData.lastRequest = getTime();
+  spaFilterSettingsData.lastRequestMs = millis();
 }
 
 void spaRequestPreferences()
@@ -842,6 +849,7 @@ void spaRequestPreferences()
   unsigned char preferences_request[] = PREFERENCES_REQUEST;
   sendMessageToSpa(preferences_request, sizeof(preferences_request));
   spaPreferencesData.lastRequest = getTime();
+  spaPreferencesData.lastRequestMs = millis();
 }
 
 void spaRequestFaultLogEntry(uint8_t entry)
@@ -856,6 +864,7 @@ void spaRequestFaultLogEntry(uint8_t entry)
   addCRC(frame);
   (void)sendMessageToSpa(frame);
   spaFaultLogData.lastRequest = getTime();
+  spaFaultLogData.lastRequestMs = millis();
 }
 
 bool sendMessageToSpa(uint8_t *data, int length)

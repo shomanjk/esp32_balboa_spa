@@ -23,6 +23,7 @@
 #include "WebResponseImpl.h"
 #include "literals.h"
 #include <cstring>
+#include <new>
 
 #define __is_param_char(c) ((c) && ((c) != '{') && ((c) != '[') && ((c) != '&') && ((c) != '='))
 
@@ -163,8 +164,14 @@ void AsyncWebServerRequest::_onData(void* buf, size_t len) {
           else if (!_response->_sourceValid())
             send(500, T_text_plain, "Invalid data in handler");
           _client->setRxTimeout(0);
-          _response->_respond(this);
-          _sent = true;
+          // Local patch: with nothrow beginResponse even the fallback sends can yield no
+          // response under OOM; closing the connection beats dereferencing NULL.
+          if (_response) {
+            _response->_respond(this);
+            _sent = true;
+          } else {
+            _client->close();
+          }
         }
       }
     }
@@ -621,8 +628,14 @@ void AsyncWebServerRequest::_parseLine() {
           else if (!_response->_sourceValid())
             send(500, T_text_plain, "Invalid data in handler");
           _client->setRxTimeout(0);
-          _response->_respond(this);
-          _sent = true;
+          // Local patch: with nothrow beginResponse even the fallback sends can yield no
+          // response under OOM; closing the connection beats dereferencing NULL.
+          if (_response) {
+            _response->_respond(this);
+            _sent = true;
+          } else {
+            _client->close();
+          }
         }
       }
     } else
@@ -746,48 +759,52 @@ double AsyncWebServerRequest::getAttribute(const char* name, double defaultValue
   return it != _attributes.end() ? it->second.toDouble() : defaultValue;
 }
 
+// Local patch: the whole beginResponse family allocates with new (std::nothrow). Under
+// -fno-exceptions a failed throwing new aborts the firmware; these run on OOM-recovery paths
+// (503 fallbacks) where "return nullptr and let the caller degrade" is the entire point.
+// Callers that dereference without checking are guarded where they live in this library.
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse(int code, const char* contentType, const char* content, AwsTemplateProcessor callback) {
   if (callback)
-    return new AsyncProgmemResponse(code, contentType, (const uint8_t*)content, strlen(content), callback);
-  return new AsyncBasicResponse(code, contentType, content);
+    return new (std::nothrow) AsyncProgmemResponse(code, contentType, (const uint8_t*)content, strlen(content), callback);
+  return new (std::nothrow) AsyncBasicResponse(code, contentType, content);
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse(int code, const char* contentType, const uint8_t* content, size_t len, AwsTemplateProcessor callback) {
-  return new AsyncProgmemResponse(code, contentType, content, len, callback);
+  return new (std::nothrow) AsyncProgmemResponse(code, contentType, content, len, callback);
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse(FS& fs, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) {
   if (fs.exists(path) || (!download && fs.exists(path + T__gz)))
-    return new AsyncFileResponse(fs, path, contentType, download, callback);
+    return new (std::nothrow) AsyncFileResponse(fs, path, contentType, download, callback);
   return NULL;
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse(File content, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) {
   if (content == true)
-    return new AsyncFileResponse(content, path, contentType, download, callback);
+    return new (std::nothrow) AsyncFileResponse(content, path, contentType, download, callback);
   return NULL;
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse(Stream& stream, const char* contentType, size_t len, AwsTemplateProcessor callback) {
-  return new AsyncStreamResponse(stream, contentType, len, callback);
+  return new (std::nothrow) AsyncStreamResponse(stream, contentType, len, callback);
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse(const char* contentType, size_t len, AwsResponseFiller callback, AwsTemplateProcessor templateCallback) {
-  return new AsyncCallbackResponse(contentType, len, callback, templateCallback);
+  return new (std::nothrow) AsyncCallbackResponse(contentType, len, callback, templateCallback);
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginChunkedResponse(const char* contentType, AwsResponseFiller callback, AwsTemplateProcessor templateCallback) {
   if (_version)
-    return new AsyncChunkedResponse(contentType, callback, templateCallback);
-  return new AsyncCallbackResponse(contentType, 0, callback, templateCallback);
+    return new (std::nothrow) AsyncChunkedResponse(contentType, callback, templateCallback);
+  return new (std::nothrow) AsyncCallbackResponse(contentType, 0, callback, templateCallback);
 }
 
 AsyncResponseStream* AsyncWebServerRequest::beginResponseStream(const char* contentType, size_t bufferSize) {
-  return new AsyncResponseStream(contentType, bufferSize);
+  return new (std::nothrow) AsyncResponseStream(contentType, bufferSize);
 }
 
 AsyncWebServerResponse* AsyncWebServerRequest::beginResponse_P(int code, const String& contentType, PGM_P content, AwsTemplateProcessor callback) {
-  return new AsyncProgmemResponse(code, contentType, (const uint8_t*)content, strlen_P(content), callback);
+  return new (std::nothrow) AsyncProgmemResponse(code, contentType, (const uint8_t*)content, strlen_P(content), callback);
 }
 
 void AsyncWebServerRequest::send(AsyncWebServerResponse* response) {
@@ -800,6 +817,9 @@ void AsyncWebServerRequest::send(AsyncWebServerResponse* response) {
 
 void AsyncWebServerRequest::redirect(const char* url, int code) {
   AsyncWebServerResponse* response = beginResponse(code);
+  if (!response) {
+    return; // OOM: request completes via the null-response guard in the parser
+  }
   response->addHeader(T_LOCATION, url);
   send(response);
 }

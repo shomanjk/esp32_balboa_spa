@@ -263,6 +263,21 @@ AsyncBasicResponse::AsyncBasicResponse(int code, const char* contentType, const 
   addHeader(T_Connection, T_close, false);
 }
 
+// Local patch (this class and AsyncAbstractResponse::_ack below): upstream trusted the
+// space() probe and removed the probed byte count from its buffers no matter what write()
+// returned. tcp_write can refuse bytes (ERR_MEM under pbuf/heap pressure) even when sndbuf
+// shows room, and AsyncClient::write() returns 0 when tcp_output fails AFTER tcp_write
+// queued the bytes — retrying those duplicates them on the wire. So: add() is the sole
+// authority on accepted bytes (they are in lwIP's queue even if the output trigger fails),
+// send() is a best-effort nudge, and exactly the unaccepted remainder is retained.
+static size_t _acceptedWrite(AsyncClient* client, const char* data, size_t len) {
+  size_t accepted = client->add(data, len);
+  if (accepted) {
+    client->send();
+  }
+  return accepted;
+}
+
 void AsyncBasicResponse::_respond(AsyncWebServerRequest* request) {
   _state = RESPONSE_HEADERS;
   String out;
@@ -270,26 +285,50 @@ void AsyncBasicResponse::_respond(AsyncWebServerRequest* request) {
   size_t outLen = out.length();
   size_t space = request->client()->space();
   if (!_contentLength && space >= outLen) {
-    _writtenLength += request->client()->write(out.c_str(), outLen);
-    _state = RESPONSE_WAIT_ACK;
+    size_t accepted = _acceptedWrite(request->client(), out.c_str(), outLen);
+    _writtenLength += accepted;
+    if (accepted < outLen) {
+      // keep the exact unsent head bytes; _ack's RESPONSE_CONTENT path drains them
+      _content = out.substring(accepted);
+      _contentLength = outLen - accepted;
+      _sentLength = 0;
+      _state = RESPONSE_CONTENT;
+    } else {
+      _state = RESPONSE_WAIT_ACK;
+    }
   } else if (_contentLength && space >= outLen + _contentLength) {
     out += _content;
     outLen += _contentLength;
-    _writtenLength += request->client()->write(out.c_str(), outLen);
-    _state = RESPONSE_WAIT_ACK;
+    size_t accepted = _acceptedWrite(request->client(), out.c_str(), outLen);
+    _writtenLength += accepted;
+    if (accepted < outLen) {
+      _content = out.substring(accepted);
+      _contentLength = outLen - accepted;
+      _sentLength = 0;
+      _state = RESPONSE_CONTENT;
+    } else {
+      _state = RESPONSE_WAIT_ACK;
+    }
   } else if (space && space < outLen) {
-    String partial = out.substring(0, space);
-    _content = out.substring(space) + _content;
-    _contentLength += outLen - space;
-    _writtenLength += request->client()->write(partial.c_str(), partial.length());
+    size_t accepted = _acceptedWrite(request->client(), out.c_str(), space);
+    _writtenLength += accepted;
+    _content = out.substring(accepted) + _content;
+    _contentLength += outLen - accepted;
     _state = RESPONSE_CONTENT;
   } else if (space > outLen && space < (outLen + _contentLength)) {
     size_t shift = space - outLen;
-    outLen += shift;
-    _sentLength += shift;
     out += _content.substring(0, shift);
-    _content = _content.substring(shift);
-    _writtenLength += request->client()->write(out.c_str(), outLen);
+    size_t accepted = _acceptedWrite(request->client(), out.c_str(), outLen + shift);
+    _writtenLength += accepted;
+    if (accepted >= outLen) {
+      size_t bodySent = accepted - outLen;
+      _sentLength += bodySent;
+      _content = _content.substring(bodySent);
+    } else {
+      // not even the head fully accepted: prepend the unsent head tail, body untouched
+      _content = out.substring(accepted, outLen) + _content;
+      _contentLength += outLen - accepted;
+    }
     _state = RESPONSE_CONTENT;
   } else {
     _content = out + _content;
@@ -304,19 +343,19 @@ size_t AsyncBasicResponse::_ack(AsyncWebServerRequest* request, size_t len, uint
   if (_state == RESPONSE_CONTENT) {
     size_t available = _contentLength - _sentLength;
     size_t space = request->client()->space();
-    // we can fit in this packet
-    if (space > available) {
-      _writtenLength += request->client()->write(_content.c_str(), available);
+    size_t want = (space > available) ? available : space;
+    if (!want) {
+      return 0;
+    }
+    size_t accepted = _acceptedWrite(request->client(), _content.c_str(), want);
+    _writtenLength += accepted;
+    _sentLength += accepted;
+    _content = _content.substring(accepted);
+    if (_sentLength == _contentLength) {
       _content = emptyString;
       _state = RESPONSE_WAIT_ACK;
-      return available;
     }
-    // send some data, the rest on ack
-    String out = _content.substring(0, space);
-    _content = _content.substring(space);
-    _sentLength += space;
-    _writtenLength += request->client()->write(out.c_str(), space);
-    return space;
+    return accepted;
   } else if (_state == RESPONSE_WAIT_ACK) {
     if (_ackedLength >= _writtenLength) {
       _state = RESPONSE_END;
@@ -375,12 +414,16 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
       _state = RESPONSE_CONTENT;
       space -= headLen;
     } else {
-      String out = _head.substring(0, space);
-      _head = _head.substring(space);
-      _writtenLength += request->client()->write(out.c_str(), out.length());
-      _in_flight += out.length();
-      --_in_flight_credit; // take a credit
-      return out.length();
+      // Local patch: only bytes add() accepted leave _head; a short tcp_write here used to
+      // silently drop a range of header bytes (space was probed, then trusted blindly).
+      size_t accepted = _acceptedWrite(request->client(), _head.c_str(), space);
+      if (accepted) {
+        _head = _head.substring(accepted);
+        _writtenLength += accepted;
+        _in_flight += accepted;
+        --_in_flight_credit; // take a credit
+      }
+      return accepted;
     }
   }
 
@@ -401,7 +444,7 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
     // buffer already holds exact wire framing (head/chunk header included), so a retry keeps
     // the stream byte-identical instead of skipping a range like the upstream code did.
     if (_carryBuf) {
-      size_t w = request->client()->write((const char*)_carryBuf + _carryOff, _carryLen - _carryOff);
+      size_t w = _acceptedWrite(request->client(), (const char*)_carryBuf + _carryOff, _carryLen - _carryOff);
       if (w) {
         _writtenLength += w;
         _in_flight += w;
@@ -471,13 +514,15 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
       _head = emptyString;
     }
 
-    // Local patch: honor the actual write() result. Upstream added the full buffer to
+    // Local patch: honor the actual accepted-byte count. Upstream added the full buffer to
     // _writtenLength/_in_flight and advanced _sentLength even when lwIP refused some or all
     // of it (tcp_write ERR_MEM under pbuf/heap pressure), which silently dropped a fill-sized
-    // range mid-response and wedged the in-flight pacing with phantom bytes.
+    // range mid-response and wedged the in-flight pacing with phantom bytes. add()+send()
+    // instead of write(): write() returns 0 when only tcp_output fails, and retrying bytes
+    // tcp_write already queued would duplicate them.
     size_t written = 0;
     if (outLen) {
-      written = request->client()->write((const char*)buf, outLen);
+      written = _acceptedWrite(request->client(), (const char*)buf, outLen);
       _writtenLength += written;
       _in_flight += written; // only bytes actually queued
       --_in_flight_credit;   // take a credit
