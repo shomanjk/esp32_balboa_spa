@@ -37,10 +37,20 @@ Edit at minimum:
 | `WIFI_SSID` / `WIFI_PASSWORD` | **2.4 GHz** Wi‑Fi (ESP32 has no 5 GHz) |
 | `MQTT_SERVER` / `MQTT_PORT` | Optional until you add HA; required for MQTT/HA |
 | `BROKER_LOGIN` / `BROKER_PASS` | If your broker requires auth |
-| `TX485_Rx` / `TX485_Tx` | **M5\*‑tub envs:** set by PlatformIO (Atom Lite **22/19**, AtomS3 Lite **5/6**) — omit in `config.h`. **Generic envs:** set here (e.g. **16/17**) |
-| `AUTO_TX` | Prefer **`true`** unless your transceiver needs explicit DE/RE |
+| `TX485_Rx` / `TX485_Tx` | **Atomic base on Atom Lite:** omit in `config.h` (env **22/19**). **Tail485 / Unit RS485 on Atom Lite:** uncomment **`#undef` / 32/26 block** in `config-example.h`. **Generic ESP32 dev board:** set pins here (e.g. **16/17**) |
+| `AUTO_TX` | **`true`** for auto-direction transceivers (required). Separate DE/RE GPIO is **not supported**. |
 
-Comment out or remove the default **GPIO 16/17** pair if you use the M5 stack pins.
+**Which env and pins for Atom Lite?**
+
+| RS485 module | How it attaches | PlatformIO env | Pins |
+|--------------|-----------------|----------------|------|
+| **Atomic RS485 Base** | Tail stack | `M5AtomLite-tub` | **22 / 19** — omit overrides in `config.h` |
+| **Tail485** | Tail stack (**not** Grove) | `M5AtomLite-tub` | **32 / 26** — enable **`#undef` block** in `config.h` |
+| **Unit RS485** | Grove cable | `M5AtomLite-tub` | **32 / 26** — enable **`#undef` block** in `config.h` |
+
+See [Hardware targets — alternate 32/26](Hardware-targets#atom-lite--alternate-rs485-3226-pins). **Generic tub-side ESP32 dev boards** use **`ESP32usb`** (first USB) then **`ESP32ota`** (OTA) — not **`ESP32serial`** (remote client).
+
+Do not use **GPIO 16/17** on Atom Lite (PICO flash). The **`#undef` block** overrides env `-D` pins; **`#ifndef`-only** lines do not.
 
 Also copy local upload/monitor ports (gitignored):
 
@@ -52,9 +62,28 @@ Edit `upload_port` / `monitor_port` per env (USB `/dev/cu.…` or OTA `spa-XXXXX
 
 ### 3. Build and flash firmware
 
+**M5 Atom Lite** (Atomic base, Tail485, or Unit RS485 — all use `M5AtomLite-tub` for first USB flash):
+
 ```bash
+# Atomic RS485 Base (22/19): default config.h — no pin overrides
+pio run -e M5AtomLite-tub -t upload
+
+# Tail485 or Unit RS485 (32/26): uncomment the #undef / 32/26 block in config.h first
 pio run -e M5AtomLite-tub -t upload
 ```
+
+**Generic ESP32 dev board** (tub-side RS485 — not Atom Lite; pins in `config.h`):
+
+```bash
+# First USB flash
+pio run -e ESP32usb -t upload
+pio run -e ESP32usb -t uploadfs
+
+# Later updates (Wi-Fi / espota)
+pio run -e ESP32ota -t upload
+```
+
+Do not use **`ESP32serial`** for tub-side — that env builds **`REMOTE_CLIENT`** (TCP to a gateway), not RS485.
 
 Set `upload_port` / `monitor_port` in **`platformio_local.ini`** (copy from [`platformio_local.ini.example`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/platformio_local.ini.example)) or pass `--upload-port /dev/cu.…` if PlatformIO does not auto-detect USB.
 

@@ -8,6 +8,14 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Added
+
+- **`ESP32usb` PlatformIO env** ([`platformio.ini`](platformio.ini)): Tub-side generic ESP32 dev board — shared **`ESP32tub`** base with **`ESP32ota`** / **`ESP32prodOta`**; **`ESP32usb`** sets `upload_protocol = esptool` for first USB flash (does not inherit **`ESP32ota`** upload port from `extends`). Use **`ESP32ota`** for espota updates after Wi‑Fi is up. Not **`ESP32serial`** (that env builds **`REMOTE_CLIENT`**). Build CI includes **`ESP32usb`**.
+
+### Documentation
+
+- **Atom Lite alternate RS485 (Tail485, Unit RS485):** Wiki, README, and [`src/config-example.h`](src/config-example.h) document **32/26** pins via **`#undef` in `config.h`** on **`M5AtomLite-tub`**; Tail485 is a **tail stack** (not Grove). Community report [#31](https://github.com/shomanjk/esp32_balboa_spa/issues/31) noted as unverified on v2.28+.
+
 ## [2.28.0] - 2026-09-02
 
 ### Changed

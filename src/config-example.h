@@ -71,7 +71,7 @@
 // Pin ownership:
 //   - M5AtomLite-tub / M5AtomLite-tub-ota: env sets TX485_Rx=22, TX485_Tx=19, AUTO_TX — omit overrides here.
 //   - M5AtomS3Lite-tub (AtomS3 Lite, not AtomS3): env sets TX485_Rx=5, TX485_Tx=6, AUTO_TX — omit overrides here.
-//   - Generic envs (ESP32ota, ESP32prodOta, …): set pins / AUTO_TX in this file (defaults below).
+//   - Generic envs (ESP32usb, ESP32ota, ESP32prodOta, …): set pins / AUTO_TX in this file (defaults below).
 // Migration: if your private config.h still #define's TX485_* / AUTO_TX unconditionally, M5 envs will
 // redefinition-warn/error until you wrap them in #ifndef (as below) or remove those lines.
 
@@ -102,16 +102,27 @@
 //   wiki: Hardware-targets
 //
 // ---------------------------------------------------------------------------
-// Alternate wiring on a generic env (not an M5*-tub env — those own pins via build_flags)
+// Alternate Atom Lite RS485 at 32/26 (Tail485 tail stack or Unit RS485 Grove)
 // ---------------------------------------------------------------------------
-// M5 Unit RS485 on Grove (example for Atom Lite Grove pinout):
-//   Black=GND, Red=5V, Yellow=G26, White=G32
-//   https://docs.m5stack.com/en/unit/rs485
-// Wire: ESP TX (G26) -> module RX (yellow); ESP RX (G32) -> module TX (white).
-// If you see no frames, swap those two TTL wires.
+// Use with M5AtomLite-tub / -ota on Atom Lite hardware (recommended — correct
+// m5stack-atom board, USB upload, status LED, pin guard). Env defaults 22/19
+// for Atomic base; this #undef block OVERRIDES env -D pins to 32/26.
+// (#ifndef-only lines above do NOT override the env.)
 //
-// Uncomment below to override the defaults above. Use #undef first — a second
-// #ifndef TX485_Rx after the defaults would silently keep 16/17.
+// M5 Atom Lite MCU is ESP32-PICO-D4 ("ESP32 Pico" in community posts).
+//
+// Tail485 (tail stack — NOT Grove): https://docs.m5stack.com/en/atom/tail485
+//   Atom G26=TX, G32=RX → TX485_Tx=26, TX485_Rx=32
+//
+// Unit RS485 (Grove): https://docs.m5stack.com/en/unit/rs485
+//   Black=GND, Red=5V, Yellow=G26, White=G32
+//   ESP TX (G26) -> module RX; ESP RX (G32) -> module TX (swap if no frames)
+//
+// AUTO_TX true. Manual DE/RE from an ESP32 GPIO is NOT supported (no
+// RS485_DIR_PIN). Tail485 handles direction on-module; only TX/RX reach the Atom.
+// Generic ESP32usb / ESP32ota: esp32dev tub-side boards, not Atom Lite — see wiki Hardware-targets.
+//
+// Uncomment below for Tail485 / Unit RS485 on Atom Lite:
 // #undef TX485_Rx
 // #undef TX485_Tx
 // #undef AUTO_TX

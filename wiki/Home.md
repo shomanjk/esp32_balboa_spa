@@ -4,7 +4,7 @@ ESP32 firmware that talks to a **Balboa** spa controller over **RS485**: read st
 
 **Full overview (value, parts, setup, features):** [README · Overview](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/README.md#overview) in the main repo.
 
-**Last reviewed for firmware:** 2.10.0 (see [`VERSION`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/main.h) in the main repo).
+**Last reviewed for firmware:** 2.28.0 (see [`VERSION`](https://github.com/shomanjk/esp32_balboa_spa/blob/ESP32/src/main.h) in the main repo). Portal reliability on Atom Lite / PICO-D4: [Troubleshooting FAQ](Troubleshooting-FAQ) and [Discussions #33](https://github.com/shomanjk/esp32_balboa_spa/discussions/33).
 
 ---
 

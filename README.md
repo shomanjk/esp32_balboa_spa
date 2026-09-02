@@ -291,7 +291,7 @@ Step-by-step checklist (clone, `config.h`, USB & OTA): **[`wiki/Getting-started.
 
 Feature **macros** are enabled with **`-DNAME`** strings under each environment’s **`build_flags`** in [`platformio.ini`](platformio.ini).
 
-1. Open the **`[env:…]`** block you use (for example **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`**, **`ESP32ota`**, **`ESP32-epd47`**).
+1. Open the **`[env:…]`** block you use (for example **`M5AtomLite-tub`**, **`M5AtomLite-tub-ota`**, **`ESP32-epd47`**). For generic tub-side ESP32 dev boards (**`ESP32ota`**, **`ESP32usb`**, **`ESP32prodOta`**), shared flags live in **`[env:ESP32tub]`** — edit that block (affects all three). For flags that apply to **one** child env only, add **`build_flags`** there **after** **`${env:ESP32tub.build_flags}`** so inherited tub flags are kept (a bare child list replaces the base and drops **`LOCAL_CLIENT`** / **`BRIDGE`**, etc.).
 2. Add or remove lines like `'-DTELNET_LOG'` inside that block’s **`build_flags =`** list. Most envs also include **`${com.build_flags}`**, which pulls in the shared **`[com]`** defaults (including **`LOG_LEVEL_*`** for ArduinoLog).
 3. Rebuild with **`pio run -e <env>`** (and **`-t upload`** / **`-t uploadfs`** when you need them).
 
@@ -328,7 +328,7 @@ Copy [`src/config-example.h`](src/config-example.h) to `src/config.h`, set Wi‑
 
 **Panel clock auto-sync:** New `config-example.h` sets **`AUTO_SYNC_PANEL_CLOCK 1`** so the gateway can set the spa panel time once per boot after Wi‑Fi/NTP (when drift exceeds 2 minutes). Existing **`config.h`** files without this line keep auto-sync **off** until you add it. Requires correct **`GMT_OFFSET`** / **`DAYLIGHT_OFFSET`**.
 
-**Alternate wiring:** On a **generic** env, set pins in `config.h` (defaults **16/17**, or [M5 Unit RS485](https://docs.m5stack.com/en/unit/rs485) Grove example **32/26** in [`src/config-example.h`](src/config-example.h)). Do not expect `config.h` pin overrides to win on `M5*-tub` envs.
+**Alternate wiring:** **Tail485** ([tail stack](https://docs.m5stack.com/en/atom/tail485)) and **Unit RS485** ([Grove](https://docs.m5stack.com/en/unit/rs485)) on Atom Lite use **`M5AtomLite-tub`** with the **`#undef` / 32/26 block** in [`src/config-example.h`](src/config-example.h). **Generic esp32dev tub boards:** **`ESP32usb`** (first USB flash), then **`ESP32ota`** (OTA) — not **`ESP32serial`** (remote client). Atom Lite MCU is **ESP32-PICO-D4**. Use **`AUTO_TX true`**; separate **DE/RE GPIO from the Atom is not supported**. See wiki **[alternate RS485 (32/26 pins)](https://github.com/shomanjk/esp32_balboa_spa/wiki/Hardware-targets#atom-lite--alternate-rs485-3226-pins)**.
 
 ### M5 AtomS3 Lite (bench / bring-up)
 

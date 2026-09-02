@@ -1,7 +1,15 @@
 ; Copy to platformio_local.ini (gitignored) and fill in your device.
 ; Alternative: pio run -e <env> -t upload --upload-port <host-or-ip>
+;
+; ESP32usb and ESP32ota are separate envs (both extend ESP32tub). If you only had
+; [env:ESP32ota] upload_port before, add [env:ESP32usb] with your USB serial path —
+; OTA hostname must not be used for first USB flash.
 
 [env:ESP32serial]
+upload_port = /dev/cu.usbserial-XXXX
+monitor_port = /dev/cu.usbserial-XXXX
+
+[env:ESP32usb]
 upload_port = /dev/cu.usbserial-XXXX
 monitor_port = /dev/cu.usbserial-XXXX
 
