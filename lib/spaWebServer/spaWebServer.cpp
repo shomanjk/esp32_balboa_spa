@@ -1548,7 +1548,8 @@ void handleepdpanel(AsyncWebServerRequest *request)
 /** True when portal global CSS marker is present (String: buffer scan; chunks: append stayed healthy). */
 static bool portalHtmlSawGlobalCss(const String &html)
 {
-  return html.indexOf(F(":root{--bg:#f4f7f8")) >= 0;
+  // Global CSS is a flash-served asset now; presence means the <link> made it into the head.
+  return html.indexOf(F("/assets/portal.css")) >= 0;
 }
 
 static bool portalHtmlSawGlobalCss(const PortalHtmlChunks &html)
