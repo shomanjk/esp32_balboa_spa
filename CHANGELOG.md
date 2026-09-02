@@ -10,7 +10,7 @@ where version numbers are used.
 
 ### Added
 
-- **`ESP32usb` PlatformIO env** ([`platformio.ini`](platformio.ini)): Tub-side generic ESP32 dev board (`extends` **`ESP32ota`**, `upload_protocol = esptool`) for first USB flash; use **`ESP32ota`** for espota updates after Wi‑Fi is up. Not **`ESP32serial`** (that env builds **`REMOTE_CLIENT`**). Build CI includes **`ESP32usb`**.
+- **`ESP32usb` PlatformIO env** ([`platformio.ini`](platformio.ini)): Tub-side generic ESP32 dev board — shared **`ESP32tub`** base with **`ESP32ota`** / **`ESP32prodOta`**; **`ESP32usb`** sets `upload_protocol = esptool` for first USB flash (does not inherit **`ESP32ota`** upload port from `extends`). Use **`ESP32ota`** for espota updates after Wi‑Fi is up. Not **`ESP32serial`** (that env builds **`REMOTE_CLIENT`**). Build CI includes **`ESP32usb`**.
 
 ### Documentation
 
