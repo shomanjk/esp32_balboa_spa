@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-09-02
+
+### Changed
+
+- **Portal CSS/JS moved to flash-resident static assets** ([`lib/spaWebServer/spaPortalAssets.h`](lib/spaWebServer/spaPortalAssets.h), [`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): The ~58KB of byte-identical inline `<style>`/`<script>` boilerplate (base styles, dark-mode palette, theme/nav scripts, both canvas chart engines, page feature scripts) is no longer rebuilt into RAM slabs on every page request. It now lives in flash as six immutable-cached assets under `/assets/` (`portal.css`, `portal-head.js`, and per-page `portal-{status,config,state,logs}.js`), cache-busted via `?v=VERSION`. Page bodies shrink dramatically — `/status` **73,008 → 15,471 bytes** (18 slabs → 4) — which removes the DRAM exhaustion that caused `portal page assembly failed (low memory)` when a page build overlapped the SPA's parallel JSON responses (see 2.27.0 notes: real usable DRAM is ~87KB and the old 73KB body plus hydration traffic did not fit). Bench: the reload-storm that previously failed 25/25 rounds now passes **12/12 first-try**; pages render identically (theme, charts, controls verified in headless Chrome). Deprecated `beginResponse_P` calls replaced with `beginResponse`.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.28.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
+
 ## [2.27.0] - 2026-09-01
 
 ### Added
