@@ -535,6 +535,7 @@ void rs485ProcessByte(uint8_t x, uint8_t uartAvailable)
         if (xQueueSend(spaReadQueue, &messageToSend, 0) != pdTRUE)
         {
           Log.error(F("[rs485]: SPA Read Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+          delete messageToSend;
         }
         else
         {
