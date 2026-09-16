@@ -12,6 +12,10 @@ where version numbers are used.
 
 - **`ESP32usb` PlatformIO env** ([`platformio.ini`](platformio.ini)): Tub-side generic ESP32 dev board — shared **`ESP32tub`** base with **`ESP32ota`** / **`ESP32prodOta`**; **`ESP32usb`** sets `upload_protocol = esptool` for first USB flash (does not inherit **`ESP32ota`** upload port from `extends`). Use **`ESP32ota`** for espota updates after Wi‑Fi is up. Not **`ESP32serial`** (that env builds **`REMOTE_CLIENT`**). Build CI includes **`ESP32usb`**.
 
+### Fixed
+
+- **Heating mode `0x02` labeled Ready in Rest** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)): Status byte 5 is stored unmasked and published through `heatingModeMap`. That map had Ready (`0`), Rest (`1`), and Ready in Rest (`3`) only, so a controller that reports `2` for the panel text "Ready in Rest Mode" published `Unknown (0x02)` on `/status` and MQTT. `2` now uses the same label as `3`. Home Assistant discovery already lists that string. The `0x51` Ready/Rest toggle count is unchanged: it still treats only `heatingMode == 1` as Rest, because this report does not show how many toggles leave state `2`. Tracks [#38](https://github.com/shomanjk/esp32_balboa_spa/issues/38).
+
 ### Documentation
 
 - **Atom Lite alternate RS485 (Tail485, Unit RS485):** Wiki, README, and [`src/config-example.h`](src/config-example.h) document **32/26** pins via **`#undef` in `config.h`** on **`M5AtomLite-tub`**; Tail485 is a **tail stack** (not Grove). Community report [#31](https://github.com/shomanjk/esp32_balboa_spa/issues/31) noted as unverified on v2.28+.
