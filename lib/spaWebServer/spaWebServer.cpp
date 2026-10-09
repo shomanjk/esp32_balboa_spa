@@ -36,6 +36,9 @@
 #include "../../src/config.h"
 #include "../../src/main.h"
 #include "spaConfigExport.h"
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "driver/temp_sensor.h"
+#endif
 
 // Local functions
 
@@ -966,12 +969,114 @@ struct GatewayChipTempStatus
 {
   bool available;
   float tempC;
+  float rangeMinC;
+  float rangeMaxC;
   const char *statusKey;
   const char *statusLabel;
   const char *badgeColor;
 };
 
-static bool readGatewayChipTempC(float &outC)
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+/** ESP32-S3 DAC range table (driver/temp_sensor.h). */
+static void gatewayChipTempDacRange(temp_sensor_dac_offset_t dac, float &minC, float &maxC)
+{
+  switch (dac)
+  {
+  case TSENS_DAC_L0:
+    minC = 50.0f;
+    maxC = 125.0f;
+    break;
+  case TSENS_DAC_L1:
+    minC = 20.0f;
+    maxC = 100.0f;
+    break;
+  case TSENS_DAC_L3:
+    minC = -30.0f;
+    maxC = 50.0f;
+    break;
+  case TSENS_DAC_L4:
+    minC = -40.0f;
+    maxC = 20.0f;
+    break;
+  case TSENS_DAC_L2:
+  default:
+    minC = -10.0f;
+    maxC = 80.0f;
+    break;
+  }
+}
+
+static bool readGatewayChipTempSensor(temp_sensor_dac_offset_t dac, float &outC)
+{
+  temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
+  tsens.dac_offset = dac;
+  if (temp_sensor_set_config(tsens) != ESP_OK)
+  {
+    return false;
+  }
+  if (temp_sensor_start() != ESP_OK)
+  {
+    return false;
+  }
+  float result = NAN;
+  const esp_err_t err = temp_sensor_read_celsius(&result);
+  temp_sensor_stop();
+  if (err != ESP_OK || std::isnan(result))
+  {
+    return false;
+  }
+  outC = result;
+  return true;
+}
+
+/**
+ * Arduino temperatureRead() pins L2 (−10…80 °C). Equipment-bay dies often sit at/above
+ * that ceiling, so High/Critical badges were extrapolated. Prefer L2 when cool; step up
+ * to L1 / L0 when the reading is near the top of the active range (issue #35).
+ */
+static bool readGatewayChipTempC(float &outC, float &rangeMinC, float &rangeMaxC)
+{
+  temp_sensor_dac_offset_t dac = TSENS_DAC_L2;
+  float tempC = 0.0f;
+
+  if (!readGatewayChipTempSensor(TSENS_DAC_L2, tempC))
+  {
+    // Hot/cold enough that L2 refused the sample — try the warm-bay band next.
+    dac = TSENS_DAC_L1;
+    if (!readGatewayChipTempSensor(TSENS_DAC_L1, tempC))
+    {
+      dac = TSENS_DAC_L0;
+      if (!readGatewayChipTempSensor(TSENS_DAC_L0, tempC))
+      {
+        return false;
+      }
+    }
+  }
+  else if (tempC >= 75.0f)
+  {
+    float warmer = 0.0f;
+    if (readGatewayChipTempSensor(TSENS_DAC_L1, warmer))
+    {
+      dac = TSENS_DAC_L1;
+      tempC = warmer;
+      if (tempC >= 95.0f)
+      {
+        float hotter = 0.0f;
+        if (readGatewayChipTempSensor(TSENS_DAC_L0, hotter))
+        {
+          dac = TSENS_DAC_L0;
+          tempC = hotter;
+        }
+      }
+    }
+  }
+
+  outC = tempC;
+  gatewayChipTempDacRange(dac, rangeMinC, rangeMaxC);
+  return true;
+}
+#else
+static bool readGatewayChipTempC(float &outC, float &rangeMinC, float &rangeMaxC)
 {
   const float tempC = temperatureRead();
   if (std::isnan(tempC))
@@ -979,14 +1084,27 @@ static bool readGatewayChipTempC(float &outC)
     return false;
   }
   outC = tempC;
+  // Classic ESP32 ROM sensor has no DAC range table in this core path.
+  rangeMinC = -40.0f;
+  rangeMaxC = 125.0f;
   return true;
 }
+#endif
 
-static GatewayChipTempStatus classifyGatewayChipTemp(float tempC)
+static GatewayChipTempStatus classifyGatewayChipTemp(float tempC, float rangeMinC, float rangeMaxC)
 {
   GatewayChipTempStatus status;
   status.available = true;
   status.tempC = tempC;
+  status.rangeMinC = rangeMinC;
+  status.rangeMaxC = rangeMaxC;
+  if (tempC < rangeMinC || tempC > rangeMaxC)
+  {
+    status.statusKey = "out_of_range";
+    status.statusLabel = "Out of range";
+    status.badgeColor = "#4b5563";
+    return status;
+  }
   if (tempC >= 100.0f)
   {
     status.statusKey = "critical";
@@ -1017,17 +1135,21 @@ static GatewayChipTempStatus classifyGatewayChipTemp(float tempC)
 static GatewayChipTempStatus gatewayChipTempSnapshot()
 {
   float tempC = 0.0f;
-  if (!readGatewayChipTempC(tempC))
+  float rangeMinC = 0.0f;
+  float rangeMaxC = 0.0f;
+  if (!readGatewayChipTempC(tempC, rangeMinC, rangeMaxC))
   {
     GatewayChipTempStatus status;
     status.available = false;
     status.tempC = 0.0f;
+    status.rangeMinC = 0.0f;
+    status.rangeMaxC = 0.0f;
     status.statusKey = "unavailable";
     status.statusLabel = "Unavailable";
     status.badgeColor = "#4b5563";
     return status;
   }
-  return classifyGatewayChipTemp(tempC);
+  return classifyGatewayChipTemp(tempC, rangeMinC, rangeMaxC);
 }
 
 static void appendGatewayChipTempJson(JsonDocument &doc)
@@ -1039,6 +1161,8 @@ static void appendGatewayChipTempJson(JsonDocument &doc)
   if (chip.available)
   {
     doc["chipTempC"] = roundf(chip.tempC * 10.0f) / 10.0f;
+    doc["chipTempRangeMinC"] = chip.rangeMinC;
+    doc["chipTempRangeMaxC"] = chip.rangeMaxC;
   }
 }
 
@@ -1063,7 +1187,21 @@ static void appendGatewayChipTempStateSubCard(HtmlOut &html)
     html += "—";
   }
   html += "</span></div>";
-  html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>ESP32 die sensor — approximate; not cabinet ambient.</p></div>";
+  if (chip.available)
+  {
+    char rangeBuf[72];
+    snprintf(rangeBuf, sizeof(rangeBuf),
+             "Configured sensor band %.0f…%.0f °C.",
+             static_cast<double>(chip.rangeMinC),
+             static_cast<double>(chip.rangeMaxC));
+    html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>";
+    html += rangeBuf;
+    html += " Approximate die reading — not cabinet ambient.</p></div>";
+  }
+  else
+  {
+    html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>ESP32 die sensor — approximate; not cabinet ambient.</p></div>";
+  }
 }
 
 template <typename HtmlOut>
