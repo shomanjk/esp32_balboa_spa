@@ -675,7 +675,7 @@ Byte	Name	Description/Values
 2	Current Temperature	Temperature (scaled by Temperature Scale), 0xFF if unknown
 3	Time: Hour	0-23
 4	Time: Minute	0-59
-5	Heating Mode	0=Ready, 1=Rest, 3=Ready-in-Rest
+5	Heating Mode	0=Ready, 1=Rest, 2=Ready-in-Rest (field panel, issue #38), 3=Ready-in-Rest
 6	Reminder Type	0x00=None, 0x03/0x04=Clean filter, 0x08=Change water, 0x09=Check sanitizer, 0x0A=Check pH, 0x1E=Fault (others model-specific; byte unreliable while spaState=Initializing)
 7	Sensor A Temperature / Hold Timer	Minutes if Hold Mode else Temperature (scaled by Temperature Scale) if A/B Temps else 0x01 if Test Mode else 0x00
 8	Sensor B Temperature	Temperature (scaled by Temperature Scale) if A/B Temps else 0x00

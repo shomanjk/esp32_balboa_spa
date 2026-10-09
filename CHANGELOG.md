@@ -8,6 +8,8 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.28.1] - 2026-10-09
+
 ### Added
 
 - **`ESP32usb` PlatformIO env** ([`platformio.ini`](platformio.ini)): Tub-side generic ESP32 dev board — shared **`ESP32tub`** base with **`ESP32ota`** / **`ESP32prodOta`**; **`ESP32usb`** sets `upload_protocol = esptool` for first USB flash (does not inherit **`ESP32ota`** upload port from `extends`). Use **`ESP32ota`** for espota updates after Wi‑Fi is up. Not **`ESP32serial`** (that env builds **`REMOTE_CLIENT`**). Build CI includes **`ESP32usb`**.
@@ -15,10 +17,15 @@ where version numbers are used.
 ### Fixed
 
 - **Dropped RS485 frames leaked heap and could pin the portal in the OOM retry page** ([`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp), [`lib/spaRemoteCommunication/spaCommunication.cpp`](lib/spaRemoteCommunication/spaCommunication.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): A frame addressed to the gateway is heap-allocated before `spaReadQueue` enqueue. The write-queue drop path already freed that allocation; the read-queue drop path did not. `spaMessageLoop()` also drained only one message per pass, so a slow portal (page build plus `/status` polling) filled the 10-slot queue and every further drop permanently fragmented DRAM until `maxAllocHeap` was too small for any page. Dropped frames are now freed, and each loop drains up to the queue depth (watchdog reset per frame). Config polling still runs only when the queue was empty, same as before. Tracks [#37](https://github.com/shomanjk/esp32_balboa_spa/issues/37).
+- **Heating mode `0x02` labeled Ready in Rest** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)): Status byte 5 is stored unmasked and published through `heatingModeMap`. That map had Ready (`0`), Rest (`1`), and Ready in Rest (`3`) only, so a controller that reports `2` for the panel text "Ready in Rest Mode" published `Unknown (0x02)` on `/status` and MQTT. `2` now uses the same label as `3`. Home Assistant discovery already lists that string. The `0x51` Ready/Rest toggle count is unchanged: it still treats only `heatingMode == 1` as Rest, because this report does not show how many toggles leave state `2`. Tracks [#38](https://github.com/shomanjk/esp32_balboa_spa/issues/38).
 
 ### Documentation
 
 - **Atom Lite alternate RS485 (Tail485, Unit RS485):** Wiki, README, and [`src/config-example.h`](src/config-example.h) document **32/26** pins via **`#undef` in `config.h`** on **`M5AtomLite-tub`**; Tail485 is a **tail stack** (not Grove). Community report [#31](https://github.com/shomanjk/esp32_balboa_spa/issues/31) noted as unverified on v2.28+.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.28.1`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)).
 
 ## [2.28.0] - 2026-09-02
 
@@ -1170,7 +1177,10 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.2...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.28.1...HEAD
+[2.28.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.28.0...v2.28.1
+[2.28.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.27.0...v2.28.0
+[2.27.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.2...v2.27.0
 [2.26.2]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.1...v2.26.2
 [2.26.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.0...v2.26.1
 [2.26.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.25.0...v2.26.0
