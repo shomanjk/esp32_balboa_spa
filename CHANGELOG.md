@@ -12,6 +12,10 @@ where version numbers are used.
 
 - **`ESP32usb` PlatformIO env** ([`platformio.ini`](platformio.ini)): Tub-side generic ESP32 dev board — shared **`ESP32tub`** base with **`ESP32ota`** / **`ESP32prodOta`**; **`ESP32usb`** sets `upload_protocol = esptool` for first USB flash (does not inherit **`ESP32ota`** upload port from `extends`). Use **`ESP32ota`** for espota updates after Wi‑Fi is up. Not **`ESP32serial`** (that env builds **`REMOTE_CLIENT`**). Build CI includes **`ESP32usb`**.
 
+### Fixed
+
+- **Dropped RS485 frames leaked heap and could pin the portal in the OOM retry page** ([`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp), [`lib/spaRemoteCommunication/spaCommunication.cpp`](lib/spaRemoteCommunication/spaCommunication.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): A frame addressed to the gateway is heap-allocated before `spaReadQueue` enqueue. The write-queue drop path already freed that allocation; the read-queue drop path did not. `spaMessageLoop()` also drained only one message per pass, so a slow portal (page build plus `/status` polling) filled the 10-slot queue and every further drop permanently fragmented DRAM until `maxAllocHeap` was too small for any page. Dropped frames are now freed, and each loop drains up to the queue depth (watchdog reset per frame). Config polling still runs only when the queue was empty, same as before. Tracks [#37](https://github.com/shomanjk/esp32_balboa_spa/issues/37).
+
 ### Documentation
 
 - **Atom Lite alternate RS485 (Tail485, Unit RS485):** Wiki, README, and [`src/config-example.h`](src/config-example.h) document **32/26** pins via **`#undef` in `config.h`** on **`M5AtomLite-tub`**; Tail485 is a **tail stack** (not Grove). Community report [#31](https://github.com/shomanjk/esp32_balboa_spa/issues/31) noted as unverified on v2.28+.
