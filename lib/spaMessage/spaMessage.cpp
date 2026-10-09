@@ -294,60 +294,68 @@ void spaScheduleFilterSettingsReadbackFollowup(uint8_t extraReads)
 
 void spaMessageLoop()
 {
-  // Log.verbose(F("[Mess]: spaMessageLoop - %d" CR), uxQueueMessagesWaiting(spaReadQueue));
-  if (uxQueueMessagesWaiting(spaReadQueue) > 0)
+  // Drain a bounded backlog each pass. One-per-loop left spaReadQueue full while
+  // the portal was busy, and each dropped frame leaked its allocation.
+  unsigned drained = 0;
+  while (drained < SPA_READ_QUEUE)
   {
-    SpaReadQueueMessage *message;
-    if (xQueueReceive(spaReadQueue, &message, 0) == pdTRUE)
+    SpaReadQueueMessage *message = nullptr;
+    if (xQueueReceive(spaReadQueue, &message, 0) != pdTRUE)
     {
-      esp_task_wdt_reset();
-      // Log.verbose(F("[Mess]: Queue Message Received: [%d]%s" CR), message->length, msgToString(message->message, message->length).c_str());
+      break;
+    }
+    drained++;
+    if (message == nullptr)
+    {
+      continue;
+    }
+    esp_task_wdt_reset();
+    // Log.verbose(F("[Mess]: Queue Message Received: [%d]%s" CR), message->length, msgToString(message->message, message->length).c_str());
 #if defined(LOCAL_CONNECT) || defined(BRIDGE)
-      if (message->message[2] == id || message->message[2] == 0xff)
-      {
-        bridgeSend(message->message, message->length);
-      }
+    if (message->message[2] == id || message->message[2] == 0xff)
+    {
+      bridgeSend(message->message, message->length);
+    }
 #endif
-      switch (message->message[4])
-      {
-      case Status_Message_Type:
-        parseStatusMessage(message->message, message->length);
-        break;
-      case Filter_Cycles_Type:
-        Log.verbose(F("[Mess]: Filter Cycles Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parseFilterResponse(message->message, message->length);
-        break;
-      case Information_Response_Type:
-        Log.verbose(F("[Mess]: Information Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parseInformationResponse(message->message, message->length);
-        break;
-      case Settings_0x04_Response_Type:
-        Log.verbose(F("[Mess]: Settings 0x04 Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parseSettings0x04Response(message->message, message->length);
-        break;
-      case Preferences_Type:
-        Log.verbose(F("[Mess]: Preferences Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parsePreferencesResponse(message->message, message->length);
-        break;
-      case Fault_Log_Type:
-        Log.verbose(F("[Mess]: Fault_Log_Type Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parseFaultResponse(message->message, message->length);
-        break;
-      case Configuration_Type:
-        Log.verbose(F("[Mess]: Configuration Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parseConfigurationResponse(message->message, message->length);
-        break;
-      case WiFi_Module_Configuration_Type:
-        Log.verbose(F("[Mess]: WiFi Module Configuration Response: %s" CR), msgToString(message->message, message->length).c_str());
-        parseWiFiModuleConfigurationResponse(message->message, message->length);
-        break;
-      default:
-        Log.verbose(F("[Mess]: Unknown Message Type: %x - %s" CR), message->message[4], msgToString(message->message, message->length).c_str());
-      }
+    switch (message->message[4])
+    {
+    case Status_Message_Type:
+      parseStatusMessage(message->message, message->length);
+      break;
+    case Filter_Cycles_Type:
+      Log.verbose(F("[Mess]: Filter Cycles Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parseFilterResponse(message->message, message->length);
+      break;
+    case Information_Response_Type:
+      Log.verbose(F("[Mess]: Information Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parseInformationResponse(message->message, message->length);
+      break;
+    case Settings_0x04_Response_Type:
+      Log.verbose(F("[Mess]: Settings 0x04 Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parseSettings0x04Response(message->message, message->length);
+      break;
+    case Preferences_Type:
+      Log.verbose(F("[Mess]: Preferences Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parsePreferencesResponse(message->message, message->length);
+      break;
+    case Fault_Log_Type:
+      Log.verbose(F("[Mess]: Fault_Log_Type Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parseFaultResponse(message->message, message->length);
+      break;
+    case Configuration_Type:
+      Log.verbose(F("[Mess]: Configuration Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parseConfigurationResponse(message->message, message->length);
+      break;
+    case WiFi_Module_Configuration_Type:
+      Log.verbose(F("[Mess]: WiFi Module Configuration Response: %s" CR), msgToString(message->message, message->length).c_str());
+      parseWiFiModuleConfigurationResponse(message->message, message->length);
+      break;
+    default:
+      Log.verbose(F("[Mess]: Unknown Message Type: %x - %s" CR), message->message[4], msgToString(message->message, message->length).c_str());
     }
     delete message;
   }
-  else
+  if (drained == 0)
   {
 #ifdef LOCAL_CLIENT
     if (!rs485UartBegun())

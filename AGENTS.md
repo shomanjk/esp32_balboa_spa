@@ -64,7 +64,7 @@ This file helps AI coding agents and humans work on **`esp32_balboa_spa`** witho
 | Status LED (`M5_STATUS_LED`) | [`src/led_control.cpp`](src/led_control.cpp) | Green/red Wi‑Fi; blue/yellow RS485 activity. **Fast** green/orange = RS485 safe mode; **slow** = UART up but no valid frames this boot (Wi‑Fi up only). |
 | Main loop / init | [`src/main.ino`](src/main.ino) | Conditional compilation per flags above; LOCAL_CLIENT calls **`rs485EnsureUartBegun()`** after Wi‑Fi + OTA. |
 
-**Queues:** `spaReadQueue` / `spaWriteQueue` — declared in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), exposed via [`src/main.h`](src/main.h).
+**Queues:** `spaReadQueue` / `spaWriteQueue` — declared in [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), exposed via [`src/main.h`](src/main.h). Depth 10. Inbound frames are heap-allocated and must be `delete`d if enqueue fails. **`spaMessageLoop()`** drains up to that depth each pass (not one message); config polling still runs only when the read queue was empty.
 
 ## Known product gaps (do not assume they work)
 

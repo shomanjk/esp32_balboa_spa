@@ -36,6 +36,7 @@ void dataAvailable(void *r, AsyncClient *c, void *buf, size_t len)
   if (xQueueSend(spaReadQueue, &messageToSend, 0) != pdTRUE)
   {
     Log.error(F("[Comm]: SPA Read Queue full, dropped %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
+    delete messageToSend;
   }
   else
   {
