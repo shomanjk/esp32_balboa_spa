@@ -122,6 +122,12 @@ void spaMessageSetup()
     spaPreferencesData = {};
     spaPreferencesData.magicNumber = MAGIC_NUMBER;
   }
+  else if (spaPreferencesData.rawDataLength > 7 && spaPreferencesData.rawData[4] == Preferences_Type)
+  {
+    // RTC cache survives OTA: firmware before #45 stored payload byte 1 in `reminders`.
+    // Re-derive from the cached raw frame (payload byte 2) so the new polarity applies at once.
+    spaPreferencesData.reminders = spaPreferencesData.rawData[7];
+  }
   if (wiFiModuleConfigurationData.magicNumber != MAGIC_NUMBER)
   {
     Log.verbose(F("[Mess]: wiFiModuleConfigurationData.magicNumber: %x" CR), wiFiModuleConfigurationData.magicNumber);
