@@ -4,6 +4,25 @@ This log tracks attempted command-write solutions and measured outcomes so we do
 
 Write live captures and harness outputs under **`docs/local/`** (entire folder gitignored). Shape reference: [`diag-light1-next-cts-live-run.example.json`](diag-light1-next-cts-live-run.example.json).
 
+## 2026-11-19 - Panel reminders preference (`0x27 0x00`) — byte 2, inverted (#45, PR #46)
+
+- **Implementation:** [`spaSetPanelReminders`](../lib/spaMessage/spaCommandDispatcher.cpp) queues **`0a bf 27 00 VV`** with **`VV = 0x00` to enable, `0x01` to disable** (inverted). [`parsePreferencesResponse`](../lib/spaMessage/spaMessage.cpp) reads reminders from **`0x26` payload byte 2** (byte 1 is a constant: `0x85` here, `0x87` on viriol's BP200UX). **`spaMessageSetup()`** re-derives the cached value from the RTC raw frame so an OTA upgrade from older firmware reads correctly at once.
+- **Firmware:** `fix/panel-reminders` @ `58d7cc2`, OTA to tub **M5 Atom Lite** (`app0`, boot verified, `VALID_FRAMES_OK`).
+- **Pre-flash:** cached preferences `7E 17 0A BF 26 00 85 00 00 00 01 …` (byte 2 = `00`); status `initMode` `0x03`, byte 6 `0x02`; panel shows **Test GFCI**.
+
+| Step | Action | Result |
+|------|--------|--------|
+| R1 | Boot after OTA (no new `0x26` yet) | **Pass** — `reminders` 0 → **On**, same `lastUpdate` as pre-flash (re-derived from cache) |
+| R2 | `/status` + `/api/status/controls` | **Pass** — **Test GFCI** text + hint, banner active |
+| R3 | `POST /api/config/preferences {"reminders":0}` | **Pass** — fresh `0x26` within ~2 s, byte 2 = `01` (**Off**). Status `initMode` 3 → 0 and byte 6 `0x02` → `0x00` at the same time (reminder dismissed) |
+| R4 | `POST … {"reminders":1}` within ~10–20 s of R3 | **Ignored** — accepted and queued; controller answered (`lastUpdate` advanced once) but byte 2 stayed `01` for 16 s |
+| R5 | Same POST again ~30 s after R4 | **Pass** — byte 2 = `00` (**On**) |
+| R6 | After R5 | Test GFCI reminder did **not** return (R3 dismissed it); `initMode` stays `0x00` |
+
+**Open question (R4):** cause unknown. Candidates: (a) frame lost to bus noise — this tub logs a steady error background (**`crcToday` 179**, **`badFormatToday` 525**, similar to the day before), and two `Invalid message, corrupted length/broadcast flag` warnings appeared around a later write; (b) pack ignores a second Set Preference shortly after the previous one. The 80-line web log ring had rolled over (mostly `[BridgeDiag]` lines), so R4's sent/response frames were not captured. **Next time:** repeat off → on with 2 s / 10 s / 30 s spacing and capture via the TCP bridge or a larger log window before concluding anything. The `/config` readback now reports "The spa answered, but Reminders is still …" for this case, so a user retry is obvious.
+
+**Status-flag finding:** byte 6 is a reminder id only while **`initMode` = `0x03`** (R3), which is the rule PR #46 applies.
+
 ## 2026-06-22 - MQTT filter schedule writes + running telemetry
 
 - **Implementation:** [`mqttModule.cpp`](../lib/mqttModule/mqttModule.cpp) dispatches **`Spa/<gateway>/cmd/filter`** (JSON, merge from cache) and granular **`cmd/filter/filter{1,2}/{start,duration,enabled}`** via shared helpers in [`spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) → **`spaSetFilterCycles(..., SPA_COMMAND_SOURCE_MQTT)`**. Read telemetry: **`status/filter1_running`**, **`status/filter2_running`** from live **`filterMode`** ([`spaMqttMessage.cpp`](../lib/spaMessage/spaMqttMessage.cpp)); HA **`binary_sensor`** discovery in [`haMqttDiscovery.cpp`](../lib/mqttModule/haMqttDiscovery.cpp).

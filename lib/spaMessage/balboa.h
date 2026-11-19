@@ -369,6 +369,7 @@ const std::map<uint8_t, const char *> onOffMap = {
 // correlate unknown codes with the topside panel message before adding labels here.
 const std::map<uint8_t, const char *> reminderTypeMap = {
     {0x00, "None"},
+    {0x02, "Test GFCI"},
     {0x03, "Clean Filter"},
     {0x04, "Clean Filter"},
     {0x08, "Change Water"},
@@ -378,6 +379,7 @@ const std::map<uint8_t, const char *> reminderTypeMap = {
 
 // Portal banner subtext for status byte 6 (typical Balboa topside schedules; manufacturer may differ).
 const std::map<uint8_t, const char *> reminderHintMap = {
+    {0x02, "Press the GFCI breaker's Test button, then Reset, and clear the reminder on the spa panel (see your spa manual)."},
     {0x03, "Stays until cleared on the spa panel. Typical repeat: about every 30 days (manufacturer-dependent)."},
     {0x04, "Stays until cleared on the spa panel. Typical repeat: about every 30 days (manufacturer-dependent)."},
     {0x08, "Stays until cleared on the spa panel. Typical repeat: about every 90 days (manufacturer-dependent)."},

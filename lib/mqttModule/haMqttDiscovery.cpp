@@ -576,7 +576,7 @@ namespace
   {
     static const char *HEATING_STATE_OPTIONS[] = {"Idle / not heating", "Heating (active)", "Heating (alternate stage)", "Reserved"};
     static const char *SPA_STATE_OPTIONS[] = {"Running", "Initializing", "Hold Mode", "A/B Temps ON", "Test Mode"};
-    static const char *INIT_MODE_OPTIONS[] = {"Idle", "Priming Mode", "Fault", "Reminder", "Stage 1", "Stage 2", "Stage 3"};
+    static const char *INIT_MODE_OPTIONS[] = {"Idle", "Priming Mode", "Fault", "Reminder", "Stage 1", "Stage 2", "Stage 3", "Run pumps for temp"};
     static const char *HEATING_MODE_OPTIONS[] = {"Ready", "Rest", "Ready in Rest"};
     static const char *FILTER_MODE_OPTIONS[] = {"Off", "Cycle 1", "Cycle 2", "Cycle 1 & 2"};
     static const char *TEMP_RANGE_OPTIONS[] = {"Low Range", "High Range"};
