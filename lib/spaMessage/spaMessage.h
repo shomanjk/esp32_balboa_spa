@@ -33,6 +33,8 @@ void spaScheduleFilterSettingsReadbackFollowup(uint8_t extraReads = 2);
 String getMapDescription(uint8_t element, const std::map<uint8_t, const char*>& suppliedMap);
 /** True when status byte 13 blower field (TwoBit, 0–3) is non-zero. */
 inline bool spaBlowerIsOn(uint8_t blower) { return blower != 0; }
+/** True when a stored high/low range setpoint is plausible for the current scale (10–40 °C / 50–104 °F). */
+bool spaStoredSetpointKnown(float value);
 /** MQTT/HA and portal binary label for blower status. */
 const char *spaBlowerBinaryLabel(uint8_t blower);
 /** Human-readable maintenance reminder from status byte 6 (handles boot/init edge cases). */
