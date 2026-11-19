@@ -2336,7 +2336,7 @@ void handleStatus(AsyncWebServerRequest *request)
   html += F("</p></div>");
   {
     const String reminderTxt =
-        spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
+        spaReminderText(spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
     const bool reminderActive = spaReminderIsActive(
         spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
     const bool reminderFault = spaReminderIsFault(spaStatusData.reminderType);
@@ -2357,7 +2357,7 @@ void handleStatus(AsyncWebServerRequest *request)
     html += reminderActive ? reminderTxt : "";
     html += "</p><p id=\"statusReminderBannerHint\" class=\"status-reminder-banner-hint\">";
     html += reminderActive
-                ? spaReminderHintText(spaStatusData.reminderType, spaStatusData.spaState)
+                ? spaReminderHintText(spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode)
                 : "";
     html += "</p></div></div>";
     html += F("<div class=\"status-layout\">");
@@ -2424,7 +2424,7 @@ void handleStatus(AsyncWebServerRequest *request)
 
   {
     const String spaStateTxt = getMapDescription(spaStatusData.spaState, spaStateMap);
-    const String initTxt = getMapDescription(spaStatusData.initMode, initModeMap);
+    const String initTxt = spaInitModeText(spaStatusData.initMode, spaStatusData.spaState);
     const String heatModeTxt = getMapDescription(spaStatusData.heatingMode, heatingModeMap);
     const String heatStateTxt = getMapDescription(spaStatusData.heatingState, heatingStateMap);
     const uint8_t ss = spaStatusData.spaState;
@@ -2435,7 +2435,7 @@ void handleStatus(AsyncWebServerRequest *request)
     {
       heroClass = "heat-hero heat-hero--alert";
     }
-    else if (ss == 1 || im == 1)
+    else if (ss == 1 || (im == 1 && !spaInitModeIsRunPumpsForTemp(im, ss)))
     {
       heroClass = "heat-hero heat-hero--init";
     }
@@ -2554,7 +2554,7 @@ void handleStatus(AsyncWebServerRequest *request)
   appendStatusKvRow(html, "Settings Lock", getMapDescription(spaStatusData.settingsLock, lockedMap));
   {
     const String reminderTxt =
-        spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
+        spaReminderText(spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
     html += "<div class=\"kv-row";
     if (spaReminderIsActive(
             spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode))
@@ -3509,7 +3509,8 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["spaState"] = spaStatusData.spaState;
   doc["spaStateText"] = getMapDescription(spaStatusData.spaState, spaStateMap);
   doc["initMode"] = spaStatusData.initMode;
-  doc["initModeText"] = getMapDescription(spaStatusData.initMode, initModeMap);
+  doc["initModeText"] = spaInitModeText(spaStatusData.initMode, spaStatusData.spaState);
+  doc["initRunPumpsForTemp"] = spaInitModeIsRunPumpsForTemp(spaStatusData.initMode, spaStatusData.spaState);
   doc["heatingMode"] = spaStatusData.heatingMode;
   doc["heatingModeText"] = getMapDescription(spaStatusData.heatingMode, heatingModeMap);
   doc["heatingState"] = spaStatusData.heatingState;
@@ -3556,9 +3557,9 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["filter2_running"] = spaFilter2Running() ? 1 : 0;
   doc["reminderType"] = spaStatusData.reminderType;
   doc["reminderText"] =
-      spaReminderText(spaStatusData.reminderType, spaStatusData.spaState);
+      spaReminderText(spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
   doc["reminderHint"] =
-      spaReminderHintText(spaStatusData.reminderType, spaStatusData.spaState);
+      spaReminderHintText(spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
   doc["reminderActive"] = spaReminderIsActive(
       spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode);
   doc["reminderIsFault"] = spaReminderIsFault(spaStatusData.reminderType);
