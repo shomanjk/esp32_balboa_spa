@@ -969,50 +969,33 @@ struct GatewayChipTempStatus
 {
   bool available;
   float tempC;
-  float rangeMinC;
-  float rangeMaxC;
   const char *statusKey;
   const char *statusLabel;
   const char *badgeColor;
 };
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
-/** ESP32-S3 DAC range table (driver/temp_sensor.h). */
-static void gatewayChipTempDacRange(temp_sensor_dac_offset_t dac, float &minC, float &maxC)
+/**
+ * ESP32-S3: configure the IDF temp sensor once, then start → read → stop per call (issue #35).
+ *
+ * The IDF 4.4 driver selects the DAC range itself inside temp_sensor_read_celsius() and keeps the
+ * active range in static state that temp_sensor_set_config() does not update. Arduino's
+ * temperatureRead() (and any per-read set_config) re-writes the DAC on every call, which can leave
+ * hardware and driver on different ranges and produce stepped / alternating readings. Readings are
+ * whole degrees and include the chip's eFuse TEMP_CALIB offset, so values are not directly
+ * comparable across boards.
+ */
+static bool readGatewayChipTempC(float &outC)
 {
-  switch (dac)
+  static bool configured = false;
+  if (!configured)
   {
-  case TSENS_DAC_L0:
-    minC = 50.0f;
-    maxC = 125.0f;
-    break;
-  case TSENS_DAC_L1:
-    minC = 20.0f;
-    maxC = 100.0f;
-    break;
-  case TSENS_DAC_L3:
-    minC = -30.0f;
-    maxC = 50.0f;
-    break;
-  case TSENS_DAC_L4:
-    minC = -40.0f;
-    maxC = 20.0f;
-    break;
-  case TSENS_DAC_L2:
-  default:
-    minC = -10.0f;
-    maxC = 80.0f;
-    break;
-  }
-}
-
-static bool readGatewayChipTempSensor(temp_sensor_dac_offset_t dac, float &outC)
-{
-  temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
-  tsens.dac_offset = dac;
-  if (temp_sensor_set_config(tsens) != ESP_OK)
-  {
-    return false;
+    temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
+    if (temp_sensor_set_config(tsens) != ESP_OK)
+    {
+      return false;
+    }
+    configured = true;
   }
   if (temp_sensor_start() != ESP_OK)
   {
@@ -1028,55 +1011,8 @@ static bool readGatewayChipTempSensor(temp_sensor_dac_offset_t dac, float &outC)
   outC = result;
   return true;
 }
-
-/**
- * Arduino temperatureRead() pins L2 (−10…80 °C). Equipment-bay dies often sit at/above
- * that ceiling, so High/Critical badges were extrapolated. Prefer L2 when cool; step up
- * to L1 / L0 when the reading is near the top of the active range (issue #35).
- */
-static bool readGatewayChipTempC(float &outC, float &rangeMinC, float &rangeMaxC)
-{
-  temp_sensor_dac_offset_t dac = TSENS_DAC_L2;
-  float tempC = 0.0f;
-
-  if (!readGatewayChipTempSensor(TSENS_DAC_L2, tempC))
-  {
-    // Hot/cold enough that L2 refused the sample — try the warm-bay band next.
-    dac = TSENS_DAC_L1;
-    if (!readGatewayChipTempSensor(TSENS_DAC_L1, tempC))
-    {
-      dac = TSENS_DAC_L0;
-      if (!readGatewayChipTempSensor(TSENS_DAC_L0, tempC))
-      {
-        return false;
-      }
-    }
-  }
-  else if (tempC >= 75.0f)
-  {
-    float warmer = 0.0f;
-    if (readGatewayChipTempSensor(TSENS_DAC_L1, warmer))
-    {
-      dac = TSENS_DAC_L1;
-      tempC = warmer;
-      if (tempC >= 95.0f)
-      {
-        float hotter = 0.0f;
-        if (readGatewayChipTempSensor(TSENS_DAC_L0, hotter))
-        {
-          dac = TSENS_DAC_L0;
-          tempC = hotter;
-        }
-      }
-    }
-  }
-
-  outC = tempC;
-  gatewayChipTempDacRange(dac, rangeMinC, rangeMaxC);
-  return true;
-}
 #else
-static bool readGatewayChipTempC(float &outC, float &rangeMinC, float &rangeMaxC)
+static bool readGatewayChipTempC(float &outC)
 {
   const float tempC = temperatureRead();
   if (std::isnan(tempC))
@@ -1084,27 +1020,15 @@ static bool readGatewayChipTempC(float &outC, float &rangeMinC, float &rangeMaxC
     return false;
   }
   outC = tempC;
-  // Classic ESP32 ROM sensor has no DAC range table in this core path.
-  rangeMinC = -40.0f;
-  rangeMaxC = 125.0f;
   return true;
 }
 #endif
 
-static GatewayChipTempStatus classifyGatewayChipTemp(float tempC, float rangeMinC, float rangeMaxC)
+static GatewayChipTempStatus classifyGatewayChipTemp(float tempC)
 {
   GatewayChipTempStatus status;
   status.available = true;
   status.tempC = tempC;
-  status.rangeMinC = rangeMinC;
-  status.rangeMaxC = rangeMaxC;
-  if (tempC < rangeMinC || tempC > rangeMaxC)
-  {
-    status.statusKey = "out_of_range";
-    status.statusLabel = "Out of range";
-    status.badgeColor = "#4b5563";
-    return status;
-  }
   if (tempC >= 100.0f)
   {
     status.statusKey = "critical";
@@ -1135,21 +1059,17 @@ static GatewayChipTempStatus classifyGatewayChipTemp(float tempC, float rangeMin
 static GatewayChipTempStatus gatewayChipTempSnapshot()
 {
   float tempC = 0.0f;
-  float rangeMinC = 0.0f;
-  float rangeMaxC = 0.0f;
-  if (!readGatewayChipTempC(tempC, rangeMinC, rangeMaxC))
+  if (!readGatewayChipTempC(tempC))
   {
     GatewayChipTempStatus status;
     status.available = false;
     status.tempC = 0.0f;
-    status.rangeMinC = 0.0f;
-    status.rangeMaxC = 0.0f;
     status.statusKey = "unavailable";
     status.statusLabel = "Unavailable";
     status.badgeColor = "#4b5563";
     return status;
   }
-  return classifyGatewayChipTemp(tempC, rangeMinC, rangeMaxC);
+  return classifyGatewayChipTemp(tempC);
 }
 
 static void appendGatewayChipTempJson(JsonDocument &doc)
@@ -1161,8 +1081,6 @@ static void appendGatewayChipTempJson(JsonDocument &doc)
   if (chip.available)
   {
     doc["chipTempC"] = roundf(chip.tempC * 10.0f) / 10.0f;
-    doc["chipTempRangeMinC"] = chip.rangeMinC;
-    doc["chipTempRangeMaxC"] = chip.rangeMaxC;
   }
 }
 
@@ -1187,21 +1105,7 @@ static void appendGatewayChipTempStateSubCard(HtmlOut &html)
     html += "—";
   }
   html += "</span></div>";
-  if (chip.available)
-  {
-    char rangeBuf[72];
-    snprintf(rangeBuf, sizeof(rangeBuf),
-             "Configured sensor band %.0f…%.0f °C.",
-             static_cast<double>(chip.rangeMinC),
-             static_cast<double>(chip.rangeMaxC));
-    html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>";
-    html += rangeBuf;
-    html += " Approximate die reading — not cabinet ambient.</p></div>";
-  }
-  else
-  {
-    html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>ESP32 die sensor — approximate; not cabinet ambient.</p></div>";
-  }
+  html += "<p style='margin:8px 0 0 0;font-size:14px;color:var(--muted)'>ESP32 die sensor — approximate; not cabinet ambient.</p></div>";
 }
 
 template <typename HtmlOut>

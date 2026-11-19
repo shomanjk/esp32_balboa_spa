@@ -10,7 +10,7 @@ where version numbers are used.
 
 ### Fixed
 
-- **ESP32-S3 chip temperature no longer uses the default −10…80 °C DAC for High/Critical badges** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Arduino’s `temperatureRead()` on S3 pins `TSENS_DAC_L2`, so readings above ~80 °C (where Elevated/High/Critical thresholds live) were extrapolated and could plateau/step. S3 builds now read via the IDF temp-sensor driver with a cool→warm DAC step (L2 → L1 → L0), expose `chipTempRangeMinC` / `chipTempRangeMaxC` on diagnostics JSON, and label values outside the active band `out_of_range` instead of Critical. Classic ESP32 (Atom Lite) still uses `temperatureRead()`. Tracks [#35](https://github.com/shomanjk/esp32_balboa_spa/issues/35).
+- **ESP32-S3 chip temperature no longer steps or flips between ranges** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Arduino’s `temperatureRead()` re-applies `temp_sensor_set_config()` on every call, but the IDF 4.4 S3 driver auto-selects the DAC range inside `temp_sensor_read_celsius()` and tracks it in static state that `set_config` does not update — so hardware and driver could disagree and readings plateaued / jumped (e.g. 97 → 115 → 106 °C). S3 builds now configure the sensor **once** and then only start → read → stop, letting the driver manage range. Readings remain whole degrees and include the chip’s factory eFuse calibration offset, so values are not directly comparable across boards. Classic ESP32 (Atom Lite) still uses `temperatureRead()`. Diagnosis and tested fix by @gregbert42 in [#41](https://github.com/shomanjk/esp32_balboa_spa/pull/41). Fixes [#35](https://github.com/shomanjk/esp32_balboa_spa/issues/35).
 
 ## [2.28.1] - 2026-10-09
 
