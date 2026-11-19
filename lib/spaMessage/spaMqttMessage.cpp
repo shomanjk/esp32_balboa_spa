@@ -64,7 +64,7 @@ void publishSpaStatusData()
   publishElement("rawData", "status", rawDataHex);
 
   PUBLISH_STATE_MAP(spaState, spaStateMap);
-  PUBLISH_STATE_MAP(initMode, initModeMap);
+  publishElement("initMode", "status", spaInitModeText(spaStatusData.initMode, spaStatusData.spaState).c_str());
   publishStatusTemperature("currentTemp", spaStatusData.currentTemp);
 
   publishStatusTemperature("currentTemp", spaStatusData.currentTemp);
@@ -74,7 +74,7 @@ void publishSpaStatusData()
 
   PUBLISH_STATUS_ELEMENT(reminderType, "%u");
   publishElement("reminderText", "status",
-                 spaReminderText(spaStatusData.reminderType, spaStatusData.spaState).c_str());
+                 spaReminderText(spaStatusData.reminderType, spaStatusData.spaState, spaStatusData.initMode).c_str());
   PUBLISH_STATUS_ELEMENT(sensorA, "%u");
   PUBLISH_STATUS_ELEMENT(sensorB, "%u");
   PUBLISH_STATUS_ELEMENT(tempScale, "%u");

@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Panel reminders preference reads and writes the right byte and polarity** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): the Preferences response (`0x26`) was parsed from payload byte 1, a constant (`0x85` / `0x87` on field packs), so **Turn reminders off** appeared to do nothing. Reminders is payload byte 2 (Set Preference code N ↔ byte N+2), and the value is inverted: `0` = on, `1` = off. Set Preference `0x27 0x00` now sends `0x00` to enable and `0x01` to disable. Confirmed on a BP200UX and on a second pack showing an active reminder with byte 2 = `0x00`. Fixes [#45](https://github.com/shomanjk/esp32_balboa_spa/issues/45); diagnosis by viriol.
+- **`/config` reminders toggle no longer sticks on "Queued — verifying readback…"** ([`lib/spaWebServer/spaPortalAssets.h`](lib/spaWebServer/spaPortalAssets.h)): `cfgRemindersOn` was scoped inside `cfgSyncPrefsUi`, so the readback check threw and the error was swallowed. Readback now only reports success when the value actually changed, and says so when the controller answers without applying the change.
+- **Reminder text and banner follow the active-reminder rules** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): status byte 6 is treated as a reminder only while `initMode` (Flags 1) = `0x03` "Reminder", so MQTT **`status/reminderText`** and the `/status` banner no longer show a permanent "Maintenance reminder" on packs that hold an unrelated constant in byte 6 (e.g. `0x26` on a BP200UX). Based on a pack reporting `initMode` `0x03` with byte 6 `0x02` while its panel showed "Test GFCI"; more field captures requested on #45.
+
+### Added
+
+- **Reminder type `0x02` = "Test GFCI"** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)) with a portal hint; previously shown as the generic "Maintenance reminder".
+- **`initMode` "Run pumps for temp"** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Flags 1 = `0x01` while `spaState` is Running and current temp is `0xFF` is the panel's "RUN PUMPS FOR TEMP" (pump off ~1 h), not power-on priming. Reported on MQTT **`status/initMode`**, the Home Assistant **Spa init mode** enum (new option), and `/status` (no "initializing" hero styling; JSON **`initRunPumpsForTemp`**). Resolves [#42](https://github.com/shomanjk/esp32_balboa_spa/issues/42).
+
 ## [2.28.1] - 2026-10-09
 
 ### Added

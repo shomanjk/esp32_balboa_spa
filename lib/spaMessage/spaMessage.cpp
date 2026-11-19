@@ -485,8 +485,9 @@ Arguments:
 
 Byte(s)	Name	Description/Values
 0	??	0
-1	Reminders	0=OFF, 1=OFF
-2	??	0
+1	??	Not the reminders flag: constant 0x85 / 0x87 on field packs; unchanged by Set Preference 0x00
+2	Reminders	0=ON, 1=OFF (inverted vs older notes; Set Preference code 0x00 — verified on BP200UX and on a
+		pack showing an active "Test GFCI" reminder with byte 2 = 0x00, issue #45)
 3	Temperature Scale	0=1°F, 1=0.5°C
 4	Clock Mode	0=12-hour, 1=24-hour
 5	Cleanup Cycle	0=OFF, 1-8 (30 minute increments)
@@ -510,7 +511,9 @@ void parsePreferencesResponse(u_int8_t *message, int length)
 
   u_int8_t *hexArray = message + 5;
 
-  spaPreferencesData.reminders = hexArray[1];
+  // Set Preference code N lands in payload byte N+2 (scale 1→3, clock 2→4, cleanup 3→5,
+  // dolphin 4→6, M8 6→8), so Reminders (code 0x00) is byte 2. See spaPreferencesRemindersEnabled.
+  spaPreferencesData.reminders = hexArray[2];
   spaPreferencesData.tempScale = hexArray[3];
   spaPreferencesData.clockMode = hexArray[4];
   spaPreferencesData.cleanupCycle = hexArray[5];
@@ -960,15 +963,33 @@ const char *spaBlowerBinaryLabel(uint8_t blower)
   return spaBlowerIsOn(blower) ? "On" : "Off";
 }
 
-String spaReminderText(uint8_t reminderType, uint8_t spaState)
+bool spaStatusCurrentTempUnknown()
 {
-  if (reminderType == 0x00)
+  // rawData is the whole frame (7E len ch AF 13, then payload); payload byte 2 = current temp,
+  // 0xFF while the pack has no fresh reading (currentTemp keeps the last good value).
+  return spaStatusData.rawDataLength > 7 && spaStatusData.rawData[7] == 0xFF;
+}
+
+bool spaInitModeIsRunPumpsForTemp(uint8_t initMode, uint8_t spaState)
+{
+  // Panels show "RUN PUMPS FOR TEMP" after the pump has been off ~1 h; the pack reports this as
+  // Flags 1 = 0x01 (same bit as power-on Priming) with spaState Running and temp 0xFF (issue #42).
+  return initMode == 0x01 && spaState == 0x00 && spaStatusCurrentTempUnknown();
+}
+
+String spaInitModeText(uint8_t initMode, uint8_t spaState)
+{
+  if (spaInitModeIsRunPumpsForTemp(initMode, spaState))
   {
-    return String("None");
+    return String("Run pumps for temp");
   }
-  // Byte 6 is not a reliable reminder id while the pack is still booting (often 0x13 = hour 19
-  // or other transient values; 0x13 is also the status *message* type, not a reminder label).
-  if (spaState == 0x01)
+  return getMapDescription(initMode, initModeMap);
+}
+
+String spaReminderText(uint8_t reminderType, uint8_t spaState, uint8_t initMode)
+{
+  // Byte 6 is only a reminder id while initMode = 0x03 (see spaReminderIsActive).
+  if (!spaReminderIsActive(reminderType, spaState, initMode))
   {
     return String("None");
   }
@@ -981,13 +1002,9 @@ String spaReminderText(uint8_t reminderType, uint8_t spaState)
   return String("Maintenance reminder");
 }
 
-String spaReminderHintText(uint8_t reminderType, uint8_t spaState)
+String spaReminderHintText(uint8_t reminderType, uint8_t spaState, uint8_t initMode)
 {
-  if (reminderType == 0x00)
-  {
-    return String("");
-  }
-  if (spaState == 0x01)
+  if (!spaReminderIsActive(reminderType, spaState, initMode))
   {
     return String("");
   }
@@ -1002,16 +1019,14 @@ String spaReminderHintText(uint8_t reminderType, uint8_t spaState)
 
 bool spaReminderIsActive(uint8_t reminderType, uint8_t spaState, uint8_t initMode)
 {
-  if (reminderType == 0x00)
+  if (reminderType == 0x00 || spaState == 0x01)
   {
     return false;
   }
-  // Byte 6 is unreliable while the pack is booting or in priming mode.
-  if (spaState == 0x01 || initMode == 0x01)
-  {
-    return false;
-  }
-  return true;
+  // Byte 6 only names a reminder while Flags 1 = 0x03 ("Reminder"). Outside that it can hold
+  // unrelated values: hour-like junk during boot, or a constant (0x26 on a BP200UX) with no
+  // reminder on the panel. A pack showing "Test GFCI" reported initMode 0x03 + byte 6 0x02 (#45).
+  return initMode == 0x03;
 }
 
 bool spaReminderIsFault(uint8_t reminderType)
@@ -1021,7 +1036,8 @@ bool spaReminderIsFault(uint8_t reminderType)
 
 bool spaPreferencesRemindersEnabled(uint8_t reminders)
 {
-  return (reminders & 0x01u) != 0;
+  // Inverted: 0 = reminders on, 1 = off (topside panel shows Yes for 0; issue #45).
+  return (reminders & 0x01u) == 0;
 }
 
 String spaPreferencesRemindersText(uint8_t reminders)

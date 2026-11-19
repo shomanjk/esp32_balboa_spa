@@ -36,15 +36,21 @@ inline bool spaBlowerIsOn(uint8_t blower) { return blower != 0; }
 /** MQTT/HA and portal binary label for blower status. */
 const char *spaBlowerBinaryLabel(uint8_t blower);
 /** Human-readable maintenance reminder from status byte 6 (handles boot/init edge cases). */
-String spaReminderText(uint8_t reminderType, uint8_t spaState);
+String spaReminderText(uint8_t reminderType, uint8_t spaState, uint8_t initMode);
 /** Portal banner subtext for an active reminder (schedule hints; empty when none). */
-String spaReminderHintText(uint8_t reminderType, uint8_t spaState);
-/** Panel reminders master enable (preferences byte 1, bit 0; some packs set extra flag bits). */
+String spaReminderHintText(uint8_t reminderType, uint8_t spaState, uint8_t initMode);
+/** True when the last status frame reported current temp 0xFF (pack has no fresh reading). */
+bool spaStatusCurrentTempUnknown();
+/** Flags 1 = 0x01 while Running with temp unknown: panel "RUN PUMPS FOR TEMP", not priming. */
+bool spaInitModeIsRunPumpsForTemp(uint8_t initMode, uint8_t spaState);
+/** initMode label for MQTT/portal (initModeMap plus the "Run pumps for temp" case). */
+String spaInitModeText(uint8_t initMode, uint8_t spaState);
+/** Panel reminders master enable (preferences payload byte 2, bit 0; inverted: 0 = on). */
 bool spaPreferencesRemindersEnabled(uint8_t reminders);
 
 /** Human-readable panel reminders preference (`spaPreferencesData.reminders`). */
 String spaPreferencesRemindersText(uint8_t reminders);
-/** True when the portal should treat a maintenance reminder as active (alert styling). */
+/** True when byte 6 names an active panel reminder: non-zero, not booting, and initMode = 0x03. */
 bool spaReminderIsActive(uint8_t reminderType, uint8_t spaState, uint8_t initMode);
 /** True for reminder byte 6 value 0x1E (fault-class reminder). */
 bool spaReminderIsFault(uint8_t reminderType);
