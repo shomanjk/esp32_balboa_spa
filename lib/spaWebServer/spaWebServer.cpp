@@ -36,6 +36,9 @@
 #include "../../src/config.h"
 #include "../../src/main.h"
 #include "spaConfigExport.h"
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "driver/temp_sensor.h"
+#endif
 
 // Local functions
 
@@ -971,6 +974,44 @@ struct GatewayChipTempStatus
   const char *badgeColor;
 };
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+/**
+ * ESP32-S3: configure the IDF temp sensor once, then start → read → stop per call (issue #35).
+ *
+ * The IDF 4.4 driver selects the DAC range itself inside temp_sensor_read_celsius() and keeps the
+ * active range in static state that temp_sensor_set_config() does not update. Arduino's
+ * temperatureRead() (and any per-read set_config) re-writes the DAC on every call, which can leave
+ * hardware and driver on different ranges and produce stepped / alternating readings. Readings are
+ * whole degrees and include the chip's eFuse TEMP_CALIB offset, so values are not directly
+ * comparable across boards.
+ */
+static bool readGatewayChipTempC(float &outC)
+{
+  static bool configured = false;
+  if (!configured)
+  {
+    temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
+    if (temp_sensor_set_config(tsens) != ESP_OK)
+    {
+      return false;
+    }
+    configured = true;
+  }
+  if (temp_sensor_start() != ESP_OK)
+  {
+    return false;
+  }
+  float result = NAN;
+  const esp_err_t err = temp_sensor_read_celsius(&result);
+  temp_sensor_stop();
+  if (err != ESP_OK || std::isnan(result))
+  {
+    return false;
+  }
+  outC = result;
+  return true;
+}
+#else
 static bool readGatewayChipTempC(float &outC)
 {
   const float tempC = temperatureRead();
@@ -981,6 +1022,7 @@ static bool readGatewayChipTempC(float &outC)
   outC = tempC;
   return true;
 }
+#endif
 
 static GatewayChipTempStatus classifyGatewayChipTemp(float tempC)
 {
