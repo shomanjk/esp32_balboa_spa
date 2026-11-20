@@ -1163,11 +1163,16 @@ void autoSyncAttempt()
   }
 
   const int driftMin = circularMinuteDrift(panelHour, panelMinute, gatewayHour, gatewayMinute);
+  // ArduinoLog has no width/padding flags (%02d prints "2d"): pre-format HH:MM and log with %s.
+  char panelHHMM[6];
+  char gatewayHHMM[6];
+  snprintf(panelHHMM, sizeof(panelHHMM), "%02u:%02u", panelHour, panelMinute);
+  snprintf(gatewayHHMM, sizeof(gatewayHHMM), "%02u:%02u", gatewayHour, gatewayMinute);
   if (driftMin <= AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN)
   {
     autoSyncRecord("skipped", driftMin, "within_threshold", false);
-    Log.notice(F("[Cmd ]: panel clock auto-sync skipped: drift %d min (threshold %d); panel %02d:%02d gateway %02d:%02d" CR),
-               driftMin, AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN, panelHour, panelMinute, gatewayHour, gatewayMinute);
+    Log.notice(F("[Cmd ]: panel clock auto-sync skipped: drift %d min (threshold %d); panel %s gateway %s" CR),
+               driftMin, AUTO_SYNC_PANEL_CLOCK_THRESHOLD_MIN, panelHHMM, gatewayHHMM);
     return;
   }
 
@@ -1175,8 +1180,8 @@ void autoSyncAttempt()
   if (result.accepted)
   {
     autoSyncRecord("synced", driftMin, result.reason, true);
-    Log.notice(F("[Cmd ]: panel clock auto-sync sent: drift %d min; panel %02d:%02d -> gateway %02d:%02d" CR),
-               driftMin, panelHour, panelMinute, gatewayHour, gatewayMinute);
+    Log.notice(F("[Cmd ]: panel clock auto-sync sent: drift %d min; panel %s -> gateway %s" CR),
+               driftMin, panelHHMM, gatewayHHMM);
   }
   else
   {
