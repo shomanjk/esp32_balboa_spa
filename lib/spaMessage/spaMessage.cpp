@@ -992,16 +992,20 @@ bool spaInitModeIsRunPumpsForTemp(uint8_t initMode, uint8_t spaState)
 // single byte written only from the status parser, so other tasks read old or new, never torn.
 static volatile uint8_t s_lastKnownSpaState = 0xFF;
 static volatile uint8_t s_lastKnownInitMode = 0xFF;
+// Held initMode marker for "Run pumps for temp": raw 0x01 means that or Priming depending on
+// spaState / current temp, so holding the bare code would fall back to "Priming Mode". 0xFE is not
+// a key in initModeMap. Kept in the same single byte so readers never see a torn pair.
+static constexpr uint8_t kHeldInitRunPumpsForTemp = 0xFE;
 // One bit per code: unmapped codes are logged once per boot.
 static uint32_t s_loggedUnknownSpaState[8];
 static uint32_t s_loggedUnknownInitMode[8];
 
-static bool noteStatusCode(uint8_t code, const std::map<uint8_t, const char *> &labels,
+static bool noteStatusCode(uint8_t code, const std::map<uint8_t, const char *> &labels, uint8_t heldValue,
                            volatile uint8_t &lastKnown, uint32_t (&logged)[8])
 {
   if (labels.find(code) != labels.end())
   {
-    lastKnown = code;
+    lastKnown = heldValue;
     return false;
   }
   const uint32_t bit = 1u << (code & 31u);
@@ -1015,8 +1019,10 @@ static bool noteStatusCode(uint8_t code, const std::map<uint8_t, const char *> &
 
 static void spaStatusNoteCodes(uint8_t spaState, uint8_t initMode, const u_int8_t *payload, int payloadLen)
 {
-  const bool newState = noteStatusCode(spaState, spaStateMap, s_lastKnownSpaState, s_loggedUnknownSpaState);
-  const bool newInit = noteStatusCode(initMode, initModeMap, s_lastKnownInitMode, s_loggedUnknownInitMode);
+  const bool newState = noteStatusCode(spaState, spaStateMap, spaState, s_lastKnownSpaState, s_loggedUnknownSpaState);
+  // rawData (current temp) is already updated for this frame, so the run-pumps check is current.
+  const uint8_t heldInit = spaInitModeIsRunPumpsForTemp(initMode, spaState) ? kHeldInitRunPumpsForTemp : initMode;
+  const bool newInit = noteStatusCode(initMode, initModeMap, heldInit, s_lastKnownInitMode, s_loggedUnknownInitMode);
   if (newState || newInit)
   {
     // ArduinoLog has no width/padding flags (%02X misparses and shifts later args): use %x.
@@ -1045,7 +1051,12 @@ String spaInitModeText(uint8_t initMode, uint8_t spaState)
   {
     return String("Run pumps for temp");
   }
-  return heldStatusText(initMode, initModeMap, s_lastKnownInitMode);
+  const uint8_t held = s_lastKnownInitMode;
+  if (held == kHeldInitRunPumpsForTemp && initModeMap.find(initMode) == initModeMap.end())
+  {
+    return String("Run pumps for temp");
+  }
+  return heldStatusText(initMode, initModeMap, held == kHeldInitRunPumpsForTemp ? 0xFF : held);
 }
 
 String spaReminderText(uint8_t reminderType, uint8_t spaState, uint8_t initMode)
