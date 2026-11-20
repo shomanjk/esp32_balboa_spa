@@ -33,6 +33,18 @@ static void publishStatusTemperature(const char *element, float value)
   publishElement(element, "status", buffer);
 }
 
+static void publishStoredRangeSetpoint(const char *element, float value)
+{
+  if (spaStoredSetpointKnown(value))
+  {
+    publishStatusTemperature(element, value);
+  }
+  else
+  {
+    publishElement(element, "status", "None");
+  }
+}
+
 void publishElement(const char *element, const char *group, const char *value)
 {
   char topic[128];
@@ -100,8 +112,10 @@ void publishSpaStatusData()
   PUBLISH_STATE_MAP(mister, onOffMap);
 
   publishStatusTemperature("setTemp", spaStatusData.setTemp);
-  publishStatusTemperature("lowSetTemp", spaStatusData.lowSetTemp);
-  publishStatusTemperature("highSetTemp", spaStatusData.highSetTemp);
+  // The inactive range's setpoint may be unknown or from the other scale (#44). "None" makes the
+  // HA MQTT sensor report unknown (status topics are not retained, so skipping would leave HA stale).
+  publishStoredRangeSetpoint("lowSetTemp", spaStatusData.lowSetTemp);
+  publishStoredRangeSetpoint("highSetTemp", spaStatusData.highSetTemp);
   PUBLISH_STATUS_ELEMENT(notification, "%u");
   PUBLISH_STATUS_ELEMENT(flags19, "%u");
   PUBLISH_STATE_MAP(settingsLock, lockedMap);

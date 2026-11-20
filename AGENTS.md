@@ -101,9 +101,10 @@ Planned and deferred **product** direction lives in the README so it stays visib
 
 ## Releases & versioning
 
-- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md); **`[Unreleased]`** for pending work.
-- **Firmware version:** [`src/main.h`](src/main.h) `VERSION` should align with tagged releases when cutting a release.
-- **Process:** [FORK.md](FORK.md) (prefer feature-branch PRs into **`ESP32`**; wait for **Build** CI + Codex; tags + GitHub Releases for named snapshots).
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md); **`[Unreleased]`** for work on a branch until its version bump.
+- **Firmware version — bump on every merge:** each PR merged into **`ESP32`** carries a version bump commit, unless the maintainer says otherwise for that merge. Bump [`src/main.h`](src/main.h) **`VERSION`** (patch for fixes, minor for features) and keep **`ANALYTICS_VERSION`** in [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h) aligned (label only; nothing reads it). Move the PR's **`[Unreleased]`** entries into a **`[x.y.z] - YYYY-MM-DD`** section with a short **Version bump** note. If another PR merges first, re-bump before merging. Add the bottom-of-file compare link for a version only when it is tagged.
+- **Releases are separate:** a version number does **not** imply a tag or GitHub Release. Create tags / Releases only when the maintainer asks (agents may recommend one).
+- **Process:** [FORK.md](FORK.md) (prefer feature-branch PRs into **`ESP32`**; wait for **Build** CI + Codex).
 
 ## Conventions for agents
 

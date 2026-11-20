@@ -966,6 +966,19 @@ String getMapDescription(uint8_t element, const std::map<uint8_t, const char *> 
   return String(buf);
 }
 
+bool spaStoredSetpointKnown(float value)
+{
+  // The pack only reports the active range's setpoint, so the other range's stored value is
+  // unknown (0) until the tub has been in that range, and one recorded under the other scale can
+  // linger in RTC memory (e.g. 77 °F shown while the tub is in °C, issue #44). The °C and °F
+  // setpoint bands do not overlap, so a band check rejects both cases.
+  if (spaStatusData.tempScale)
+  {
+    return value >= 10.0f && value <= 40.0f;
+  }
+  return value >= 50.0f && value <= 104.0f;
+}
+
 const char *spaBlowerBinaryLabel(uint8_t blower)
 {
   return spaBlowerIsOn(blower) ? "On" : "Off";

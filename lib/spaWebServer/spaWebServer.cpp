@@ -2213,7 +2213,7 @@ static String statusFormattedTempWithUnit(float v)
 /** Stored high/low setpoint for a band; em dash when never populated (<=0). */
 static String statusBandStoredSetpointText(float v)
 {
-  if (!statusSpaTempReady() || v <= 0.0f)
+  if (!statusSpaTempReady() || !spaStoredSetpointKnown(v))
   {
     return String("\xe2\x80\x94");
   }
@@ -3516,8 +3516,9 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["heatingState"] = spaStatusData.heatingState;
   doc["heatingStateText"] = getMapDescription(spaStatusData.heatingState, heatingStateMap);
   doc["needsHeat"] = spaStatusData.needsHeat ? 1 : 0;
-  doc["highSetTemp"] = spaStatusData.highSetTemp;
-  doc["lowSetTemp"] = spaStatusData.lowSetTemp;
+  // 0 renders as an em dash on /status ("not known yet"); see spaStoredSetpointKnown() (#44).
+  doc["highSetTemp"] = spaStoredSetpointKnown(spaStatusData.highSetTemp) ? spaStatusData.highSetTemp : 0.0f;
+  doc["lowSetTemp"] = spaStoredSetpointKnown(spaStatusData.lowSetTemp) ? spaStatusData.lowSetTemp : 0.0f;
   doc["setTemp"] = spaStatusData.setTemp;
   {
     float bandMin = 0;
