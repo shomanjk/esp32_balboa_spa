@@ -45,7 +45,9 @@ String spaReminderHintText(uint8_t reminderType, uint8_t spaState, uint8_t initM
 bool spaStatusCurrentTempUnknown();
 /** Flags 1 = 0x01 while Running with temp unknown: panel "RUN PUMPS FOR TEMP", not priming. */
 bool spaInitModeIsRunPumpsForTemp(uint8_t initMode, uint8_t spaState);
-/** initMode label for MQTT/portal (initModeMap plus the "Run pumps for temp" case). */
+/** spaState label for MQTT/portal; an unmapped code shows the last known label this boot (#36). */
+String spaStateText(uint8_t spaState);
+/** initMode label for MQTT/portal (initModeMap plus "Run pumps for temp"; unmapped → last known, #36). */
 String spaInitModeText(uint8_t initMode, uint8_t spaState);
 /** Panel reminders master enable (preferences payload byte 2, bit 0; inverted: 0 = on). */
 bool spaPreferencesRemindersEnabled(uint8_t reminders);

@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.28.3] - 2026-11-19
+
+### Fixed
+
+- **`spaState` / `initMode` no longer flip to "Unknown (0x..)" during topside setpoint edits** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): some packs send codes we have no label for for a second or two while the setpoint is being changed (e.g. `spaState` `0x18` / `0x03` with `initMode` `0x10` on a BP100G1). MQTT **`status/spaState`** / **`status/initMode`**, the Home Assistant enum sensors, `/status`, and the ePaper UI now keep the **last known label** instead of guessing a new one. The raw bytes are unchanged in the JSON (`spaState`, `initMode`) and raw frame, and each unmapped code is logged once per boot with its payload (`[Mess]: Unmapped status code(s) …`) to collect evidence from more packs. Fixes [#36](https://github.com/shomanjk/esp32_balboa_spa/issues/36).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.28.3`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Follows **2.28.2** ([#47](https://github.com/shomanjk/esp32_balboa_spa/pull/47)). Not tagged or released.
+
 ## [2.28.2] - 2026-11-19
 
 ### Fixed

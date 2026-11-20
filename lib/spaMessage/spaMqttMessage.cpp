@@ -75,7 +75,7 @@ void publishSpaStatusData()
   convertRawDataToHex(spaStatusData, rawDataHex);
   publishElement("rawData", "status", rawDataHex);
 
-  PUBLISH_STATE_MAP(spaState, spaStateMap);
+  publishElement("spaState", "status", spaStateText(spaStatusData.spaState).c_str());
   publishElement("initMode", "status", spaInitModeText(spaStatusData.initMode, spaStatusData.spaState).c_str());
   publishStatusTemperature("currentTemp", spaStatusData.currentTemp);
 
