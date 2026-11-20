@@ -710,32 +710,21 @@ var logView=document.getElementById('logView'),since=0,pollMs=1000,pollMaxMs=200
 var pollFailures=0,wsRetryTimer=null,wsOpenEver=false,pollInFlight=null;
 var fInc=document.getElementById('fInc'),fExc=document.getElementById('fExc'),sel=document.getElementById('lvl');
 var pauseEl=document.getElementById('pause'),newBadge=document.getElementById('newBadge');
-var hideIdleCtsEl=document.getElementById('hideIdleCts'),showHiddenEl=document.getElementById('showHidden');
-var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),hiddenCountEl=document.getElementById('hiddenCount'),connState=document.getElementById('connState');
+var streamMode=document.getElementById('streamMode'),renderCount=document.getElementById('renderCount'),connState=document.getElementById('connState');
 var rendered=[],maxRendered=8000;
-var hiddenIdleCts=0;
 function abortLogPoll(){if(pollInFlight){pollInFlight.abort();pollInFlight=null;}}
 function getTag(t){var m=t.match(/\[([^\]]+)\]/);return m?m[1]:'';}
 function getLevelClass(t){if(/\bE:|\bERROR\b/.test(t))return'lvl-e';if(/\bW:|\bWARNING\b/.test(t))return'lvl-w';if(/\bI:|\bNOTICE\b|\bINFO\b/.test(t))return'lvl-i';if(/\bTRACE\b|\bVERBOSE\b/.test(t))return'lvl-v';return'';}
 function esc(s){return s.replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
-function isIdleCtsLine(t){
-var l=t.toLowerCase();
-if(l.indexOf('[bridgediag]')<0)return false;
-if(l.indexOf('cts')<0)return false;
-if(l.indexOf('depth_before=0')<0)return false;
-return true;
-}
 function passes(t){var i=(fInc.value||'').trim();var x=(fExc.value||'').trim();if(i&&t.toLowerCase().indexOf(i.toLowerCase())<0)return false;if(x&&t.toLowerCase().indexOf(x.toLowerCase())>=0)return false;return true;}
 function isVisibleRecord(rec){
 var line=rec.t;
-var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);
-if(hiddenByIdleCts&&!showHiddenEl.checked)return false;
 if(!passes(line))return false;
 return true;
 }
 function renderLine(rec){var tag=getTag(rec.t),cls=getLevelClass(rec.t);var body=esc(rec.t);if(tag){body=body.replace('['+tag+']','<span class=\"log-tag\">['+esc(tag)+']</span>');}
 return '<div class=\"log-line '+cls+'\"><span class=\"log-seq\">#'+rec.s+'</span><span>'+body+'</span></div>';}
-function refreshFromRendered(){var out='',n=0,h=0;for(var i=0;i<rendered.length;i++){var line=rendered[i].t;var hiddenByIdleCts=hideIdleCtsEl.checked&&isIdleCtsLine(line);if(hiddenByIdleCts){h++;}if(!isVisibleRecord(rendered[i]))continue;out+=renderLine(rendered[i]);n++;}hiddenIdleCts=h;hiddenCountEl.textContent='hidden idle CTS: '+String(hiddenIdleCts);var stick=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;logView.innerHTML=out;renderCount.textContent=n+' lines';if(stick){logView.scrollTop=logView.scrollHeight;}}
+function refreshFromRendered(){var out='',n=0;for(var i=0;i<rendered.length;i++){if(!isVisibleRecord(rendered[i]))continue;out+=renderLine(rendered[i]);n++;}var stick=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;logView.innerHTML=out;renderCount.textContent=n+' lines';if(stick){logView.scrollTop=logView.scrollHeight;}}
 function appendLines(arr){if(!arr)return;for(var j=0;j<arr.length;j++){rendered.push({s:arr[j].s,t:arr[j].t});if(rendered.length>maxRendered)rendered.shift();}refreshFromRendered();}
 function receiveLines(arr){if(!arr||!arr.length)return;var atBottom=(logView.scrollTop+logView.clientHeight+20)>=logView.scrollHeight;
 if(atBottom){appendLines(arr);newBuffered=0;newBadge.style.display='none';}
@@ -769,8 +758,6 @@ document.getElementById('pRs').addEventListener('click',function(){setPreset('[R
 document.getElementById('pBridge').addEventListener('click',function(){setPreset('[BridgeDiag]','');});
 document.getElementById('pWifi').addEventListener('click',function(){setPreset('[WiFi]','');});
 fInc.addEventListener('input',refreshFromRendered);fExc.addEventListener('input',refreshFromRendered);
-hideIdleCtsEl.addEventListener('change',refreshFromRendered);
-showHiddenEl.addEventListener('change',refreshFromRendered);
 newBadge.addEventListener('click',function(){newBuffered=0;newBadge.style.display='none';refreshFromRendered();logView.scrollTop=logView.scrollHeight;});
 document.getElementById('pause').addEventListener('change',function(){if(this.checked){stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}}else if(useWs)connectWs();else startPoll();});
 document.getElementById('useWs').addEventListener('change',function(){useWs=this.checked;stopPoll();clearWsRetry();abortLogPoll();if(ws){ws.close();ws=null;}if(!pauseEl.checked){if(useWs)connectWs();else startPoll();}});
