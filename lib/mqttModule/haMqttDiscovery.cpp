@@ -899,7 +899,7 @@ void publishHomeAssistantDiscoveryExpanded()
     if (retract & b)
     {
       retractEquipmentBit(b, macStr);
-      Log.verbose(F("[HA discovery]: retract equipment bit 0x%lx" CR), (unsigned long)b);
+      Log.verbose(F("[HA discovery]: retract equipment bit 0x%x" CR), (unsigned long)b);
     }
   }
 
@@ -912,7 +912,7 @@ void publishHomeAssistantDiscoveryExpanded()
   publishWritableEntities(macStr, desired);
 
   if (desired != 0)
-    Log.notice(F("[HA discovery]: equipment discovery mask 0x%lx (config=%lu info=%lu)" CR),
+    Log.notice(F("[HA discovery]: equipment discovery mask 0x%x (config=%u info=%u)" CR),
                (unsigned long)desired,
                (unsigned long)spaConfigurationData.lastUpdate,
                (unsigned long)spaInformationData.lastUpdate);

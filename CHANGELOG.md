@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.29.1] - 2026-11-20
+
+### Fixed
+
+- **Panel clock auto-sync log lines** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): the "skipped" and "sent" lines printed `panel 2d:2d gateway 2d:2d` because ArduinoLog does not support `%02d`. The times are now pre-formatted as `HH:MM`. Reported in [#36](https://github.com/shomanjk/esp32_balboa_spa/issues/36).
+- **`%lu` and `%lx` in log lines** ([`lib/wifiModule/wifiModule.cpp`](lib/wifiModule/wifiModule.cpp), [`lib/bridge/bridge.cpp`](lib/bridge/bridge.cpp), [`lib/localRS485Communication/rs485.cpp`](lib/localRS485Communication/rs485.cpp), [`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp)): ArduinoLog reads `%l` as a complete specifier, so `%lu` printed a stray `u` after the number (`ms=123786u`, `Offline for 5000ums`) and `%lx` printed the HA discovery equipment mask in **decimal** behind a `0x` prefix. The 21 affected log lines now use ArduinoLog's `%u` (unsigned long) and `%x`. MQTT payloads and web JSON use real `snprintf` and were not affected.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.29.1`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Patch bump: log formatting fixes. Not tagged or released.
+
 ## [2.29.0] - 2026-11-19
 
 ### Added
