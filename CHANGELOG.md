@@ -10,7 +10,6 @@ where version numbers are used.
 
 ### Fixed
 
-- **`spaState` / `initMode` no longer flip to "Unknown (0x..)" during topside setpoint edits** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): some packs send codes we have no label for for a second or two while the setpoint is being changed (e.g. `spaState` `0x18` / `0x03` with `initMode` `0x10` on a BP100G1). MQTT **`status/spaState`** / **`status/initMode`**, the Home Assistant enum sensors, `/status`, and the ePaper UI now keep the **last known label** instead of guessing a new one. The raw bytes are unchanged in the JSON (`spaState`, `initMode`) and raw frame, and each unmapped code is logged once per boot with its payload (`[Mess]: Unmapped status code(s) …`) to collect evidence from more packs. Fixes [#36](https://github.com/shomanjk/esp32_balboa_spa/issues/36).
 
 - **ESP32-S3 chip temperature no longer steps or flips between ranges** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): Arduino’s `temperatureRead()` re-applies `temp_sensor_set_config()` on every call, but the IDF 4.4 S3 driver auto-selects the DAC range inside `temp_sensor_read_celsius()` and tracks it in static state that `set_config` does not update — so hardware and driver could disagree and readings plateaued / jumped (e.g. 97 → 115 → 106 °C). S3 builds now configure the sensor **once** and then only start → read → stop, letting the driver manage range. Readings remain whole degrees and include the chip’s factory eFuse calibration offset, so values are not directly comparable across boards. Classic ESP32 (Atom Lite) still uses `temperatureRead()`. Diagnosis and tested fix by @gregbert42 in [#41](https://github.com/shomanjk/esp32_balboa_spa/pull/41). Fixes [#35](https://github.com/shomanjk/esp32_balboa_spa/issues/35).
 - **Panel reminders preference reads and writes the right byte and polarity** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp), [`spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): the Preferences response (`0x26`) was parsed from payload byte 1, a constant (`0x85` / `0x87` on field packs), so **Turn reminders off** appeared to do nothing. Reminders is payload byte 2 (Set Preference code N ↔ byte N+2), and the value is inverted: `0` = on, `1` = off. Set Preference `0x27 0x00` now sends `0x00` to enable and `0x01` to disable. Confirmed on a BP200UX and on a second pack showing an active reminder with byte 2 = `0x00`. Fixes [#45](https://github.com/shomanjk/esp32_balboa_spa/issues/45); diagnosis by viriol.
@@ -21,6 +20,16 @@ where version numbers are used.
 
 - **Reminder type `0x02` = "Test GFCI"** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)) with a portal hint; previously shown as the generic "Maintenance reminder".
 - **`initMode` "Run pumps for temp"** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Flags 1 = `0x01` while `spaState` is Running and current temp is `0xFF` is the panel's "RUN PUMPS FOR TEMP" (pump off ~1 h), not power-on priming. Reported on MQTT **`status/initMode`**, the Home Assistant **Spa init mode** enum (new option), and `/status` (no "initializing" hero styling; JSON **`initRunPumpsForTemp`**). Resolves [#42](https://github.com/shomanjk/esp32_balboa_spa/issues/42).
+
+## [2.28.3] - 2026-11-19
+
+### Fixed
+
+- **`spaState` / `initMode` no longer flip to "Unknown (0x..)" during topside setpoint edits** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): some packs send codes we have no label for for a second or two while the setpoint is being changed (e.g. `spaState` `0x18` / `0x03` with `initMode` `0x10` on a BP100G1). MQTT **`status/spaState`** / **`status/initMode`**, the Home Assistant enum sensors, `/status`, and the ePaper UI now keep the **last known label** instead of guessing a new one. The raw bytes are unchanged in the JSON (`spaState`, `initMode`) and raw frame, and each unmapped code is logged once per boot with its payload (`[Mess]: Unmapped status code(s) …`) to collect evidence from more packs. Fixes [#36](https://github.com/shomanjk/esp32_balboa_spa/issues/36).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.28.3`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Follows **2.28.2** ([#47](https://github.com/shomanjk/esp32_balboa_spa/pull/47)). Not tagged or released.
 
 ## [2.28.1] - 2026-10-09
 
