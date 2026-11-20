@@ -589,7 +589,7 @@ bool spaFilterSettingsFromCache(SpaFilterCycleSettings &out)
   return true;
 }
 
-bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute)
+bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute, bool allowFullDay)
 {
   String t = payload;
   t.trim();
@@ -624,7 +624,8 @@ bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute)
   }
   const int h = hourStr.toInt();
   const int m = minStr.toInt();
-  if (h < 0 || h > 23 || m < 0 || m > 59)
+  const bool fullDay = allowFullDay && h == 24 && m == 0; // 24:00 duration (filter runs all day)
+  if (!fullDay && (h < 0 || h > 23 || m < 0 || m > 59))
   {
     return false;
   }
@@ -717,7 +718,7 @@ bool spaApplyFilterGranularMqtt(const String &subPath, const String &payload, Sp
   {
     uint8_t hour = 0;
     uint8_t minute = 0;
-    if (!spaParseFilterTimeHm(payload, hour, minute))
+    if (!spaParseFilterTimeHm(payload, hour, minute, true))
     {
       if (errReason)
       {
@@ -748,7 +749,7 @@ bool spaApplyFilterGranularMqtt(const String &subPath, const String &payload, Sp
   {
     uint8_t hour = 0;
     uint8_t minute = 0;
-    if (!spaParseFilterTimeHm(payload, hour, minute))
+    if (!spaParseFilterTimeHm(payload, hour, minute, true))
     {
       if (errReason)
       {
@@ -805,7 +806,7 @@ bool spaFilter2StageGranularMqtt(const String &subPath, const String &payload, S
 
   uint8_t hour = 0;
   uint8_t minute = 0;
-  if (!spaParseFilterTimeHm(payload, hour, minute))
+  if (!spaParseFilterTimeHm(payload, hour, minute, isDuration))
   {
     result = {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid_time_payload"};
     return true;

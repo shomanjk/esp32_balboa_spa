@@ -84,8 +84,8 @@ bool spaParseFilterCyclePayload(const uint8_t *eightBytes, SpaFilterCycleSetting
 bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilterSettingsData &cached);
 /** Map live filter cache into dispatcher settings. Returns false if filter read not ready. */
 bool spaFilterSettingsFromCache(SpaFilterCycleSettings &out);
-/** Parse `H:MM` / `HH:MM` (minutes always two digits). */
-bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute);
+/** Parse `H:MM` / `HH:MM` (minutes always two digits). Hours 0–23; `allowFullDay` also accepts `24:00` (durations). */
+bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute, bool allowFullDay = false);
 /** Parse filter JSON; merge omitted fields from cache when `mergeFromCache` is true. */
 bool spaParseFilterCycleJson(JsonObjectConst doc, SpaFilterCycleSettings &out, bool mergeFromCache, const char **errReason);
 /** Granular MQTT path under `filter/…` (e.g. `filter/filter1/start`). */
