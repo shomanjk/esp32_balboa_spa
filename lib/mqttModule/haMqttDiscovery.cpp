@@ -92,16 +92,35 @@ namespace
     char topic[192];
     snprintf(topic, sizeof(topic), "%s/%s/%s/config", MQTT_DISCOVERY_PREFIX, haComponent, objectId);
 
-    char payload[1536];
-    size_t n = serializeJson(doc, payload, sizeof(payload));
-    if (n == 0 || n >= sizeof(payload))
+    // Most documents fit the stack buffer; larger ones (e.g. the 96-option filter start-time
+    // select) use a temporary heap buffer instead of growing the stack for every call.
+    char stackPayload[1536];
+    char *payload = stackPayload;
+    size_t capacity = sizeof(stackPayload);
+    const size_t needed = measureJson(doc) + 1;
+    if (needed > capacity)
+    {
+      payload = static_cast<char *>(malloc(needed));
+      if (payload == nullptr)
+      {
+        Log.error(F("[HA discovery]: out of memory for %s" CR), topic);
+        return false;
+      }
+      capacity = needed;
+    }
+    size_t n = serializeJson(doc, payload, capacity);
+    if (n == 0 || n >= capacity)
     {
       Log.error(F("[HA discovery]: JSON too large or empty for %s" CR), topic);
+      if (payload != stackPayload)
+        free(payload);
       return false;
     }
     bool ok = mqtt.publish(topic, (const uint8_t *)payload, (unsigned int)n, true);
     if (!ok)
       Log.warning(F("[HA discovery]: publish failed for %s" CR), topic);
+    if (payload != stackPayload)
+      free(payload);
     mqtt.loop();
     return ok;
   }
@@ -316,6 +335,84 @@ namespace
     publishDoc("select", objectId, doc);
   }
 
+  /**
+   * Filter start time: `select` with every quarter hour 00:00..23:45 (the controller only accepts
+   * 15-minute steps). State/command payloads are the plain `HH:MM` strings, so they match the
+   * retained filterSettings/... state topics and spaParseFilterTimeHm() without templates.
+   */
+  void publishQuarterHourSelect(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                                const char *group, const char *field, const char *commandSuffix,
+                                const char *icon = nullptr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    // 96 options: array slots plus copied strings (about 3.3 KB on ESP32), so a heap document with headroom.
+    DynamicJsonDocument doc(6144);
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["command_topic"] = commandTopic(commandSuffix);
+    JsonArray opts = root.createNestedArray("options");
+    for (int minuteOfDay = 0; minuteOfDay < 24 * 60; minuteOfDay += 15)
+    {
+      char option[6];
+      snprintf(option, sizeof(option), "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60);
+      opts.add(String(option)); // String overload copies; a char array pointer would dangle
+    }
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    if (doc.overflowed())
+    {
+      Log.error(F("[HA discovery]: select %s overflowed its JSON document" CR), objectId);
+      return;
+    }
+    publishDoc("select", objectId, doc);
+  }
+
+  /**
+   * Filter duration: `number` slider in minutes (15..1440, step 15; the pack accepts up to 24:00). The firmware topics carry
+   * `HH:MM`, so the number entity converts with templates in both directions.
+   */
+  void publishDurationNumber(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
+                             const char *group, const char *field, const char *commandSuffix,
+                             const char *icon = nullptr)
+  {
+    char objectId[48];
+    buildObjectId(objectId, sizeof(objectId), objectSuffix);
+
+    char uniqueId[64];
+    snprintf(uniqueId, sizeof(uniqueId), "%s_%s", macSlugStr, objectSuffix);
+
+    StaticJsonDocument<1024> doc;
+    JsonObject root = doc.to<JsonObject>();
+    root["name"] = friendlyName;
+    root["unique_id"] = uniqueId;
+    root["object_id"] = objectId;
+    root["state_topic"] = stateTopic(group, field);
+    root["command_topic"] = commandTopic(commandSuffix);
+    root["value_template"] = "{% set p = value.split(':') %}{{ p[0] | int * 60 + p[1] | int }}";
+    root["command_template"] = "{{ '%02d:%02d' | format((value | int) // 60, (value | int) % 60) }}";
+    root["min"] = 15;
+    root["max"] = 1440; // 24:00 is valid (e.g. filter 1 running all day); 240 rejected it in HA
+    root["step"] = 15;
+    root["mode"] = "slider";
+    root["device_class"] = "duration";
+    root["unit_of_measurement"] = "min";
+    addAvailability(root, mqttTopic);
+    addDevice(root, macSlugStr);
+    if (icon && icon[0])
+      root["icon"] = icon;
+    publishDoc("number", objectId, doc);
+  }
+
   void publishButton(const char *macSlugStr, const char *objectSuffix, const char *friendlyName,
                      const char *commandSuffix, const char *payloadPress, const char *icon = nullptr)
   {
@@ -337,6 +434,23 @@ namespace
     if (icon && icon[0])
       root["icon"] = icon;
     publishDoc("button", objectId, doc);
+  }
+
+  /** Filter 1/2 schedule: state from filterSettings/..., writes via the existing cmd/filter/... topics. */
+  void publishFilterScheduleEntities(const char *macSlugStr)
+  {
+    publishQuarterHourSelect(macSlugStr, "filter1_start", "Spa filter 1 start", "filterSettings", "filter1_start",
+                             "filter/filter1/start", "mdi:clock-start");
+    publishDurationNumber(macSlugStr, "filter1_duration", "Spa filter 1 duration", "filterSettings", "filter1_duration",
+                          "filter/filter1/duration", "mdi:timer-outline");
+    publishSwitch(macSlugStr, "filter2_enabled", "Spa filter 2 enabled", "filterSettings", "filter2_enabled",
+                  "filter/filter2/enabled", "mdi:sync", "on", "off");
+    publishQuarterHourSelect(macSlugStr, "filter2_start", "Spa filter 2 start", "filterSettings", "filter2_start",
+                             "filter/filter2/start", "mdi:clock-start");
+    publishDurationNumber(macSlugStr, "filter2_duration", "Spa filter 2 duration", "filterSettings", "filter2_duration",
+                          "filter/filter2/duration", "mdi:timer-outline");
+    publishButton(macSlugStr, "refresh_filter_settings", "Spa refresh filter schedule", "refresh/filter", "1",
+                  "mdi:refresh");
   }
 
   void publishClimate(const char *macSlugStr)
@@ -719,6 +833,7 @@ namespace
     publishSwitch(macSlugStr, "blower", "Spa blower", "status", "blower", "button/12", nullptr, "On", "Off");
     publishSwitch(macSlugStr, "mister", "Spa mister", "status", "mister", "button/14", nullptr, "On", "Off");
     publishButton(macSlugStr, "sync_panel_time", "Spa sync panel clock", "syncTime", "1", "mdi:clock-check");
+    publishFilterScheduleEntities(macSlugStr);
     publishCommandResultSensor(macSlugStr);
 
     for (uint32_t b = HA_PUMP1; b <= HA_PUMP6; b <<= 1)

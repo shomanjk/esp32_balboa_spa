@@ -7,6 +7,7 @@
 #include <mqttModule.h>
 #include <spaUtilities.h>
 #include <spaCommandDispatcher.h>
+#include "spaFilter2Memory.h"
 
 #define BUFFER_SIZE BALBOA_MESSAGE_SIZE * 3 + 1
 // Macro to simplify publishing data
@@ -51,6 +52,22 @@ void publishElement(const char *element, const char *group, const char *value)
   snprintf(topic, sizeof(topic), "%s%s/%s", mqttTopic.c_str(), group, element);
   // Log.verbose("Publishing %s: %s\n", topic, value);
   mqtt.publish(topic, value);
+}
+
+// Retained variant for state topics that Home Assistant reads after its own restart
+// (the controller is not re-queried while the RTC cache is fresh).
+static void publishElementRetained(const char *element, const char *group, const char *value)
+{
+  char topic[128];
+  snprintf(topic, sizeof(topic), "%s%s/%s", mqttTopic.c_str(), group, element);
+  mqtt.publish(topic, value, true);
+}
+
+static void publishFilterTimeRetained(const char *element, uint8_t hour, uint8_t minute)
+{
+  char buffer[12];
+  snprintf(buffer, sizeof(buffer), "%02u:%02u", (unsigned)hour, (unsigned)minute);
+  publishElementRetained(element, "filterSettings", buffer);
 }
 
 #define convertRawDataToHex(structure, outputBuffer)                             \
@@ -200,6 +217,24 @@ void publishSpaFilterSettingsData()
   PUBLISH_FILTER_SETTINGS_ELEMENT(filt2Minute, "%u");
   PUBLISH_FILTER_SETTINGS_ELEMENT(filt2DurationHour, "%u");
   PUBLISH_FILTER_SETTINGS_ELEMENT(filt2DurationMinute, "%u");
+
+  // Combined HH:MM / on-off state topics (retained). They use the same format as the
+  // cmd/filter/filter{1,2}/{start,duration,enabled} write topics, so Home Assistant text/switch
+  // entities can read and write the schedule with one topic pair each.
+  publishFilterTimeRetained("filter1_start", spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute);
+  publishFilterTimeRetained("filter1_duration", spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute);
+  publishElementRetained("filter2_enabled", "filterSettings", spaFilterSettingsData.filt2Enable ? "on" : "off");
+  // While filter 2 is off the controller reports zeros; show the remembered schedule instead
+  // (what switching filter 2 on will use), so the entities stay editable.
+  SpaFilter2Schedule f2 = {spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute,
+                           spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute};
+  if (!spaFilterSettingsData.filt2Enable)
+  {
+    f2 = spaFilter2MemoryGet(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute,
+                             spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute);
+  }
+  publishFilterTimeRetained("filter2_start", f2.startHour, f2.startMinute);
+  publishFilterTimeRetained("filter2_duration", f2.durHour, f2.durMinute);
 }
 
 #define PUBLISH_FAULT_LOG_ELEMENT(element, format)                     \

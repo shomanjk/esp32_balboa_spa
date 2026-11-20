@@ -23,6 +23,8 @@ Write live captures and harness outputs under **`docs/local/`** (entire folder g
 
 **Status-flag finding:** byte 6 is a reminder id only while **`initMode` = `0x03`** (R3), which is the rule PR #46 applies.
 
+**Second occurrence (2026-11-19, filter `0x23`, #43 test on the same tub):** MQTT `cmd/filter/filter1/start` = `06:15` was accepted and queued, but the readback ~6 s later still showed `06:00`. The identical command a few minutes later applied within 3 s. Same signature as R4 on a different command family, so a per-command cause (reminders polarity, filter encoding) is unlikely; bus collision or a pack-side "busy" window remain the candidates. No timing pattern yet: R4 was the second write ~10–20 s after another, this one was the first write in its sequence.
+
 ## 2026-06-22 - MQTT filter schedule writes + running telemetry
 
 - **Implementation:** [`mqttModule.cpp`](../lib/mqttModule/mqttModule.cpp) dispatches **`Spa/<gateway>/cmd/filter`** (JSON, merge from cache) and granular **`cmd/filter/filter{1,2}/{start,duration,enabled}`** via shared helpers in [`spaCommandDispatcher.cpp`](../lib/spaMessage/spaCommandDispatcher.cpp) → **`spaSetFilterCycles(..., SPA_COMMAND_SOURCE_MQTT)`**. Read telemetry: **`status/filter1_running`**, **`status/filter2_running`** from live **`filterMode`** ([`spaMqttMessage.cpp`](../lib/spaMessage/spaMqttMessage.cpp)); HA **`binary_sensor`** discovery in [`haMqttDiscovery.cpp`](../lib/mqttModule/haMqttDiscovery.cpp).

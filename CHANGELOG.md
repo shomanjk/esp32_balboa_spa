@@ -8,6 +8,24 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.29.0] - 2026-11-19
+
+### Added
+
+- **Filter 1/2 schedule as Home Assistant entities** ([`lib/mqttModule/haMqttDiscovery.cpp`](lib/mqttModule/haMqttDiscovery.cpp), [`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp), [`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp)): new **retained** state topics in the same format as the write topics — **`filterSettings/filter1_start`**, **`filter1_duration`**, **`filter2_start`**, **`filter2_duration`** (`HH:MM`) and **`filter2_enabled`** (`on`/`off`) — republished after every MQTT connect, so the schedule is visible right after a gateway or HA restart (previously nothing was published for up to an hour). HA discovery adds start-time **`select`** entities (every 15 min, `00:00`–`23:45`), duration **`number`** sliders (15–1440 min, i.e. up to 24 h, step 15; converted to `HH:MM` by a discovery template), a **filter 2 enabled `switch`**, and a **refresh `button`**. Writes use the existing `cmd/filter/filter{1,2}/…` topics. The existing numeric `filt1Hour` … topics are unchanged. Fixes [#43](https://github.com/shomanjk/esp32_balboa_spa/issues/43).
+- **`cmd/refresh/filter`** ([`lib/mqttModule/mqttModule.cpp`](lib/mqttModule/mqttModule.cpp)): any payload reads the filter cycles from the controller now, instead of waiting for the ~1 h cache refresh. Use it after changing the schedule on the panel or in the Balboa app (the controller does not announce those changes).
+- **Remembered filter 2 schedule** ([`lib/spaMessage/spaFilter2Memory.cpp`](lib/spaMessage/spaFilter2Memory.cpp)): while filter 2 is off its start and duration are zero, so the gateway remembers the last schedule seen while it was on, in RAM and in ESP32 NVS flash (written only when it changes; survives power loss). It is shown on the `filter2_start` / `filter2_duration` topics while filter 2 is off and used when filter 2 is switched back on. With nothing remembered yet, the default is: start when filter 1 ends, 60 minutes.
+
+### Changed
+
+- **`cmd/filter/filter2/start` and `…/duration` no longer switch filter 2 on while it is off** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): the value is remembered and published (result `staged`) and nothing is sent to the controller; turn filter 2 on with `cmd/filter/filter2/enabled` = `on`. Previously a start write while off was rejected (zero duration) and a duration write silently enabled filter 2 starting at `00:00`. A `cmd/filter` JSON that turns filter 2 on without giving its times now uses the remembered schedule (it was rejected before). Writes while filter 2 is on, `/config` and `/api/config/filter` are unchanged.
+
+Implementation adapted from viriol's fork ([`b8bba39`](https://github.com/viriol/esp32_balboa_spa/commit/b8bba3950eeb94ad9260dd236d384acf3e22d200), [`ae2fb99`](https://github.com/viriol/esp32_balboa_spa/commit/ae2fb99)), without its `TIMEZONE_POSIX` change (separate PR).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.29.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Minor bump: new Home Assistant entities and MQTT command. Not tagged or released.
+
 ## [2.28.3] - 2026-11-19
 
 ### Fixed
