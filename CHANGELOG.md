@@ -8,6 +8,16 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.29.1] - 2026-11-20
+
+### Fixed
+
+- **Panel clock auto-sync log lines** ([`lib/spaMessage/spaCommandDispatcher.cpp`](lib/spaMessage/spaCommandDispatcher.cpp)): the "skipped" and "sent" lines printed `panel 2d:2d gateway 2d:2d` because ArduinoLog does not support `%02d`. The times are now pre-formatted as `HH:MM`. Reported in [#36](https://github.com/shomanjk/esp32_balboa_spa/issues/36).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.29.1`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Patch bump: log formatting fix. Not tagged or released.
+
 ## [2.29.0] - 2026-11-19
 
 ### Added
