@@ -235,7 +235,7 @@ static void armOfflineWatchdogIfNeeded(unsigned long nowMs)
   {
     wifiOfflineSinceMs = nowMs;
     wifiOfflineLastLogMs = 0;
-    Log.warning(F("[WiFi]: Offline watchdog started at %lums" CR), wifiOfflineSinceMs);
+    Log.warning(F("[WiFi]: Offline watchdog started at %ums" CR), wifiOfflineSinceMs);
   }
 }
 
@@ -244,7 +244,7 @@ static void clearOfflineWatchdogOnRecovery()
   if (wifiOfflineSinceMs != 0)
   {
     unsigned long recoveredMs = millis() - wifiOfflineSinceMs;
-    Log.notice(F("[WiFi]: Connectivity restored after %lums offline" CR), recoveredMs);
+    Log.notice(F("[WiFi]: Connectivity restored after %ums offline" CR), recoveredMs);
   }
   wifiOfflineSinceMs = 0;
   wifiOfflineLastLogMs = 0;
@@ -411,13 +411,13 @@ void wifiConnect()
 
   if (wifiBssidLock)
   {
-    Log.notice(F("[WiFi]: Connecting to %s (BSSID %s) attempt #%lu" CR),
+    Log.notice(F("[WiFi]: Connecting to %s (BSSID %s) attempt #%u" CR),
                WIFI_SSID, wifiBssidLockStr, wifiConnectAttempts);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 0, wifiBssidBytes, true);
   }
   else
   {
-    Log.notice(F("[WiFi]: Connecting to %s (strongest AP) attempt #%lu" CR),
+    Log.notice(F("[WiFi]: Connecting to %s (strongest AP) attempt #%u" CR),
                WIFI_SSID, wifiConnectAttempts);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
@@ -439,7 +439,7 @@ static void failConnectAttempt(unsigned long nowMs, const __FlashStringHelper *w
   {
     wifiSuppressDisconnectBackoff = false;
   }
-  Log.warning(F("[WiFi]: Connect attempt failed (%s), next in %lums" CR), why, wifiReconnectBackoffMs);
+  Log.warning(F("[WiFi]: Connect attempt failed (%s), next in %ums" CR), why, wifiReconnectBackoffMs);
   scheduleReconnectBackoff(nowMs);
 }
 
@@ -500,7 +500,7 @@ void wifiModuleLoop()
       (wifiOfflineLastLogMs == 0 || (nowMs - wifiOfflineLastLogMs) >= WIFI_OFFLINE_RESTART_LOG_INTERVAL_MS))
   {
     wifiOfflineLastLogMs = nowMs;
-    Log.warning(F("[WiFi]: Offline for %lums (restart at %lums)" CR), offlineMs, (unsigned long)WIFI_OFFLINE_RESTART_TIMEOUT_MS);
+    Log.warning(F("[WiFi]: Offline for %ums (restart at %ums)" CR), offlineMs, (unsigned long)WIFI_OFFLINE_RESTART_TIMEOUT_MS);
   }
   if (wifiOfflineRestartArmed &&
       offlineMs >= WIFI_OFFLINE_RESTART_TIMEOUT_MS &&
@@ -508,7 +508,7 @@ void wifiModuleLoop()
   {
     wifiOfflineRestartArmed = false;
     setLastRestartReason("WiFi offline watchdog");
-    Log.error(F("[WiFi]: Offline timeout reached (%lums), restarting" CR), offlineMs);
+    Log.error(F("[WiFi]: Offline timeout reached (%ums), restarting" CR), offlineMs);
     delay(50);
     ESP.restart();
     return;

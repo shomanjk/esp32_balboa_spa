@@ -921,7 +921,7 @@ bool sendMessageToSpa(uint8_t *data, int length)
   }
 
   Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-  BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%u depth=%u frame=%s" CR),
              millis(),
              static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
              msgToString(messageToSend->message, messageToSend->length).c_str());
@@ -954,7 +954,7 @@ bool sendMessageToSpa(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   }
 
   Log.verbose(F("[Mess]: Queuing message to spa %s" CR), msgToString(messageToSend->message, messageToSend->length).c_str());
-  BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%lu depth=%u frame=%s" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: queued ms=%u depth=%u frame=%s" CR),
              millis(),
              static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)),
              msgToString(messageToSend->message, messageToSend->length).c_str());

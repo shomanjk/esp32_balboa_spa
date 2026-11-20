@@ -381,7 +381,7 @@ void rs485CheckSpaSilenceWatchdog()
   }
   restartArmed = false;
   setLastRestartReason("SPA silence watchdog");
-  Log.error(F("[rs485]: No valid frame for %lums (limit %us), restarting" CR),
+  Log.error(F("[rs485]: No valid frame for %ums (limit %us), restarting" CR),
             static_cast<unsigned long>(ageMs),
             static_cast<unsigned>(RUNNING_WDT_TIMEOUT));
   delay(50);
@@ -560,7 +560,7 @@ void rs485ClearToSend()
   //  mqtt.publish((mqttTopic + "node/rs485Queue").c_str(), "rs485ClearToSend");
   rs485WriteQueueMessage *message;
   CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> dataBuffer;
-  BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts ms=%lu depth_before=%u" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts ms=%u depth_before=%u" CR),
              millis(),
              static_cast<unsigned int>(uxQueueMessagesWaiting(spaWriteQueue)));
   rs485LastCtsAtMs = millis();
@@ -573,7 +573,7 @@ void rs485ClearToSend()
     }
     rs485NextCtsArmed = false;
     rs485NextCtsFireSeenCount++;
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts_send next_cts_frame=%s cts_count=%lu" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: cts_send next_cts_frame=%s cts_count=%u" CR),
                msgToString(dataBuffer).c_str(),
                rs485CtsSeenCount);
     rs485Write(dataBuffer);
@@ -647,7 +647,7 @@ bool rs485ArmFrameOnNextCts(const uint8_t *frame, int length, uint32_t *outArmCo
   {
     *outArmCount = rs485NextCtsArmSeenCount;
   }
-  BRIDGE_LOG_NOISY(F("[BridgeDiag]: next_cts armed frame=%s arm_count=%lu" CR),
+  BRIDGE_LOG_NOISY(F("[BridgeDiag]: next_cts armed frame=%s arm_count=%u" CR),
              msgToString(const_cast<uint8_t *>(frame), length).c_str(),
              rs485NextCtsArmSeenCount);
   return true;
@@ -752,7 +752,7 @@ void rs485Write(CircularBuffer<uint8_t, BALBOA_MESSAGE_SIZE> &data)
   if (data[4] != Nothing_to_Send_Type)
   {
     Log.verbose(F("[rs485]: Sent: %s" CR), msgToString(data).c_str());
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: rs485_sent ms=%lu frame=%s" CR), millis(), msgToString(data).c_str());
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: rs485_sent ms=%u frame=%s" CR), millis(), msgToString(data).c_str());
   }
   data.clear();
 }

@@ -154,11 +154,11 @@ void bridgeLoop()
           clients[i]->onTimeout([slot](void *r, AsyncClient *c, uint32_t time) {
 #if defined(DIAG_FAULT_CAPTURE)
             const String rip = bridgeRipForSlot(slot, c);
-            Log.warning(F("[Bridge]: Timeout from Spa %s ms=%lu" CR), rip.c_str(), static_cast<unsigned long>(time));
+            Log.warning(F("[Bridge]: Timeout from Spa %s ms=%u" CR), rip.c_str(), static_cast<unsigned long>(time));
             faultCaptureAppendf("[fault] bridge timeout ip=%s", rip.c_str());
 #else
             const String rip = bridgeRipForSlot(slot, c);
-            Log.verbose(F("[Bridge]: Timeout from Spa %s ms=%lu" CR), rip.c_str(), static_cast<unsigned long>(time));
+            Log.verbose(F("[Bridge]: Timeout from Spa %s ms=%u" CR), rip.c_str(), static_cast<unsigned long>(time));
 #endif
           });
           clients[i]->onError([slot](void *r, AsyncClient *c, int8_t error) {
@@ -234,7 +234,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     faultCaptureSetLastBridgeIngress(ingressStr.c_str());
 #endif
     Log.verbose(F("[Bridge]: bridge/in %s" CR), ingressStr.c_str());
-    BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu ms=%lu len=%u from=%s frame=%s" CR),
+    BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%u ms=%u len=%u from=%s frame=%s" CR),
                      ingressId,
                      ingressMs,
                      static_cast<unsigned int>(length),
@@ -243,7 +243,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     mqtt.publish((mqttTopic + "bridge/in").c_str(), ingressStr.c_str());
     if (length >= 5 && message[2] == id && message[4] == 0x04)
     {
-      BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu handled=wifi_module_configuration" CR), ingressId);
+      BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%u handled=wifi_module_configuration" CR), ingressId);
       Q_out.clear();
       WiFi_Module_Configuration_Response(Q_out);
       bridgeSend(Q_out);
@@ -253,7 +253,7 @@ void clientDataAvailable(void *r, AsyncClient *client, void *buffer, size_t leng
     {
       //  P_in.clear();
       publishBridge((String(length) + " Msg Received").c_str());
-      BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%lu forwarding=cacheRead" CR), ingressId);
+      BRIDGE_LOG_NOISY(F("[BridgeDiag]: ingress=%u forwarding=cacheRead" CR), ingressId);
       cacheRead(message, length);
     }
   }
