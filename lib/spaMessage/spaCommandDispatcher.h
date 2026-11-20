@@ -90,6 +90,12 @@ bool spaParseFilterTimeHm(const String &payload, uint8_t &hour, uint8_t &minute)
 bool spaParseFilterCycleJson(JsonObjectConst doc, SpaFilterCycleSettings &out, bool mergeFromCache, const char **errReason);
 /** Granular MQTT path under `filter/…` (e.g. `filter/filter1/start`). */
 bool spaApplyFilterGranularMqtt(const String &subPath, const String &payload, SpaFilterCycleSettings &out, const char **errReason);
+/**
+ * Granular `filter/filter2/{start,duration}` while filter 2 is off: the controller cannot hold a
+ * schedule for a disabled filter, so the value is only remembered (and published) and nothing is
+ * sent or enabled. Returns true when handled (`result` is set); false to use the normal path.
+ */
+bool spaFilter2StageGranularMqtt(const String &subPath, const String &payload, SpaCommandResult &result);
 /** True when live status `filterMode` reports filter cycle 1 active. */
 bool spaFilter1Running();
 /** True when live status `filterMode` reports filter cycle 2 active. */

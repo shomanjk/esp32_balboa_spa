@@ -10,6 +10,7 @@
 #include "../../src/main.h"
 #include "balboa.h"
 #include "spaMqttMessage.h"
+#include "spaFilter2Memory.h"
 #include <mqttModule.h>
 #if MQTT_HA_DISCOVERY
 #include <haMqttDiscovery.h>
@@ -833,6 +834,12 @@ void parseFilterResponse(u_int8_t *message, int length)
   spaFilterSettingsData.filt2Minute = hexArray[5];
   spaFilterSettingsData.filt2DurationHour = hexArray[6];
   spaFilterSettingsData.filt2DurationMinute = hexArray[7];
+  if (spaFilterSettingsData.filt2Enable)
+  {
+    // Remember the schedule while filter 2 is on: the controller zeroes it when it is switched off.
+    spaFilter2MemoryRemember({spaFilterSettingsData.filt2Hour, spaFilterSettingsData.filt2Minute,
+                              spaFilterSettingsData.filt2DurationHour, spaFilterSettingsData.filt2DurationMinute});
+  }
   spaNormalizeFilter2Cache(spaFilterSettingsData);
 
   // Log.verbose(F("[Mess]: Filter Response: %s" CR), msgToString(hexArray, length - 7).c_str());

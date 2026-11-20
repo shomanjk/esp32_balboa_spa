@@ -8,6 +8,8 @@
 #include "spaMessage.h"
 #include "balboa.h"
 #include "rs485.h"
+#include "spaFilter2Memory.h"
+#include "spaMqttMessage.h"
 #include <spaUtilities.h>
 
 namespace
@@ -573,6 +575,17 @@ bool spaFilterSettingsFromCache(SpaFilterCycleSettings &out)
   out.filt2Minute = spaFilterSettingsData.filt2Minute;
   out.filt2DurHour = spaFilterSettingsData.filt2DurationHour;
   out.filt2DurMinute = spaFilterSettingsData.filt2DurationMinute;
+  if (!out.filt2Enable)
+  {
+    // The controller zeroes a disabled filter 2. Use the remembered schedule so that switching
+    // it on (or enabling it in a JSON command that omits the times) has valid times to send.
+    // Callers normalize the schedule away again if filter 2 stays off.
+    const SpaFilter2Schedule remembered = spaFilter2MemoryGet(out.filt1Hour, out.filt1Minute, out.filt1DurHour, out.filt1DurMinute);
+    out.filt2Hour = remembered.startHour;
+    out.filt2Minute = remembered.startMinute;
+    out.filt2DurHour = remembered.durHour;
+    out.filt2DurMinute = remembered.durMinute;
+  }
   return true;
 }
 
@@ -775,6 +788,50 @@ bool spaApplyFilterGranularMqtt(const String &subPath, const String &payload, Sp
 
   spaNormalizeFilter2Schedule(out);
   return spaValidateFilterCycleSettings(out, errReason);
+}
+
+bool spaFilter2StageGranularMqtt(const String &subPath, const String &payload, SpaCommandResult &result)
+{
+  const bool isStart = subPath == "filter/filter2/start";
+  const bool isDuration = subPath == "filter/filter2/duration";
+  if (!isStart && !isDuration)
+  {
+    return false;
+  }
+  if (spaFilterSettingsData.lastUpdate == 0 || spaFilterSettingsData.filt2Enable)
+  {
+    return false; // not ready (normal path reports it) or filter 2 is on (write to the controller)
+  }
+
+  uint8_t hour = 0;
+  uint8_t minute = 0;
+  if (!spaParseFilterTimeHm(payload, hour, minute))
+  {
+    result = {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid_time_payload"};
+    return true;
+  }
+
+  SpaFilter2Schedule schedule = spaFilter2MemoryGet(spaFilterSettingsData.filt1Hour, spaFilterSettingsData.filt1Minute,
+                                                    spaFilterSettingsData.filt1DurationHour, spaFilterSettingsData.filt1DurationMinute);
+  if (isStart)
+  {
+    schedule.startHour = hour;
+    schedule.startMinute = minute;
+  }
+  else
+  {
+    if (!filterDurationValid(hour, minute, false))
+    {
+      result = {false, SPA_COMMAND_INVALID_ARGUMENT, "invalid_filter2_duration"};
+      return true;
+    }
+    schedule.durHour = hour;
+    schedule.durMinute = minute;
+  }
+  spaFilter2MemoryRemember(schedule);
+  publishSpaFilterSettingsData();
+  result = {true, SPA_COMMAND_ACCEPTED, "staged"};
+  return true;
 }
 
 bool spaFilterCycleSettingsEqual(const SpaFilterCycleSettings &a, const SpaFilterSettingsData &cached)

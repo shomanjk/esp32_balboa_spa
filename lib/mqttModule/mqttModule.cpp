@@ -16,6 +16,8 @@
 #include "haMqttDiscovery.h"
 #include <rs485.h>
 #include <spaCommandDispatcher.h>
+#include <spaMessage.h>
+#include <spaMqttMessage.h>
 
 // Local Functions
 void reconnect();
@@ -113,6 +115,13 @@ void reconnect()
 #if MQTT_HA_DISCOVERY
       publishHomeAssistantDiscovery();
 #endif
+      // The filter schedule is only published when the controller answers a filter request, and that
+      // request is skipped while the RTC cache is fresh (soft restart, broker/HA restart). Republish
+      // the cached schedule so its state topics exist after every MQTT connect.
+      if (spaFilterSettingsData.lastUpdate != 0 && spaFilterSettingsData.rawDataLength != 0)
+      {
+        publishSpaFilterSettingsData();
+      }
     }
   }
 }
@@ -322,11 +331,25 @@ void mqttMessage(char *p_topic, byte *p_payload, unsigned int p_length)
       }
     }
   }
+  else if (suffix == "refresh/filter")
+  {
+    // Force an immediate filter-cycles read (0x22/0x01) instead of waiting for the cache to go
+    // stale (about one hour). Useful after changing the schedule in the official app or on the
+    // panel, because the controller does not announce schedule changes. Payload is ignored.
+    Log.notice(F("[MQTT]: refresh/filter -> requesting filter cycles" CR));
+    spaRequestFilterSettings();
+    result = {true, SPA_COMMAND_ACCEPTED, "accepted"};
+  }
   else if (suffix.startsWith("filter/"))
   {
     SpaFilterCycleSettings settings{};
     const char *err = nullptr;
-    if (!spaApplyFilterGranularMqtt(suffix, payload, settings, &err))
+    SpaCommandResult staged{};
+    if (spaFilter2StageGranularMqtt(suffix, payload, staged))
+    {
+      result = staged;
+    }
+    else if (!spaApplyFilterGranularMqtt(suffix, payload, settings, &err))
     {
       if (err && strcmp(err, "unsupported_command") == 0)
       {
