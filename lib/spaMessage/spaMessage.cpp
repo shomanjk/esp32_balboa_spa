@@ -177,6 +177,7 @@ void spaMessageSetup()
 }
 
 static SpaFaultLogHistoryScan faultLogHistoryScan;
+static void spaStatusNoteCodes(uint8_t spaState, uint8_t initMode, const u_int8_t *payload, int payloadLen);
 
 constexpr unsigned long kFaultLogHistoryEntryTimeoutMs = 30000;
 constexpr uint8_t kFaultLogHistoryMaxEntryRetries = 3;
@@ -723,6 +724,7 @@ bool parseStatusMessage(u_int8_t *message, int length)
     u_int8_t *hexArray = message + 5;
     spaStatusData.spaState = hexArray[0];
     spaStatusData.initMode = hexArray[1];
+    spaStatusNoteCodes(spaStatusData.spaState, spaStatusData.initMode, hexArray, length - 7);
     spaStatusData.currentTemp = (hexArray[2] != 0xff ? (hexArray[9] & 0x01 ? (float)hexArray[2] / 2 : hexArray[2]) : spaStatusData.currentTemp);
     // Combine hour and minute into a time string
     uint8_t hour = hexArray[3];
@@ -983,13 +985,67 @@ bool spaInitModeIsRunPumpsForTemp(uint8_t initMode, uint8_t spaState)
   return initMode == 0x01 && spaState == 0x00 && spaStatusCurrentTempUnknown();
 }
 
+// Last spaState / initMode codes that had a label this boot (issue #36). Some packs send codes we
+// have no label for while a setpoint is being edited on the topside (e.g. spaState 0x18 / 0x03,
+// initMode 0x10 on a BP100G1). Rather than guess labels, keep showing the last known one; the raw
+// byte stays in spaStatusData for diagnostics. 0xFF = none yet (not a key in either map). Each is a
+// single byte written only from the status parser, so other tasks read old or new, never torn.
+static volatile uint8_t s_lastKnownSpaState = 0xFF;
+static volatile uint8_t s_lastKnownInitMode = 0xFF;
+// One bit per code: unmapped codes are logged once per boot.
+static uint32_t s_loggedUnknownSpaState[8];
+static uint32_t s_loggedUnknownInitMode[8];
+
+static bool noteStatusCode(uint8_t code, const std::map<uint8_t, const char *> &labels,
+                           volatile uint8_t &lastKnown, uint32_t (&logged)[8])
+{
+  if (labels.find(code) != labels.end())
+  {
+    lastKnown = code;
+    return false;
+  }
+  const uint32_t bit = 1u << (code & 31u);
+  if (logged[code >> 5] & bit)
+  {
+    return false;
+  }
+  logged[code >> 5] |= bit;
+  return true; // first sighting this boot: caller logs it
+}
+
+static void spaStatusNoteCodes(uint8_t spaState, uint8_t initMode, const u_int8_t *payload, int payloadLen)
+{
+  const bool newState = noteStatusCode(spaState, spaStateMap, s_lastKnownSpaState, s_loggedUnknownSpaState);
+  const bool newInit = noteStatusCode(initMode, initModeMap, s_lastKnownInitMode, s_loggedUnknownInitMode);
+  if (newState || newInit)
+  {
+    // ArduinoLog has no width/padding flags (%02X misparses and shifts later args): use %x.
+    Log.notice(F("[Mess]: Unmapped status code(s) spaState=0x%x initMode=0x%x (showing last known label); payload: %s" CR),
+               spaState, initMode, msgToString(const_cast<uint8_t *>(payload), static_cast<uint8_t>(payloadLen)).c_str());
+  }
+}
+
+static String heldStatusText(uint8_t code, const std::map<uint8_t, const char *> &labels, uint8_t lastKnown)
+{
+  if (labels.find(code) == labels.end() && lastKnown != 0xFF)
+  {
+    code = lastKnown;
+  }
+  return getMapDescription(code, labels);
+}
+
+String spaStateText(uint8_t spaState)
+{
+  return heldStatusText(spaState, spaStateMap, s_lastKnownSpaState);
+}
+
 String spaInitModeText(uint8_t initMode, uint8_t spaState)
 {
   if (spaInitModeIsRunPumpsForTemp(initMode, spaState))
   {
     return String("Run pumps for temp");
   }
-  return getMapDescription(initMode, initModeMap);
+  return heldStatusText(initMode, initModeMap, s_lastKnownInitMode);
 }
 
 String spaReminderText(uint8_t reminderType, uint8_t spaState, uint8_t initMode)

@@ -126,12 +126,12 @@ void displaySpaStatusData()
   setFont(OpenSans16);
   drawString(col1, rowHeight(x), "Spa Status:", LEFT);
   setFont(OpenSans16B);
-  drawString(col2, rowHeight(x++), getMapDescription(spaStatusData.spaState, spaStateMap), LEFT);
+  drawString(col2, rowHeight(x++), spaStateText(spaStatusData.spaState), LEFT);
 
   setFont(OpenSans16);
   drawString(col1, rowHeight(x), "Spa Mode:", LEFT);
   setFont(OpenSans16B);
-  drawString(col2, rowHeight(x++), getMapDescription(spaStatusData.initMode, initModeMap), LEFT);
+  drawString(col2, rowHeight(x++), spaInitModeText(spaStatusData.initMode, spaStatusData.spaState), LEFT);
 
   setFont(OpenSans16);
   drawString(col1, rowHeight(x), "Heat Mode:", LEFT);

@@ -2423,7 +2423,7 @@ void handleStatus(AsyncWebServerRequest *request)
   }
 
   {
-    const String spaStateTxt = getMapDescription(spaStatusData.spaState, spaStateMap);
+    const String spaStateTxt = spaStateText(spaStatusData.spaState);
     const String initTxt = spaInitModeText(spaStatusData.initMode, spaStatusData.spaState);
     const String heatModeTxt = getMapDescription(spaStatusData.heatingMode, heatingModeMap);
     const String heatStateTxt = getMapDescription(spaStatusData.heatingState, heatingStateMap);
@@ -3507,7 +3507,7 @@ static void fillStatusSnapshotDoc(DynamicJsonDocument &doc)
   doc["tempScaleCelsius"] = spaStatusData.tempScale ? true : false;
   doc["tempRange"] = spaStatusData.tempRange;
   doc["spaState"] = spaStatusData.spaState;
-  doc["spaStateText"] = getMapDescription(spaStatusData.spaState, spaStateMap);
+  doc["spaStateText"] = spaStateText(spaStatusData.spaState);
   doc["initMode"] = spaStatusData.initMode;
   doc["initModeText"] = spaInitModeText(spaStatusData.initMode, spaStatusData.spaState);
   doc["initRunPumpsForTemp"] = spaInitModeIsRunPumpsForTemp(spaStatusData.initMode, spaStatusData.spaState);
