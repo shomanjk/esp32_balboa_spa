@@ -24,7 +24,7 @@ Implementation adapted from viriol's fork ([`b8bba39`](https://github.com/viriol
 
 ### Version bump
 
-- Firmware **`VERSION`** is **`2.29.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Minor bump: new Home Assistant entities and MQTT command. Not tagged or released.
+- Firmware **`VERSION`** is **`2.29.0`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Minor bump: new Home Assistant entities and MQTT command. Tagged and released as [v2.29.0](https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v2.29.0), which also ships 2.28.2 and 2.28.3.
 
 ## [2.28.3] - 2026-11-19
 
@@ -34,7 +34,7 @@ Implementation adapted from viriol's fork ([`b8bba39`](https://github.com/viriol
 
 ### Version bump
 
-- Firmware **`VERSION`** is **`2.28.3`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Follows **2.28.2** ([#47](https://github.com/shomanjk/esp32_balboa_spa/pull/47)). Not tagged or released.
+- Firmware **`VERSION`** is **`2.28.3`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Follows **2.28.2** ([#47](https://github.com/shomanjk/esp32_balboa_spa/pull/47)). Not tagged separately; released in [v2.29.0](https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v2.29.0).
 
 ## [2.28.2] - 2026-11-19
 
@@ -53,7 +53,7 @@ Implementation adapted from viriol's fork ([`b8bba39`](https://github.com/viriol
 
 ### Version bump
 
-- Firmware **`VERSION`** is **`2.28.2`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). First per-merge bump: also covers #46 and #41, which merged without one. Not tagged or released.
+- Firmware **`VERSION`** is **`2.28.2`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). First per-merge bump: also covers #46 and #41, which merged without one. Not tagged separately; released in [v2.29.0](https://github.com/shomanjk/esp32_balboa_spa/releases/tag/v2.29.0).
 
 ## [2.28.1] - 2026-10-09
 
@@ -1224,7 +1224,8 @@ First **tagged release of this maintained fork** (lineage and workflow: [FORK.md
 
 - **`src/config-example.h`:** Clarified RS485 pin comments for generic ESP32 vs M5; default GPIO16/17 retained for existing setups.
 
-[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.28.1...HEAD
+[Unreleased]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.29.0...HEAD
+[2.29.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.28.1...v2.29.0
 [2.28.1]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.28.0...v2.28.1
 [2.28.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.27.0...v2.28.0
 [2.27.0]: https://github.com/shomanjk/esp32_balboa_spa/compare/v2.26.2...v2.27.0
