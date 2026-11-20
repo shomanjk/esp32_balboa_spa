@@ -8,6 +8,8 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.28.2] - 2026-11-19
+
 ### Fixed
 
 - **Stale low/high range setpoint no longer published in the wrong unit** ([`lib/spaMessage/spaMqttMessage.cpp`](lib/spaMessage/spaMqttMessage.cpp), [`spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp)): the pack only reports the active range's setpoint, so the inactive range's stored value (kept in RTC memory across restarts) could be unknown or recorded under the other scale, e.g. `lowSetTemp` 77 (°F) while the tub is in °C. A stored setpoint is now shown only when it is plausible for the current scale (10–40 °C / 50–104 °F, bands that do not overlap). Otherwise MQTT **`status/lowSetTemp`** / **`highSetTemp`** publish `None` (Home Assistant shows *unknown*), and `/status` shows “—”. Fixes [#44](https://github.com/shomanjk/esp32_balboa_spa/issues/44); approach from viriol's fork.
@@ -20,6 +22,10 @@ where version numbers are used.
 
 - **Reminder type `0x02` = "Test GFCI"** ([`lib/spaMessage/balboa.h`](lib/spaMessage/balboa.h)) with a portal hint; previously shown as the generic "Maintenance reminder".
 - **`initMode` "Run pumps for temp"** ([`lib/spaMessage/spaMessage.cpp`](lib/spaMessage/spaMessage.cpp)): Flags 1 = `0x01` while `spaState` is Running and current temp is `0xFF` is the panel's "RUN PUMPS FOR TEMP" (pump off ~1 h), not power-on priming. Reported on MQTT **`status/initMode`**, the Home Assistant **Spa init mode** enum (new option), and `/status` (no "initializing" hero styling; JSON **`initRunPumpsForTemp`**). Resolves [#42](https://github.com/shomanjk/esp32_balboa_spa/issues/42).
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.28.2`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). First per-merge bump: also covers #46 and #41, which merged without one. Not tagged or released.
 
 ## [2.28.1] - 2026-10-09
 

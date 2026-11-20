@@ -50,8 +50,8 @@ Default branch for this fork is **`ESP32`**. Solo maintenance is fine; **prefer 
 ### Suggested release flow
 
 1. Land the work on **`ESP32`** via a merged feature-branch PR (preferred) or a deliberate direct push for trivial changes.
-2. Update [CHANGELOG.md](CHANGELOG.md): move `[Unreleased]` items into a new `## [x.y.z] - YYYY-MM-DD` section. Use a **major** version (for example **`2.0.0`**) for milestone changes such as **reliable spa command writes**, per [Semantic Versioning](https://semver.org/) and the changelog narrative.
-3. Align firmware **`VERSION`** in [`src/main.h`](src/main.h) and **`ANALYTICS_VERSION`** in [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h) with the release tag (see [AGENTS.md](AGENTS.md)).
+2. Every merged PR already bumps **`VERSION`** in [`src/main.h`](src/main.h) / **`ANALYTICS_VERSION`** in [`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h) and gives [CHANGELOG.md](CHANGELOG.md) a `## [x.y.z] - YYYY-MM-DD` section (see [AGENTS.md](AGENTS.md) “Releases & versioning”). A release tags that current version; no extra bump is needed. Use a **major** version (for example **`2.0.0`**) for milestone changes such as **reliable spa command writes**, per [Semantic Versioning](https://semver.org/) and the changelog narrative.
+3. Add the bottom-of-file compare link for the tagged version in [CHANGELOG.md](CHANGELOG.md) (and point `[Unreleased]` at the new tag).
 4. Create an annotated tag: `git tag -a v0.2.0 -m "v0.2.0"` (use the next version) then `git push origin v0.2.0`. The first release from this fork is **`v0.1.0`** (see [CHANGELOG.md](CHANGELOG.md)).
 5. On GitHub: **Releases → Draft a new release**, choose the tag, paste changelog highlights.
 
