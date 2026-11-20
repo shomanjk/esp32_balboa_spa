@@ -3327,13 +3327,11 @@ void handleLogsPage(AsyncWebServerRequest *request)
   html += "<label>Include <input type='text' id='fInc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
   html += "<label>Exclude <input type='text' id='fExc' placeholder='substring' autocapitalize='off' autocomplete='off'/></label>";
   html += "<label><input type='checkbox' id='pause'/> Pause</label>";
-  html += "<label><input type='checkbox' id='hideIdleCts' checked/> Hide idle CTS</label>";
-  html += "<label><input type='checkbox' id='showHidden'/> Show hidden</label>";
   html += "<label><input type='checkbox' id='useWs' checked/> WebSocket tail</label>";
   html += "<button type='button' id='newBadge'>0 new lines</button>";
   html += "<button type='button' id='clr'>Clear view</button><button type='button' id='copyTxt'>Copy</button><button type='button' id='dlTxt'>Download .log</button><button type='button' id='dlJson'>Download .json</button>";
   html += "</div>";
-  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='hiddenCount'>hidden idle CTS: 0</span><span id='connState'></span></div></div>";
+  html += "<div class='status-row'><span id='streamMode'>poll</span><span id='renderCount'>0 lines</span><span id='connState'></span></div></div>";
   html += "<div id='logView' class='log-view' aria-live='polite'></div></section></main></div>";
   html += F("<script src='/assets/portal-logs.js?v=" VERSION "'></script></body></html>");
 

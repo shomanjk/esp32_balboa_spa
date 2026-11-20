@@ -8,6 +8,17 @@ where version numbers are used.
 
 ## [Unreleased]
 
+## [2.29.2] - 2026-11-20
+
+### Changed
+
+- **Idle Clear-to-Send kept out of the web log buffer** ([`lib/webLogBuffer/webLogBuffer.cpp`](lib/webLogBuffer/webLogBuffer.cpp)): `[BridgeDiag]: cts … depth_before=0` lines are no longer stored in the 80-line ring behind `/logs`, `/api/logs` and the WebSocket tail. Idle CTS arrives about 30 times a second and filled the ring in under 3 s at the default verbose level, so opening `/logs` or polling `/api/logs` after something happened showed only CTS noise. USB serial and Telnet still receive every idle CTS line, and CTS that carry a frame (`depth_before` > 0) stay in the ring along with all other `[BridgeDiag]` lines. CTS cadence is also available as `ctsCount` / `lastCtsMs` in the JSON APIs. Reported in [#36](https://github.com/shomanjk/esp32_balboa_spa/issues/36).
+- **`/logs`: removed the "Hide idle CTS" and "Show hidden" checkboxes and the hidden-line counter** ([`lib/spaWebServer/spaWebServer.cpp`](lib/spaWebServer/spaWebServer.cpp), [`lib/spaWebServer/spaPortalAssets.h`](lib/spaWebServer/spaPortalAssets.h)). The page no longer receives idle CTS lines, so there is nothing for them to hide.
+
+### Version bump
+
+- Firmware **`VERSION`** is **`2.29.2`** ([`src/main.h`](src/main.h)); **`ANALYTICS_VERSION`** aligned ([`lib/Analytics/Analytics.h`](lib/Analytics/Analytics.h)). Patch bump: web log buffer filtering. Follows 2.29.1 ([#51](https://github.com/shomanjk/esp32_balboa_spa/pull/51)). Not tagged or released.
+
 ## [2.29.0] - 2026-11-19
 
 ### Added

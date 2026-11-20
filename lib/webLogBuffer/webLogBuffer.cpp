@@ -3,6 +3,7 @@
 #include <ArduinoLog.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <string.h>
 
 #include "../../src/main.h"
 
@@ -28,9 +29,23 @@ static SemaphoreHandle_t s_mutex;
 
 static Print *s_serial = nullptr;
 
+/**
+ * Idle Clear-to-Send (`[BridgeDiag]: cts … depth_before=0`) arrives ~30/s and would push everything
+ * else out of the ring in under 3 s. Serial / Telnet still get these lines; only the web ring
+ * (`/logs`, `/api/logs`, WebSocket tail) skips them. CTS that carry a frame (depth_before>0) are kept.
+ */
+static bool isIdleCtsLine(const char *buf)
+{
+  return strstr(buf, "[BridgeDiag]: cts ms=") != nullptr && strstr(buf, "depth_before=0") != nullptr;
+}
+
 /** Caller must hold `s_mutex` (recursive). */
 static void appendRingLineLocked(const char *buf)
 {
+  if (isIdleCtsLine(buf))
+  {
+    return;
+  }
   s_ring[s_ringWrite].seq = s_nextSeq++;
   strncpy(s_ring[s_ringWrite].text, buf, WEB_LOG_LINE_MAX - 1);
   s_ring[s_ringWrite].text[WEB_LOG_LINE_MAX - 1] = '\0';
